@@ -17,8 +17,8 @@ interface AllocatedNumber {
 
 const AgentGetNumber = () => {
   const { user } = useAuth();
-  const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
-  const [provider, setProvider] = useState<string>("");
+  const [, setProviders] = useState<{ id: string; name: string }[]>([]);
+  const [provider, setProvider] = useState<string>("acchub");
   const [countries, setCountries] = useState<any[]>([]);
   const [countryId, setCountryId] = useState<number | "">("");
   const [operators, setOperators] = useState<any[]>([]);
