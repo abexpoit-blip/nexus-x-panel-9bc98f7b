@@ -17,8 +17,8 @@ interface AllocatedNumber {
 
 const AgentGetNumber = () => {
   const { user } = useAuth();
-  const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
-  const [provider, setProvider] = useState<string>("");
+  const [, setProviders] = useState<{ id: string; name: string }[]>([]);
+  const [provider, setProvider] = useState<string>("acchub");
   const [countries, setCountries] = useState<any[]>([]);
   const [countryId, setCountryId] = useState<number | "">("");
   const [operators, setOperators] = useState<any[]>([]);
@@ -32,12 +32,9 @@ const AgentGetNumber = () => {
   const dailyLimit = user?.daily_limit ?? 100;
   const usedToday = numbers.length;
 
-  // Load providers + my numbers on mount
+  // Force AccHub only — provider name hidden from agents
   useEffect(() => {
-    api.providers().then(({ providers }) => {
-      setProviders(providers);
-      if (providers[0]) setProvider(providers[0].id);
-    }).catch((e) => toast({ title: "Provider load failed", description: e.message, variant: "destructive" }));
+    setProvider("acchub");
     api.myNumbers().then(({ numbers }) => setNumbers(numbers as any)).catch(() => {});
   }, []);
 
@@ -120,7 +117,7 @@ const AgentGetNumber = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-display font-bold text-foreground">Get Number</h1>
-        <p className="text-sm text-muted-foreground mt-1">Request real numbers from connected providers</p>
+        <p className="text-sm text-muted-foreground mt-1">Request a fresh number — select country and operator</p>
       </div>
 
       <GlassCard glow="cyan">
