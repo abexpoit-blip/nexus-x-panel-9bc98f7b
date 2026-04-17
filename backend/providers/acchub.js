@@ -1,20 +1,77 @@
-// AccHub provider client
-// IMPORTANT: Endpoint paths below are placeholders — verify against AccHub's actual API docs.
-// Update BASE_URL and request shapes once you have AccHub API documentation.
+// AccHub provider — REAL working integration (reverse-engineered from sms.acchub.io)
+// Auth: POST /auth/login {username,password} → {access_token, user:{api_key,...}}
+// Token cached in-memory & auto-refreshed on 401.
+//
+// Required env vars (set in backend/.env on the VPS):
+//   ACCHUB_USERNAME=ShovonYE
+//   ACCHUB_PASSWORD=YourPassword
+//
+// Optional:
+//   ACCHUB_BASE_URL=https://sms.acchub.io   (default)
+
 const axios = require('axios');
 
-const BASE_URL = process.env.ACCHUB_BASE_URL || 'https://acchub.io/api';
-const API_KEY = process.env.ACCHUB_API_KEY || '';
+const BASE_URL = process.env.ACCHUB_BASE_URL || 'https://sms.acchub.io';
+const USERNAME = process.env.ACCHUB_USERNAME || '';
+const PASSWORD = process.env.ACCHUB_PASSWORD || '';
 
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 20000,
   headers: { 'Content-Type': 'application/json' },
 });
 
-// All requests carry the API key — adjust header name if AccHub uses a different one
-function authParams(extra = {}) {
-  return { api_key: API_KEY, ...extra };
+let cachedToken = null;
+let tokenExpiresAt = 0; // unix seconds
+
+async function login() {
+  if (!USERNAME || !PASSWORD) throw new Error('ACCHUB_USERNAME / ACCHUB_PASSWORD not set in .env');
+  const { data } = await client.post('/auth/login', { username: USERNAME, password: PASSWORD });
+  if (!data?.access_token) throw new Error('AccHub login failed: no access_token');
+  cachedToken = data.access_token;
+  // JWT exp is in payload — decode to know when to refresh
+  try {
+    const payload = JSON.parse(Buffer.from(cachedToken.split('.')[1], 'base64').toString());
+    tokenExpiresAt = payload.exp || (Math.floor(Date.now() / 1000) + 3600);
+  } catch (_) {
+    tokenExpiresAt = Math.floor(Date.now() / 1000) + 3600;
+  }
+  return cachedToken;
+}
+
+async function getToken() {
+  const now = Math.floor(Date.now() / 1000);
+  if (!cachedToken || now >= tokenExpiresAt - 60) {
+    await login();
+  }
+  return cachedToken;
+}
+
+async function authedRequest(method, path, opts = {}) {
+  const token = await getToken();
+  try {
+    const { data } = await client.request({
+      method,
+      url: path,
+      headers: { Authorization: `Bearer ${token}` },
+      ...opts,
+    });
+    return data;
+  } catch (e) {
+    // Token expired? Force refresh once.
+    if (e?.response?.status === 401) {
+      cachedToken = null;
+      const fresh = await getToken();
+      const { data } = await client.request({
+        method,
+        url: path,
+        headers: { Authorization: `Bearer ${fresh}` },
+        ...opts,
+      });
+      return data;
+    }
+    throw e;
+  }
 }
 
 module.exports = {
@@ -23,41 +80,76 @@ module.exports = {
   mode: 'auto',
 
   async listCountries() {
-    // TODO: confirm endpoint
-    const { data } = await client.get('/countries', { params: authParams() });
-    return data?.countries || data || [];
+    const data = await authedRequest('GET', '/api/freelancer/get-page/available-countries');
+    // data.data = [{id, name, phone_code, status}]
+    return (data?.data || []).map(c => ({
+      id: c.id,
+      name: `${c.name} (+${c.phone_code})`,
+      code: c.phone_code,
+    }));
   },
 
   async listOperators(countryId) {
-    // TODO: confirm endpoint
-    const { data } = await client.get(`/operators/${countryId}`, { params: authParams() });
-    return data?.operators || data || [];
+    const data = await authedRequest('GET', `/api/freelancer/get-page/available-operators?country_id=${countryId}`);
+    // shape: {status, data:[{id, name, ...}]}
+    return (data?.data || []).map(o => ({ id: o.id, name: o.name || o.operator_name }));
   },
 
   async getNumber({ countryId, operatorId }) {
-    // TODO: confirm endpoint + response shape
-    const { data } = await client.post('/getNumber', authParams({ country_id: countryId, operator_id: operatorId }));
-    if (!data?.phone_number && !data?.number) throw new Error(data?.error || 'No number available');
+    if (!countryId || !operatorId) throw new Error('countryId and operatorId required');
+    const data = await authedRequest('POST', '/api/freelancer/get-page/get-number', {
+      data: {
+        country_id: +countryId,
+        operator_id: +operatorId,
+        mode: 'single',
+        number_format: 'full',
+      },
+    });
+    const n = data?.data;
+    if (!n?.phone_number) throw new Error(data?.message || 'AccHub: no number returned');
     return {
-      provider_ref: String(data.id || data.activation_id || ''),
-      phone_number: data.phone_number || data.number,
-      operator: data.operator || null,
-      country_code: data.country_code || null,
+      // AccHub doesn't return a per-allocation ID — we use phone_number as the ref
+      provider_ref: n.phone_number,
+      phone_number: n.phone_number,
+      operator: n.operator_name || null,
+      country_code: null, // not in response; could be derived from country_id
     };
   },
 
+  // AccHub OTP polling: there's no per-number status endpoint we found.
+  // Instead, /otp-history returns recent OTPs across the account; we match by phone_number.
+  // Cached briefly to avoid hammering the API when many allocations are pending.
   async checkOtp(providerRef) {
-    // TODO: confirm endpoint
-    const { data } = await client.get(`/getStatus/${providerRef}`, { params: authParams() });
-    return {
-      otp: data?.code || data?.otp || null,
-      status: data?.status || 'waiting',
-    };
+    if (!providerRef) return { otp: null, status: 'waiting' };
+    const list = await this._otpHistory();
+    // phone_number in history may or may not have a leading '+'
+    const wanted = String(providerRef).replace(/^\+/, '');
+    const match = list.find(o => String(o.phone_number || '').replace(/^\+/, '') === wanted);
+    if (match?.otp_code) {
+      return { otp: String(match.otp_code), status: 'received' };
+    }
+    return { otp: null, status: 'waiting' };
+  },
+
+  // Cached OTP history (refresh every 4s max) — used by the poller for many numbers in one tick.
+  _otpCache: { at: 0, items: [] },
+  async _otpHistory() {
+    const now = Date.now();
+    if (now - this._otpCache.at < 4000 && this._otpCache.items.length) {
+      return this._otpCache.items;
+    }
+    try {
+      const data = await authedRequest('GET', '/api/freelancer/get-page/otp-history?page=1&limit=50');
+      this._otpCache = { at: now, items: data?.data || [] };
+    } catch (_) {
+      // keep stale cache on error
+    }
+    return this._otpCache.items;
   },
 
   async releaseNumber(providerRef) {
-    try {
-      await client.post(`/cancel/${providerRef}`, authParams());
-    } catch (_) { /* best effort */ }
+    // AccHub UI has no explicit release endpoint we observed; mark released locally.
+    // (If/when AccHub exposes a cancel endpoint, add it here.)
+    return;
   },
 };
