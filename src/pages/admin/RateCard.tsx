@@ -125,18 +125,15 @@ const AdminRateCard = () => {
           <DialogHeader><DialogTitle>{form.id ? "Edit Rate" : "New Rate"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <Field label="Provider">
-              <select value={form.provider || "msi"} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="w-full h-10 px-3 rounded-md bg-white/[0.04] border border-white/[0.08]">
-                <option value="msi">MSI</option>
-                <option value="acchub">AccHub</option>
+              <select value={form.provider || "acchub"} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="w-full h-10 px-3 rounded-md bg-white/[0.04] border border-white/[0.08]">
+                <option value="acchub">Server A (AccHub)</option>
+                <option value="ims">Server B (IMS)</option>
               </select>
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Country code"><Input value={form.country_code || ""} onChange={(e) => setForm({ ...form, country_code: e.target.value })} /></Field>
-              <Field label="Country name"><Input value={form.country_name || ""} onChange={(e) => setForm({ ...form, country_name: e.target.value })} /></Field>
-            </div>
-            <Field label="Operator"><Input value={form.operator || ""} onChange={(e) => setForm({ ...form, operator: e.target.value })} /></Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Provider Price (৳)"><Input type="number" step="0.01" value={form.price_bdt ?? 0} onChange={(e) => setForm({ ...form, price_bdt: +e.target.value })} /></Field>
+              <Field label="Provider Price (৳)">
+                <Input type="number" step="0.01" value={form.price_bdt ?? 0} onChange={(e) => setForm({ ...form, price_bdt: +e.target.value })} />
+              </Field>
               <Field label="Agent Commission (%)">
                 <Input type="number" min="0" max="100" step="1"
                   value={(form as any).agent_commission_percent ?? 60}
@@ -144,7 +141,7 @@ const AdminRateCard = () => {
               </Field>
             </div>
             <div className="text-xs text-muted-foreground -mt-1 pl-1">
-              Agent earns: <span className="text-neon-green font-mono">৳{(((form.price_bdt ?? 0) * ((form as any).agent_commission_percent ?? 60)) / 100).toFixed(2)}</span> per successful OTP
+              Agent earns: <span className="text-neon-green font-mono">৳{(((form.price_bdt ?? 0) * ((form as any).agent_commission_percent ?? 60)) / 100).toFixed(2)}</span> per successful OTP — <span className="text-neon-cyan">applies to ALL countries/operators on this provider</span>
             </div>
             <Field label="Active">
               <select value={String(form.active ?? 1)} onChange={(e) => setForm({ ...form, active: +e.target.value })} className="w-full h-10 px-3 rounded-md bg-white/[0.04] border border-white/[0.08]">
