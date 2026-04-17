@@ -42,7 +42,7 @@ const AgentSummary = () => {
               <div key={c.id} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 text-sm">
                 <div>
                   <p className="font-mono text-foreground">{c.phone_number}</p>
-                  <p className="text-xs text-muted-foreground">{c.provider.toUpperCase()} · {new Date(c.created_at * 1000).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(c.created_at * 1000).toLocaleString()}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-neon-green">৳{c.price_bdt.toFixed(2)}</p>
