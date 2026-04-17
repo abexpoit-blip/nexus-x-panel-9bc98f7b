@@ -96,14 +96,44 @@ router.get('/leaderboard', (req, res) => {
   res.json({ leaderboard });
 });
 
-// GET /api/admin/agents
+// GET /api/admin/agents — includes pending, active, suspended (excludes system pool user)
 router.get('/agents', (req, res) => {
   const agents = db.prepare(`
     SELECT id, username, role, full_name, phone, telegram, balance, otp_count,
            daily_limit, per_request_limit, status, created_at
-    FROM users WHERE role = 'agent' ORDER BY created_at DESC
+    FROM users WHERE role = 'agent' AND username != '__ims_pool__'
+    ORDER BY
+      CASE status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+      created_at DESC
   `).all();
   res.json({ agents });
+});
+
+// POST /api/admin/agents/:id/approve — approve a pending agent
+router.post('/agents/:id/approve', (req, res) => {
+  const id = +req.params.id;
+  const u = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'agent'").get(id);
+  if (!u) return res.status(404).json({ error: 'Agent not found' });
+  if (u.status !== 'pending') return res.status(400).json({ error: 'Agent is not pending' });
+
+  db.prepare("UPDATE users SET status = 'active' WHERE id = ?").run(id);
+  // Notify the agent
+  db.prepare(`
+    INSERT INTO notifications (user_id, title, message, type)
+    VALUES (?, 'Account approved', 'Your account has been approved by an admin. You can now log in.', 'success')
+  `).run(id);
+  logFromReq(req, 'agent_approved', { targetType: 'user', targetId: id, meta: { username: u.username } });
+  res.json({ ok: true });
+});
+
+// POST /api/admin/agents/:id/reject — reject (delete) a pending agent
+router.post('/agents/:id/reject', (req, res) => {
+  const id = +req.params.id;
+  const u = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'agent' AND status = 'pending'").get(id);
+  if (!u) return res.status(404).json({ error: 'Pending agent not found' });
+  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  logFromReq(req, 'agent_rejected', { targetType: 'user', targetId: id, meta: { username: u.username } });
+  res.json({ ok: true });
 });
 
 // POST /api/admin/agents

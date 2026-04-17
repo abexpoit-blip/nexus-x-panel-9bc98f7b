@@ -30,6 +30,9 @@ router.post('/login', (req, res) => {
     log({ userId: user.id, action: 'login_failed', ip: req.ip });
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  if (user.status === 'pending') {
+    return res.status(403).json({ error: 'Your account is pending admin approval. Please wait for approval before logging in.' });
+  }
   if (user.status !== 'active') return res.status(403).json({ error: 'Account suspended' });
 
   const token = signToken(user);
@@ -64,19 +67,28 @@ router.post('/register', (req, res) => {
   if (exists) return res.status(409).json({ error: 'Username already taken' });
 
   const hash = bcrypt.hashSync(password, 10);
+  // New agents start in 'pending' status — admin must approve before they can log in
   const result = db.prepare(`
-    INSERT INTO users (username, password_hash, role, full_name, phone, telegram)
-    VALUES (?, ?, 'agent', ?, ?, ?)
+    INSERT INTO users (username, password_hash, role, full_name, phone, telegram, status)
+    VALUES (?, ?, 'agent', ?, ?, ?, 'pending')
   `).run(username, hash, full_name || null, phone || null, telegram || null);
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
-  const token = signToken(user);
-  recordSession(user.id, token, req);
-  setAuthCookie(res, token);
-  log({ userId: user.id, action: 'register', ip: req.ip });
+  log({ userId: result.lastInsertRowid, action: 'register_pending', ip: req.ip, meta: { username } });
 
-  const { password_hash, ...safe } = user;
-  res.status(201).json({ token, user: safe });
+  // Notify all admins about the new pending signup
+  try {
+    const admins = db.prepare("SELECT id FROM users WHERE role='admin'").all();
+    const ins = db.prepare("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'info')");
+    for (const a of admins) {
+      ins.run(a.id, 'New agent signup', `${username} (${full_name || 'no name'}) is awaiting approval.`);
+    }
+  } catch (e) { console.warn('admin notify failed:', e.message); }
+
+  // Do NOT issue a token — agent cannot log in until approved
+  res.status(201).json({
+    pending: true,
+    message: 'Your account has been created and is awaiting admin approval. You will be notified once approved.',
+  });
 });
 
 // GET /api/auth/me — also returns impersonator info if applicable

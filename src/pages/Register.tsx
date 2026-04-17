@@ -8,6 +8,7 @@ import { Eye, EyeOff, UserPlus, Sparkles, ShieldX, User, Phone, Send, Lock, AtSi
 import { motion } from "framer-motion";
 import { toast } from "@/hooks/use-toast";
 import { APP_VERSION } from "@/components/NexusLogo";
+import { api } from "@/lib/api";
 
 const Register = () => {
   const [form, setForm] = useState({
@@ -24,13 +25,15 @@ const Register = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const enabled = localStorage.getItem("nexus_signup_enabled");
-    setSignupEnabled(enabled !== "false");
+    // Fetch real signup_enabled flag from backend
+    api.settings.getPublic()
+      .then((s) => setSignupEnabled(!!s.signup_enabled))
+      .catch(() => setSignupEnabled(true)); // fallback open
   }, []);
 
   const update = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupEnabled) return;
 
@@ -38,8 +41,8 @@ const Register = () => {
       toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
       return;
     }
-    if (form.password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+    if (form.password.length < 8) {
+      toast({ title: "Error", description: "Password must be at least 8 characters", variant: "destructive" });
       return;
     }
     if (!form.telegram.startsWith("@")) {
@@ -48,15 +51,24 @@ const Register = () => {
     }
 
     setLoading(true);
-    // Mock registration — replace with VPS API
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await api.register({
+        username: form.username,
+        password: form.password,
+        full_name: form.name,
+        phone: form.phone,
+        telegram: form.telegram,
+      });
       toast({
         title: "Registration Submitted!",
         description: "Your account is pending admin approval. You'll be notified once approved.",
       });
       navigate("/login");
-    }, 1500);
+    } catch (err: any) {
+      toast({ title: "Registration failed", description: err?.message || "Please try again", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

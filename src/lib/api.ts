@@ -237,6 +237,8 @@ export const api = {
   // Auth
   login: (username: string, password: string) =>
     request<{ token: string; user: any }>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  register: (body: { username: string; password: string; full_name?: string; phone?: string; telegram?: string }) =>
+    request<{ pending?: boolean; message?: string; token?: string; user?: any }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   me: () => request<{ user: any; impersonator?: { id: number; username: string } | null }>("/auth/me"),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   exitImpersonation: () =>
@@ -331,6 +333,8 @@ export const api = {
     createAgent: (body: any) => request<{ id: number }>("/admin/agents", { method: "POST", body: JSON.stringify(body) }),
     updateAgent: (id: number, body: any) => request(`/admin/agents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     deleteAgent: (id: number) => request(`/admin/agents/${id}`, { method: "DELETE" }),
+    approveAgent: (id: number) => request(`/admin/agents/${id}/approve`, { method: "POST" }),
+    rejectAgent: (id: number) => request(`/admin/agents/${id}/reject`, { method: "POST" }),
     loginAs: (id: number) =>
       request<{ token: string; user: any; impersonator: { id: number; username: string } }>(
         `/admin/login-as/${id}`, { method: "POST" }
