@@ -57,6 +57,24 @@ const AdminRateCard = () => {
           { key: "operator", header: "Operator", render: (r) => r.operator || "—" },
           { key: "price_bdt", header: "Price", render: (r) => <span className="font-mono text-neon-green font-bold">৳{r.price_bdt.toFixed(2)}</span> },
           {
+            key: "commission",
+            header: "Agent Commission",
+            render: (r) => {
+              const pct = (r as any).agent_commission_percent ?? 60;
+              const isZero = Number(pct) === 0;
+              return (
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold",
+                  isZero
+                    ? "bg-neon-amber/15 text-neon-amber border border-neon-amber/30"
+                    : "bg-primary/15 text-primary"
+                )}>
+                  {isZero ? "⚠ Zero-payout" : `${pct}% · ৳${((r.price_bdt * pct) / 100).toFixed(2)}`}
+                </span>
+              );
+            },
+          },
+          {
             key: "active",
             header: "Status",
             render: (r) => (
@@ -72,6 +90,19 @@ const AdminRateCard = () => {
               <div className="flex gap-2">
                 <button onClick={() => { setForm(r); setOpen(true); }} className="text-primary hover:underline text-xs flex items-center gap-1">
                   <Pencil className="w-3 h-3" /> Edit
+                </button>
+                <button
+                  onClick={() => {
+                    const pct = (r as any).agent_commission_percent ?? 60;
+                    const next = Number(pct) === 0 ? 60 : 0;
+                    save.mutate({ ...r, agent_commission_percent: next } as any);
+                  }}
+                  className={cn("text-xs flex items-center gap-1 hover:underline",
+                    Number((r as any).agent_commission_percent ?? 60) === 0 ? "text-neon-green" : "text-neon-amber"
+                  )}
+                  title="Quick toggle: set commission to 0% (no payout) or back to 60%"
+                >
+                  {Number((r as any).agent_commission_percent ?? 60) === 0 ? "Enable payout" : "Set 0%"}
                 </button>
                 <button onClick={() => { if (confirm("Delete rate?")) del.mutate(r.id); }} className="text-destructive hover:underline text-xs flex items-center gap-1">
                   <Trash2 className="w-3 h-3" /> Delete
