@@ -405,6 +405,43 @@ router.put('/ims-credentials', async (req, res) => {
   }
 });
 
+// GET /api/admin/ims-otp-interval — current fast-OTP poll interval (seconds)
+router.get('/ims-otp-interval', (req, res) => {
+  const dbVal = +(db.prepare("SELECT value FROM settings WHERE key = 'ims_otp_interval'").get()?.value || 0);
+  const envVal = +(process.env.IMS_OTP_INTERVAL || 10);
+  const effective = dbVal > 0 ? dbVal : envVal;
+  res.json({
+    interval_sec: effective,
+    source: dbVal > 0 ? 'database' : 'env',
+    options: [5, 10, 30],
+    min: 3,
+    max: 120,
+  });
+});
+
+// PUT /api/admin/ims-otp-interval — admin sets fast-OTP poll cadence (5/10/30s typical)
+router.put('/ims-otp-interval', async (req, res) => {
+  try {
+    const interval = +(req.body?.interval_sec);
+    if (!Number.isFinite(interval) || interval < 3 || interval > 120) {
+      return res.status(400).json({ error: 'interval_sec must be a number between 3 and 120' });
+    }
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('ims_otp_interval', ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `).run(String(interval));
+    logFromReq(req, 'ims_otp_interval_updated', { meta: { interval_sec: interval } });
+    // Restart bot so new interval takes effect immediately
+    try {
+      const bot = require('../workers/imsBot');
+      await bot.restart();
+      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
+    } catch (e) { console.warn('ims-otp-interval restart:', e.message); }
+    res.json({ ok: true, interval_sec: interval });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+
 // GET /api/admin/provider-status — health for all configured providers (AccHub balance, IMS bot, etc.)
 router.get('/provider-status', async (req, res) => {
   try {
