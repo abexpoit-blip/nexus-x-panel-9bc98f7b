@@ -140,6 +140,10 @@ function demoRoute(path: string, opts: RequestInit): any {
   if (path === "/admin/allocations") return demoData.allocations();
   if (path === "/admin/agents") return demoData.agents();
   if (path === "/admin/ims-status") return { status: demoImsState.snapshot() };
+  if (path === "/admin/impersonations") return { impersonations: [
+    { id: 1, created_at: Math.floor(Date.now()/1000) - 1800, action: "impersonation_start", admin_id: 1, agent_id: 2, admin_username: "admin", agent_username: "demo_agent", ip: "127.0.0.1", meta: '{"username":"demo_agent"}' },
+    { id: 2, created_at: Math.floor(Date.now()/1000) - 1500, action: "impersonation_end", admin_id: 1, agent_id: 2, admin_username: "admin", agent_username: "demo_agent", ip: "127.0.0.1" },
+  ] };
   if (path === "/admin/ims-restart" && method === "POST") { demoImsState.restart(); return { ok: true }; }
   if (path === "/admin/ims-start" && method === "POST") { demoImsState.start(); return { ok: true }; }
   if (path === "/admin/ims-stop" && method === "POST") { demoImsState.stop(); return { ok: true }; }
@@ -333,6 +337,14 @@ export const api = {
       request<{ token: string; user: any; impersonator: { id: number; username: string } }>(
         `/admin/login-as/${id}`, { method: "POST" }
       ),
+    impersonations: () => request<{
+      impersonations: {
+        id: number; created_at: number; action: string;
+        admin_id: number | null; agent_id: number | null;
+        admin_username?: string; agent_username?: string;
+        ip?: string; meta?: string;
+      }[];
+    }>("/admin/impersonations"),
     stats: () => request<{
       totalAgents: number; activeAgents: number; totalAlloc: number; activeAlloc: number;
       totalOtp: number; todayOtp: number; todayRevenue: number; totalRevenue: number;

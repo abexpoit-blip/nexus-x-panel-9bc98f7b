@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { StatCard } from "@/components/StatCard";
 import {
   Shield, UserX, UserCheck, AlertTriangle, Eye, UserPlus, Power,
-  ScrollText, Monitor, LogOut, Smartphone, Globe, Search, Wrench,
+  ScrollText, Monitor, LogOut, Smartphone, Globe, Search, Wrench, ShieldAlert,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -34,7 +34,7 @@ const parseUA = (ua: string) => {
 
 const AdminSecurity = () => {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"audit" | "sessions" | "settings" | "maintenance">("audit");
+  const [tab, setTab] = useState<"audit" | "sessions" | "impersonation" | "settings" | "maintenance">("audit");
   const [auditSearch, setAuditSearch] = useState("");
   const { signupEnabled, setSignupEnabled, maintenanceMode, maintenanceMessage, setMaintenanceMode } = useAuth();
   const [draftMsg, setDraftMsg] = useState(maintenanceMessage);
@@ -44,6 +44,9 @@ const AdminSecurity = () => {
   });
   const { data: sessData, isLoading: sessLoading } = useQuery({
     queryKey: ["sessions-all"], queryFn: () => api.sessions.all(), refetchInterval: 30000,
+  });
+  const { data: impData, isLoading: impLoading } = useQuery({
+    queryKey: ["impersonations"], queryFn: () => api.admin.impersonations(), refetchInterval: 30000,
   });
 
   const revoke = useMutation({
@@ -65,9 +68,11 @@ const AdminSecurity = () => {
   );
   const sessions = sessData?.sessions || [];
 
+  const impersonations = impData?.impersonations || [];
   const tabs = [
     { key: "audit" as const, label: "Audit Log", icon: ScrollText, count: logs.length },
     { key: "sessions" as const, label: "Active Sessions", icon: Monitor, count: sessions.length },
+    { key: "impersonation" as const, label: "Impersonation", icon: ShieldAlert, count: impersonations.length },
     { key: "settings" as const, label: "Registration", icon: UserPlus },
     { key: "maintenance" as const, label: "Maintenance", icon: Wrench },
   ];
@@ -206,6 +211,52 @@ const AdminSecurity = () => {
             <GlassCard className="text-center py-8">
               <Monitor className="w-10 h-10 text-muted-foreground mx-auto opacity-30" />
               <p className="text-sm text-muted-foreground mt-3">No active sessions</p>
+            </GlassCard>
+          )}
+        </>
+      )}
+
+      {tab === "impersonation" && (
+        <>
+          <GlassCard className="p-4 border-neon-amber/20 bg-neon-amber/[0.03]">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-neon-amber shrink-0 mt-0.5" />
+              <div className="text-sm text-muted-foreground">
+                Every time an admin uses <span className="text-neon-amber font-semibold">"Login as"</span> on an agent, it's recorded here for transparency. The agent also receives an inbox notification.
+              </div>
+            </div>
+          </GlassCard>
+          <DataTable
+            columns={[
+              { key: "created_at", header: "Time", render: (r: any) => new Date(r.created_at * 1000).toLocaleString() },
+              {
+                key: "action", header: "Event",
+                render: (r: any) => (
+                  <span className={cn(
+                    "px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase",
+                    r.action === "impersonation_start"
+                      ? "bg-neon-amber/15 text-neon-amber"
+                      : "bg-neon-green/15 text-neon-green"
+                  )}>
+                    {r.action === "impersonation_start" ? "🔓 Started" : "🔒 Ended"}
+                  </span>
+                ),
+              },
+              { key: "admin_username", header: "Admin", render: (r: any) => (
+                <span className="font-semibold text-neon-cyan">{r.admin_username || `#${r.admin_id || "?"}`}</span>
+              )},
+              { key: "agent_username", header: "→ Agent", render: (r: any) => (
+                <span className="font-semibold">{r.agent_username || `#${r.agent_id || "?"}`}</span>
+              )},
+              { key: "ip", header: "IP", render: (r: any) => <span className="font-mono text-xs">{r.ip || "—"}</span> },
+            ]}
+            data={impersonations}
+          />
+          {impLoading && <p className="text-center text-muted-foreground text-sm py-4">Loading…</p>}
+          {!impLoading && impersonations.length === 0 && (
+            <GlassCard className="text-center py-8">
+              <ShieldAlert className="w-10 h-10 text-muted-foreground mx-auto opacity-30" />
+              <p className="text-sm text-muted-foreground mt-3">No impersonation events yet</p>
             </GlassCard>
           )}
         </>
