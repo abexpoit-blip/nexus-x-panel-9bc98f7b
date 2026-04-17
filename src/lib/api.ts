@@ -111,7 +111,8 @@ export type Allocation = {
 };
 export type Rate = {
   id: number; provider: string; country_code?: string; country_name?: string;
-  operator?: string; price_bdt: number; active: number; updated_at: number;
+  operator?: string; price_bdt: number; agent_commission_percent?: number;
+  active: number; updated_at: number;
 };
 export type CDR = {
   id: number; user_id: number; username?: string; provider: string;
@@ -244,5 +245,6 @@ export const api = {
     }>("/admin/stats"),
     leaderboard: () => request<{ leaderboard: { id: number; username: string; otp_count: number }[] }>("/admin/leaderboard"),
     allocations: () => request<{ allocations: Allocation[] }>("/admin/allocations"),
+    imsStatus: () => request<{ status: any }>("/admin/ims-status"),
   },
 };
