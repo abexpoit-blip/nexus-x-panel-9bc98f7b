@@ -98,6 +98,10 @@ router.post('/withdrawals/:id/approve', authRequired, adminOnly, (req, res) => {
       INSERT INTO payments (user_id, amount_bdt, type, method, reference, note)
       VALUES (?, ?, 'debit', ?, ?, 'Withdrawal approved')
     `).run(w.user_id, w.amount_bdt, w.method, `wd:${id}`);
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type)
+      VALUES (?, ?, ?, 'success')
+    `).run(w.user_id, 'Withdrawal Approved ✅', `Your withdrawal of ৳${w.amount_bdt.toFixed(2)} via ${w.method} has been approved and processed.`);
   });
   tx();
 
@@ -109,10 +113,24 @@ router.post('/withdrawals/:id/approve', authRequired, adminOnly, (req, res) => {
 router.post('/withdrawals/:id/reject', authRequired, adminOnly, (req, res) => {
   const id = +req.params.id;
   const { note } = req.body || {};
-  const r = db.prepare(
-    "UPDATE withdrawals SET status = 'rejected', processed_at = strftime('%s','now'), note = ? WHERE id = ? AND status = 'pending'"
-  ).run(note || null, id);
-  if (!r.changes) return res.status(404).json({ error: 'Not found or already processed' });
+  const w = db.prepare("SELECT * FROM withdrawals WHERE id = ? AND status = 'pending'").get(id);
+  if (!w) return res.status(404).json({ error: 'Not found or already processed' });
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      "UPDATE withdrawals SET status = 'rejected', processed_at = strftime('%s','now'), admin_note = ? WHERE id = ?"
+    ).run(note || null, id);
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type)
+      VALUES (?, ?, ?, 'warning')
+    `).run(
+      w.user_id,
+      'Withdrawal Rejected ❌',
+      `Your withdrawal of ৳${w.amount_bdt.toFixed(2)} via ${w.method} was rejected.${note ? ` Reason: ${note}` : ''}`
+    );
+  });
+  tx();
+
   logFromReq(req, 'withdrawal_rejected', { targetType: 'withdrawal', targetId: id });
   res.json({ ok: true });
 });

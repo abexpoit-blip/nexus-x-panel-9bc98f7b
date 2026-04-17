@@ -327,6 +327,7 @@ export const api = {
     stats: () => request<{
       totalAgents: number; activeAgents: number; totalAlloc: number; activeAlloc: number;
       totalOtp: number; todayOtp: number; todayRevenue: number; totalRevenue: number;
+      todayCommission?: number; totalCommission?: number; pendingWithdrawals?: number;
     }>("/admin/stats"),
     leaderboard: () => request<{ leaderboard: { id: number; username: string; otp_count: number }[] }>("/admin/leaderboard"),
     allocations: () => request<{ allocations: Allocation[] }>("/admin/allocations"),

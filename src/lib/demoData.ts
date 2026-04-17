@@ -61,6 +61,9 @@ export const demoData = {
     todayOtp: 1316,
     todayRevenue: 18_420.5,
     totalRevenue: 547_890.25,
+    todayCommission: 6_847.25,
+    totalCommission: 184_320.75,
+    pendingWithdrawals: 3,
   }),
   leaderboard: () => ({
     leaderboard: AGENTS.slice(0, 8).map((u, i) => ({

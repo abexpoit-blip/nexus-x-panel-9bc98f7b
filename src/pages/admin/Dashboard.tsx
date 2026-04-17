@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Users, UserCheck, Hash, Activity, MessageSquare, TrendingUp, Wallet, Trophy, Globe, Zap, Server, ShieldCheck } from "lucide-react";
+import { Users, UserCheck, Hash, Activity, MessageSquare, TrendingUp, Wallet, Trophy, Globe, Zap, Server, ShieldCheck, Coins, Clock } from "lucide-react";
 import { RevenueArea, OtpLine, TopAgentsBar, CountryPie, SuccessGauge } from "@/components/charts/Charts";
 import { useMemo } from "react";
 import { GradientMesh, PageHeader, PremiumKpiCard, PremiumChartCard } from "@/components/premium";
@@ -17,6 +17,7 @@ const AdminDashboard = () => {
   const s = data || {
     totalAgents: 0, activeAgents: 0, totalAlloc: 0, activeAlloc: 0,
     totalOtp: 0, todayOtp: 0, todayRevenue: 0, totalRevenue: 0,
+    todayCommission: 0, totalCommission: 0, pendingWithdrawals: 0,
   };
 
   const { revenueSeries, otpSeries, countrySeries, successRate } = useMemo(() => {
@@ -84,9 +85,16 @@ const AdminDashboard = () => {
       {/* KPI Row 1 — primary metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <PremiumKpiCard label="Total Agents" value={s.totalAgents} icon={Users} tone="cyan" delta={{ value: 8.2, label: "vs last week" }} spark={sparkData(7, 18)} />
-        <PremiumKpiCard label="Total Numbers" value={s.totalAlloc} icon={Hash} tone="magenta" delta={{ value: 12.4 }} spark={sparkData(7, 200)} />
         <PremiumKpiCard label="Today SMS" value={s.todayOtp} icon={MessageSquare} tone="green" delta={{ value: 5.1 }} spark={otpSpark.length ? otpSpark : sparkData(7, 80)} />
         <PremiumKpiCard label="Today Revenue" value={`৳${s.todayRevenue.toFixed(0)}`} icon={Wallet} tone="amber" delta={{ value: 14.8 }} spark={revSpark.length ? revSpark : sparkData(7, 1200)} />
+        <PremiumKpiCard
+          label="Commission Paid Today"
+          value={`৳${(s.todayCommission ?? 0).toFixed(0)}`}
+          icon={Coins}
+          tone="magenta"
+          delta={{ value: 11.3, label: "credited to agents" }}
+          spark={sparkData(7, 600)}
+        />
       </div>
 
       {/* KPI Row 2 — secondary metrics */}
@@ -94,7 +102,12 @@ const AdminDashboard = () => {
         <PremiumKpiCard label="Active Agents" value={s.activeAgents} icon={UserCheck} tone="green" />
         <PremiumKpiCard label="Active Numbers" value={s.activeAlloc} icon={Activity} tone="purple" />
         <PremiumKpiCard label="Total OTP" value={s.totalOtp} icon={TrendingUp} tone="cyan" />
-        <PremiumKpiCard label="Total Revenue" value={`৳${(s.totalRevenue / 1000).toFixed(1)}k`} icon={Wallet} tone="magenta" />
+        <PremiumKpiCard
+          label="Pending Withdrawals"
+          value={s.pendingWithdrawals ?? 0}
+          icon={Clock}
+          tone={(s.pendingWithdrawals ?? 0) > 0 ? "amber" : "green"}
+        />
       </div>
 
       {/* Revenue + OTP charts */}

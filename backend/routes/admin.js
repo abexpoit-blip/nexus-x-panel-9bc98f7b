@@ -18,8 +18,20 @@ router.get('/stats', (req, res) => {
   const todayOtp = db.prepare("SELECT COUNT(*) c FROM cdr WHERE status = 'billed' AND created_at >= ?").get(todayStart).c;
   const todayRevenue = db.prepare("SELECT COALESCE(SUM(price_bdt),0) s FROM cdr WHERE status = 'billed' AND created_at >= ?").get(todayStart).s;
   const totalRevenue = db.prepare("SELECT COALESCE(SUM(price_bdt),0) s FROM cdr WHERE status = 'billed'").get().s;
+  // Total commission credited to agents today (from successful OTPs)
+  const todayCommission = db.prepare(
+    "SELECT COALESCE(SUM(amount_bdt),0) s FROM payments WHERE type = 'credit' AND created_at >= ?"
+  ).get(todayStart).s;
+  const totalCommission = db.prepare(
+    "SELECT COALESCE(SUM(amount_bdt),0) s FROM payments WHERE type = 'credit'"
+  ).get().s;
+  const pendingWithdrawals = db.prepare("SELECT COUNT(*) c FROM withdrawals WHERE status = 'pending'").get().c;
 
-  res.json({ totalAgents, activeAgents, totalAlloc, activeAlloc, totalOtp, todayOtp, todayRevenue, totalRevenue });
+  res.json({
+    totalAgents, activeAgents, totalAlloc, activeAlloc,
+    totalOtp, todayOtp, todayRevenue, totalRevenue,
+    todayCommission, totalCommission, pendingWithdrawals,
+  });
 });
 
 // GET /api/admin/leaderboard
