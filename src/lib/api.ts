@@ -17,7 +17,66 @@ export const demoMode = {
   disable: () => localStorage.removeItem(DEMO_KEY),
 };
 
-async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
+// In-memory IMS bot state for demo mode (preview without backend)
+const demoImsState = (() => {
+  let running = true;
+  let loggedIn = true;
+  let totalScrapes = 47;
+  let numbersAdded = 128;
+  let otpsDelivered = 312;
+  const events: { ts: number; level: string; message: string; meta: unknown }[] = [
+    { ts: Math.floor(Date.now() / 1000) - 8, level: "success", message: "OTP delivered to +8801712345678", meta: { otp: "458291" } },
+    { ts: Math.floor(Date.now() / 1000) - 24, level: "success", message: "Pool +3 new numbers", meta: { scraped: 12 } },
+    { ts: Math.floor(Date.now() / 1000) - 56, level: "info", message: "Scrape cycle completed", meta: null },
+    { ts: Math.floor(Date.now() / 1000) - 120, level: "success", message: "Logged in to imssms.org", meta: null },
+    { ts: Math.floor(Date.now() / 1000) - 180, level: "info", message: "Bot started", meta: null },
+  ];
+  const startTs = Math.floor(Date.now() / 1000) - 180;
+  return {
+    snapshot() {
+      return {
+        enabled: true,
+        running,
+        loggedIn: running && loggedIn,
+        lastLoginAt: running ? startTs : null,
+        lastScrapeAt: running ? Math.floor(Date.now() / 1000) - 6 : null,
+        lastScrapeOk: running,
+        lastError: null as string | null,
+        lastErrorAt: null as number | null,
+        totalScrapes,
+        numbersScrapedTotal: numbersAdded * 3,
+        numbersAddedTotal: numbersAdded,
+        otpsDeliveredTotal: otpsDelivered,
+        consecFail: 0,
+        baseUrl: "https://www.imssms.org",
+        intervalSec: 8,
+        poolSize: 47,
+        activeAssigned: 12,
+        otpReceived: otpsDelivered,
+        events: events.slice(0, 20),
+      };
+    },
+    start() {
+      if (running) return;
+      running = true;
+      loggedIn = true;
+      events.unshift({ ts: Math.floor(Date.now() / 1000), level: "success", message: "Bot started by admin", meta: null });
+    },
+    stop() {
+      if (!running) return;
+      running = false;
+      loggedIn = false;
+      events.unshift({ ts: Math.floor(Date.now() / 1000), level: "warn", message: "Bot stopped by admin", meta: null });
+    },
+    restart() {
+      events.unshift({ ts: Math.floor(Date.now() / 1000), level: "info", message: "Bot restart requested by admin", meta: null });
+      setTimeout(() => {
+        running = true; loggedIn = true; totalScrapes++;
+        events.unshift({ ts: Math.floor(Date.now() / 1000), level: "success", message: "Bot restarted successfully", meta: null });
+      }, 800);
+    },
+  };
+})();
   const token = tokenStore.get();
   // If demo mode is on OR the token looks like a demo token, short-circuit to demo handler
   if (demoMode.enabled() || (token && token.startsWith("demo_"))) {
