@@ -333,6 +333,14 @@ export const api = {
       request<{ token: string; user: any; impersonator: { id: number; username: string } }>(
         `/admin/login-as/${id}`, { method: "POST" }
       ),
+    impersonations: () => request<{
+      impersonations: {
+        id: number; created_at: number; action: string;
+        admin_id: number | null; agent_id: number | null;
+        admin_username?: string; agent_username?: string;
+        ip?: string; meta?: string;
+      }[];
+    }>("/admin/impersonations"),
     stats: () => request<{
       totalAgents: number; activeAgents: number; totalAlloc: number; activeAlloc: number;
       totalOtp: number; todayOtp: number; todayRevenue: number; totalRevenue: number;

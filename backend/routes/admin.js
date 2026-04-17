@@ -25,8 +25,39 @@ router.post('/login-as/:id', (req, res) => {
     targetType: 'user', targetId: target.id, meta: { username: target.username },
   });
 
+  // Transparency: notify the agent in their inbox
+  try {
+    const when = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka' });
+    db.prepare(`
+      INSERT INTO notifications (user_id, title, message, type)
+      VALUES (?, ?, ?, 'warning')
+    `).run(
+      target.id,
+      'Admin viewed your account',
+      `Admin "${req.user.username}" logged into your account at ${when} (Asia/Dhaka). If this was unexpected, contact support.`,
+    );
+  } catch (e) { console.error('impersonation notify failed:', e.message); }
+
   const { password_hash, ...safe } = target;
   res.json({ token, user: safe, impersonator: { id: req.user.id, username: req.user.username } });
+});
+
+// GET /api/admin/impersonations — history of admin login-as events
+router.get('/impersonations', (req, res) => {
+  const limit = Math.min(+req.query.limit || 200, 500);
+  const rows = db.prepare(`
+    SELECT a.id, a.created_at, a.action, a.user_id AS admin_id,
+           a.target_id AS agent_id, a.ip, a.meta,
+           ua.username AS admin_username,
+           ut.username AS agent_username
+    FROM audit_logs a
+    LEFT JOIN users ua ON ua.id = a.user_id
+    LEFT JOIN users ut ON ut.id = a.target_id
+    WHERE a.action IN ('impersonation_start', 'impersonation_end')
+    ORDER BY a.created_at DESC
+    LIMIT ?
+  `).all(limit);
+  res.json({ impersonations: rows });
 });
 
 // GET /api/admin/stats — dashboard KPIs
