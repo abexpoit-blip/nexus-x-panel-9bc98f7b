@@ -194,11 +194,13 @@ const demoAllocations = (() => {
   const items: Item[] = [];
   return {
     list: () => items.slice(),
-    allocate: (): Item => {
+    allocate: (countryCode = "880", operator?: string): Item => {
+      // Generate a plausible local subscriber number (8-9 digits)
+      const subscriber = `${rand(100000000, 999999999)}`.slice(0, rand(8, 10));
       const n: Item = {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        phone_number: `+88017${rand(10000000, 99999999)}`,
-        operator: pick(["Grameenphone", "Robi", "Banglalink", "Airtel"]),
+        phone_number: `+${countryCode}${subscriber}`,
+        operator: operator || pick(["Grameenphone", "Robi", "Banglalink", "Airtel"]),
         otp: null,
         status: "active",
         created_at: Math.floor(Date.now() / 1000),
