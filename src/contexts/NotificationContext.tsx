@@ -57,10 +57,17 @@ const INITIAL_NOTIFICATIONS: Notification[] = [];
 
 const INITIAL_ANNOUNCEMENTS: Announcement[] = [];
 
+// Bump this whenever stale demo/fake notifications need to be wiped from
+// users' localStorage. Old keys are deleted on next app load.
+const ANNOUNCEMENTS_VERSION = "v2-real-only";
+const ANNOUNCEMENTS_KEY = `nexus_announcements_${ANNOUNCEMENTS_VERSION}`;
+
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
-    const stored = localStorage.getItem("nexus_announcements");
+    // One-time cleanup: remove any old announcement caches from previous versions
+    try { localStorage.removeItem("nexus_announcements"); } catch { /* ignore */ }
+    const stored = localStorage.getItem(ANNOUNCEMENTS_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
