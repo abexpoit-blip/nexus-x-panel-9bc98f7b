@@ -44,7 +44,7 @@ function resolveCreds() {
 let { ENABLED, BASE_URL, USERNAME, PASSWORD } = resolveCreds();
 const HEADLESS = String(process.env.IMS_HEADLESS || 'true').toLowerCase() !== 'false';
 const CHROME_PATH = process.env.IMS_CHROME_PATH || undefined;
-const INTERVAL = +(process.env.IMS_SCRAPE_INTERVAL || 8);
+const INTERVAL = +(process.env.IMS_SCRAPE_INTERVAL || 60);
 
 let browser = null;
 let page = null;

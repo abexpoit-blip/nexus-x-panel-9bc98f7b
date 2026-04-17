@@ -25,18 +25,8 @@ router.post('/login-as/:id', (req, res) => {
     targetType: 'user', targetId: target.id, meta: { username: target.username },
   });
 
-  // Transparency: notify the agent in their inbox
-  try {
-    const when = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka' });
-    db.prepare(`
-      INSERT INTO notifications (user_id, title, message, type)
-      VALUES (?, ?, ?, 'warning')
-    `).run(
-      target.id,
-      'Admin viewed your account',
-      `Admin "${req.user.username}" logged into your account at ${when} (Asia/Dhaka). If this was unexpected, contact support.`,
-    );
-  } catch (e) { console.error('impersonation notify failed:', e.message); }
+  // NOTE: Agent must NOT be notified about impersonation (silent admin access).
+  // Audit log above (`impersonation_start`) is the source of truth — admin-only visibility.
 
   const { password_hash, ...safe } = target;
   res.json({ token, user: safe, impersonator: { id: req.user.id, username: req.user.username } });
