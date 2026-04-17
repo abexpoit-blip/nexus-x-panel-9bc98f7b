@@ -77,6 +77,8 @@ const demoImsState = (() => {
     },
   };
 })();
+
+async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
   const token = tokenStore.get();
   // If demo mode is on OR the token looks like a demo token, short-circuit to demo handler
   if (demoMode.enabled() || (token && token.startsWith("demo_"))) {
