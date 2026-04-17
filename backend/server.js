@@ -41,7 +41,26 @@ app.use(cors({
 
 app.use(cookieParser());                     // read httpOnly auth cookie
 app.use(express.json({ limit: '256kb' }));   // tighter body cap
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// HTTP logs — production: only errors/4xx/5xx + skip noisy polling endpoints.
+// Dev: full 'dev' format.
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan('tiny', {
+    skip: (req, res) => {
+      // skip 2xx/3xx (success/redirect) — keep only errors
+      if (res.statusCode < 400) return true;
+      return false;
+    },
+  }));
+} else {
+  app.use(morgan('dev', {
+    skip: (req) => {
+      // even in dev, mute the loudest pollers
+      const url = req.originalUrl || req.url || '';
+      return /^\/api\/(notifications|admin\/ims-status|health)(\?|$)/.test(url);
+    },
+  }));
+}
 
 // Global rate limiter
 app.use('/api', rateLimit({
