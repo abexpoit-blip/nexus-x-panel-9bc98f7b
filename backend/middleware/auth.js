@@ -74,6 +74,7 @@ function authRequired(req, res, next) {
     const payload = jwt.verify(token, SECRET);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
     if (!user) return res.status(401).json({ error: 'User not found' });
+    if (user.status === 'pending') return res.status(403).json({ error: 'Account pending admin approval' });
     if (user.status !== 'active') return res.status(403).json({ error: 'Account suspended' });
     req.user = user;
     req.token = token;
