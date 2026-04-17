@@ -29,6 +29,11 @@ interface Operator {
   price_bdt?: number;
 }
 
+interface Range {
+  name: string;
+  count: number;
+}
+
 // Agents see "Server A" / "Server B" — real provider names (acchub/ims) are hidden.
 const SERVERS = [
   { id: "acchub", label: "Server A" },
@@ -43,6 +48,11 @@ const AgentGetNumber = () => {
   const [countryId, setCountryId] = useState<number | "">("");
   const [operators, setOperators] = useState<Operator[]>([]);
   const [operatorId, setOperatorId] = useState<number | "">("");
+  const [ranges, setRanges] = useState<Range[]>([]);
+  const [rangeName, setRangeName] = useState<string>("");
+  const [rangeSearch, setRangeSearch] = useState("");
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const rangeRef = useRef<HTMLDivElement>(null);
   const [numbers, setNumbers] = useState<AllocatedNumber[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -70,24 +80,41 @@ const AgentGetNumber = () => {
     api.myNumbers().then(({ numbers }) => setNumbers(numbers as AllocatedNumber[])).catch(() => {});
   }, []);
 
-  // Reload countries whenever the agent switches Server A / B
+  // Reload countries OR ranges whenever the agent switches Server A / B
   useEffect(() => {
     setCountryId("");
     setOperatorId("");
     setOperators([]);
-    api.countries(provider).then(({ countries }) => setCountries(countries)).catch(() => setCountries([]));
+    setRangeName("");
+    if (provider === "ims") {
+      api.imsRanges().then(({ ranges }) => setRanges(ranges)).catch(() => setRanges([]));
+      setCountries([]);
+    } else {
+      setRanges([]);
+      api.countries(provider).then(({ countries }) => setCountries(countries)).catch(() => setCountries([]));
+    }
+  }, [provider]);
+
+  // Refresh range counts every 10s while Server B is selected
+  useEffect(() => {
+    if (provider !== "ims") return;
+    const i = setInterval(() => {
+      api.imsRanges().then(({ ranges }) => setRanges(ranges)).catch(() => {});
+    }, 10000);
+    return () => clearInterval(i);
   }, [provider]);
 
   useEffect(() => {
-    if (!countryId) { setOperators([]); setOperatorId(""); return; }
+    if (provider === "ims" || !countryId) { setOperators([]); setOperatorId(""); return; }
     setOperatorId("");
     api.operators(provider, Number(countryId)).then(({ operators }) => setOperators(operators)).catch(() => {});
   }, [countryId, provider]);
 
-  // Close country dropdown on outside click
+  // Close country/range dropdowns on outside click
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (countryRef.current && !countryRef.current.contains(e.target as Node)) setCountryOpen(false);
+      if (rangeRef.current && !rangeRef.current.contains(e.target as Node)) setRangeOpen(false);
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -101,12 +128,23 @@ const AgentGetNumber = () => {
     );
   }, [countries, countrySearch]);
 
+  const filteredRanges = useMemo(() => {
+    const q = rangeSearch.trim().toLowerCase();
+    if (!q) return ranges;
+    return ranges.filter((r) => r.name.toLowerCase().includes(q));
+  }, [ranges, rangeSearch]);
+
+  const selectedRange = ranges.find((r) => r.name === rangeName);
+  const totalPoolSize = ranges.reduce((sum, r) => sum + r.count, 0);
+
   const handleGetNumber = async () => {
     if (maintenanceMode) {
       toast({ title: "Maintenance mode", description: maintenanceMessage, variant: "destructive" });
       return;
     }
-    if (!countryId || !operatorId) {
+    if (provider === "ims") {
+      if (!rangeName) { toast({ title: "Select a range", variant: "destructive" }); return; }
+    } else if (!countryId || !operatorId) {
       toast({ title: "Select country & operator", variant: "destructive" });
       return;
     }
@@ -114,13 +152,15 @@ const AgentGetNumber = () => {
     try {
       const { allocated, errors } = await api.getNumber({
         provider,
-        country_id: Number(countryId),
-        operator_id: Number(operatorId),
+        ...(provider === "ims"
+          ? { range: rangeName }
+          : { country_id: Number(countryId), operator_id: Number(operatorId) }),
         count: quantity,
       });
       setNumbers((prev) => [...allocated.map((a: AllocatedNumber) => ({ ...a, status: "active" as const })), ...prev]);
       if (allocated.length) toast({ title: `${allocated.length} number${allocated.length > 1 ? "s" : ""} allocated!`, description: allocated[0].phone_number });
       if (errors.length) toast({ title: "Some failed", description: errors.join(", "), variant: "destructive" });
+      if (provider === "ims") api.imsRanges().then(({ ranges }) => setRanges(ranges)).catch(() => {});
     } catch (e: unknown) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     } finally {
