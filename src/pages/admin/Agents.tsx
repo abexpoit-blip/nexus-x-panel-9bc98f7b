@@ -39,7 +39,12 @@ const AdminAgents = () => {
   const [topupAmount, setTopupAmount] = useState<string>("");
   const [topupNote, setTopupNote] = useState<string>("");
 
-  const { data, isLoading } = useQuery({ queryKey: ["agents"], queryFn: () => api.admin.agents() });
+  const { data, isLoading } = useQuery({
+    queryKey: ["agents"],
+    queryFn: () => api.admin.agents(),
+    refetchInterval: 10000, // auto refresh every 10s — catches new signups
+    refetchOnWindowFocus: true, // refresh when admin tabs back in
+  });
 
   const save = useMutation({
     mutationFn: async (f: AgentForm) => {
