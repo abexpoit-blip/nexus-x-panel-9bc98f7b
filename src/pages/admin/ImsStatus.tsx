@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { GradientMesh, PageHeader } from "@/components/premium";
-import { Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText, AlertTriangle, RefreshCw, Power, Info, Play, Square, KeyRound, Save, Eye, EyeOff, Zap, Layers, ClipboardPaste, Plus } from "lucide-react";
+import { Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText, AlertTriangle, RefreshCw, Power, Info, Play, Square, KeyRound, Save, Eye, EyeOff, Zap, Layers, ClipboardPaste, Plus, Trash2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -254,6 +254,12 @@ const AdminImsStatus = () => {
               )}
             </div>
           </div>
+
+          {/* Pool cleanup tools */}
+          <PoolCleanup
+            ranges={poolData?.ranges?.map(r => r.name) ?? []}
+            onCleaned={() => { refetch(); refetchPool(); }}
+          />
 
           {/* Pool breakdown by range */}
           <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
@@ -675,6 +681,150 @@ const ManualPastePool = ({ existingRanges, onAdded }: { existingRanges: string[]
             >
               <Plus className={cn("w-3.5 h-3.5", submitting && "animate-pulse")} />
               {submitting ? "Adding…" : `Add ${uniqueCount || ""} to pool`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================
+// Pool Cleanup — manually purge old/expired/range numbers from the IMS pool
+// ============================================================
+const PoolCleanup = ({ ranges, onCleaned }: { ranges: string[]; onCleaned: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const [hours, setHours] = useState(24);
+  const [selectedRange, setSelectedRange] = useState("");
+  const [busyMode, setBusyMode] = useState<string | null>(null);
+
+  const run = async (
+    mode: "expired" | "older_than" | "range" | "all_pool",
+    confirmMsg: string,
+    extra?: { hours?: number; range?: string }
+  ) => {
+    if (!confirm(confirmMsg)) return;
+    setBusyMode(mode);
+    try {
+      const r = await api.admin.imsPoolCleanup({ mode, ...extra });
+      toast.success(r.description || `Removed ${r.removed} rows`);
+      onCleaned();
+    } catch (e) {
+      toast.error("Cleanup failed: " + (e as Error).message);
+    } finally {
+      setBusyMode(null);
+    }
+  };
+
+  return (
+    <div className="glass-card border border-white/[0.06] rounded-xl">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition rounded-xl"
+      >
+        <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-neon-amber" /> Pool Cleanup
+          <span className="text-xs text-muted-foreground/60 normal-case font-normal">
+            (purge old, expired, or range-specific numbers)
+          </span>
+        </span>
+        <span className="text-xs text-muted-foreground">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="p-5 pt-0 space-y-4 border-t border-white/[0.04]">
+          {/* Mode 1: expired/completed */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-foreground">Purge expired & completed (older than 7 days)</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Deletes allocations with status <code className="text-foreground/70">expired</code> or <code className="text-foreground/70">received</code> older than a week. Safe — keeps pool & active rows.
+              </div>
+            </div>
+            <button
+              onClick={() => run("expired", "Delete all expired/completed IMS allocations older than 7 days?")}
+              disabled={!!busyMode}
+              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/20 transition disabled:opacity-50"
+            >
+              <Trash2 className={cn("w-3.5 h-3.5", busyMode === "expired" && "animate-pulse")} />
+              {busyMode === "expired" ? "Cleaning…" : "Run"}
+            </button>
+          </div>
+
+          {/* Mode 2: pool numbers older than N hours */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-foreground">Purge pool numbers older than N hours</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Removes unused pool numbers added more than N hours ago. Use after IMS expires its stock.
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={hours}
+                onChange={(e) => setHours(+e.target.value)}
+                className="w-20 px-2 py-1.5 rounded-md bg-black/30 border border-white/[0.08] text-sm font-mono text-foreground focus:outline-none focus:border-neon-amber/40"
+              />
+              <span className="text-xs text-muted-foreground">hours</span>
+              <button
+                onClick={() => run("older_than", `Delete pool numbers older than ${hours} hour(s)?`, { hours })}
+                disabled={!!busyMode}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-amber/10 border border-neon-amber/30 text-neon-amber hover:bg-neon-amber/20 transition disabled:opacity-50"
+              >
+                <Trash2 className={cn("w-3.5 h-3.5", busyMode === "older_than" && "animate-pulse")} />
+                {busyMode === "older_than" ? "Cleaning…" : "Run"}
+              </button>
+            </div>
+          </div>
+
+          {/* Mode 3: by range */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-foreground">Purge a specific range</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Deletes all unused pool numbers from one IMS range (e.g. when a country/operator is dead).
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              <select
+                value={selectedRange}
+                onChange={(e) => setSelectedRange(e.target.value)}
+                className="px-2 py-1.5 rounded-md bg-black/30 border border-white/[0.08] text-sm text-foreground focus:outline-none focus:border-neon-amber/40 max-w-[220px]"
+              >
+                <option value="">— pick a range —</option>
+                {ranges.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <button
+                onClick={() => selectedRange
+                  ? run("range", `Delete ALL pool numbers from "${selectedRange}"?`, { range: selectedRange })
+                  : toast.error("Pick a range first")}
+                disabled={!!busyMode || !selectedRange}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-magenta/10 border border-neon-magenta/30 text-neon-magenta hover:bg-neon-magenta/20 transition disabled:opacity-50"
+              >
+                <Trash2 className={cn("w-3.5 h-3.5", busyMode === "range" && "animate-pulse")} />
+                {busyMode === "range" ? "Cleaning…" : "Run"}
+              </button>
+            </div>
+          </div>
+
+          {/* Mode 4: nuke all pool */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-destructive/[0.04] border border-destructive/20">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-destructive">Nuke entire pool ⚠️</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Deletes EVERY unused number from the IMS pool. Active allocations are kept. Bot will refill on next scrape.
+              </div>
+            </div>
+            <button
+              onClick={() => run("all_pool", "⚠️ DELETE the entire IMS pool? This cannot be undone. Active allocations are kept.")}
+              disabled={!!busyMode}
+              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 transition disabled:opacity-50"
+            >
+              <Trash2 className={cn("w-3.5 h-3.5", busyMode === "all_pool" && "animate-pulse")} />
+              {busyMode === "all_pool" ? "Nuking…" : "Nuke"}
             </button>
           </div>
         </div>

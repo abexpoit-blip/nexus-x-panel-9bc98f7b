@@ -365,6 +365,11 @@ export const api = {
     imsStop: () => request<{ ok: boolean }>("/admin/ims-stop", { method: "POST" }),
     imsScrapeNow: () => request<{ ok: boolean; added?: number; otps?: number; error?: string }>("/admin/ims-scrape-now", { method: "POST" }),
     imsPoolBreakdown: () => request<{ ranges: { name: string; count: number; last_added: number }[]; totalActive: number }>("/admin/ims-pool-breakdown"),
+    imsPoolCleanup: (body: { mode: "expired" | "older_than" | "range" | "all_pool"; hours?: number; range?: string }) =>
+      request<{ ok: boolean; removed: number; description: string }>("/admin/ims-pool-cleanup", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     imsCredentials: () => request<{
       enabled: boolean; base_url: string; username: string;
       password_masked: string; has_password: boolean;

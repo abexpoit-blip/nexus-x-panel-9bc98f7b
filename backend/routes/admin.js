@@ -292,6 +292,66 @@ router.get('/ims-pool-breakdown', (req, res) => {
   res.json({ ranges, totalActive });
 });
 
+// POST /api/admin/ims-pool-cleanup — manually purge old/invalid numbers from the pool.
+// Body: { mode: 'expired' | 'older_than' | 'range' | 'all_pool', hours?: number, range?: string }
+//   - expired:    delete allocations with status IN ('expired','received') older than 7 days
+//   - older_than: delete pool numbers added more than `hours` hours ago (default 24h)
+//   - range:      delete all POOL numbers for a given operator (e.g. "Peru Bitel TF04")
+//   - all_pool:   nuke the entire IMS pool (kept-as-active rows untouched). Use with care.
+router.post('/ims-pool-cleanup', (req, res) => {
+  try {
+    const { mode = 'older_than', hours = 24, range } = req.body || {};
+    let result = { changes: 0 };
+    let description = '';
+
+    if (mode === 'expired') {
+      const days = 7;
+      result = db.prepare(`
+        DELETE FROM allocations
+        WHERE provider = 'ims'
+          AND status IN ('expired', 'received')
+          AND allocated_at < strftime('%s','now') - ?
+      `).run(days * 86400);
+      description = `Purged ${result.changes} expired/completed allocations (>${days}d)`;
+    } else if (mode === 'older_than') {
+      const h = Math.max(1, +hours || 24);
+      result = db.prepare(`
+        DELETE FROM allocations
+        WHERE provider = 'ims' AND status = 'pool'
+          AND allocated_at < strftime('%s','now') - ?
+      `).run(h * 3600);
+      description = `Purged ${result.changes} pool numbers older than ${h}h`;
+    } else if (mode === 'range') {
+      if (!range || typeof range !== 'string') {
+        return res.status(400).json({ error: 'range is required for mode=range' });
+      }
+      result = db.prepare(`
+        DELETE FROM allocations
+        WHERE provider = 'ims' AND status = 'pool' AND COALESCE(operator,'Unknown') = ?
+      `).run(range);
+      description = `Purged ${result.changes} pool numbers from range "${range}"`;
+    } else if (mode === 'all_pool') {
+      result = db.prepare(`
+        DELETE FROM allocations
+        WHERE provider = 'ims' AND status = 'pool'
+      `).run();
+      description = `Purged entire pool (${result.changes} numbers)`;
+    } else {
+      return res.status(400).json({ error: 'Invalid mode. Use: expired | older_than | range | all_pool' });
+    }
+
+    logFromReq(req, 'ims_pool_cleanup', { meta: { mode, hours, range, removed: result.changes } });
+    try {
+      const bot = require('../workers/imsBot');
+      bot.logEvent && bot.logEvent('warn', description);
+    } catch (_) {}
+
+    res.json({ ok: true, removed: result.changes, description });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/ims-credentials', (req, res) => {
   const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
   const username = get('ims_username') || process.env.IMS_USERNAME || '';
