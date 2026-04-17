@@ -279,8 +279,8 @@ const AgentGetNumber = () => {
               </button>
 
               {rangeOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-lg bg-card/95 backdrop-blur-xl border border-white/[0.1] shadow-2xl overflow-hidden">
-                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-card/95">
+                <div className="absolute z-[100] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
                     <div className="relative">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
@@ -292,7 +292,7 @@ const AgentGetNumber = () => {
                       />
                     </div>
                   </div>
-                  <div className="max-h-72 overflow-y-auto scrollbar-none">
+                  <div className="max-h-72 overflow-y-auto scrollbar-none bg-[hsl(var(--card))]">
                     {filteredRanges.length === 0 ? (
                       <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                         {ranges.length === 0 ? "Pool is empty — admin needs to refill" : `No ranges match "${rangeSearch}"`}
@@ -357,8 +357,8 @@ const AgentGetNumber = () => {
               </button>
 
               {countryOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-lg bg-card/95 backdrop-blur-xl border border-white/[0.1] shadow-2xl overflow-hidden">
-                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-card/95">
+                <div className="absolute z-[100] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
                     <div className="relative">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
@@ -370,7 +370,7 @@ const AgentGetNumber = () => {
                       />
                     </div>
                   </div>
-                  <div className="max-h-72 overflow-y-auto scrollbar-none">
+                  <div className="max-h-72 overflow-y-auto scrollbar-none bg-[hsl(var(--card))]">
                     {filteredCountries.length === 0 ? (
                       <div className="px-3 py-6 text-center text-xs text-muted-foreground">No countries match "{countrySearch}"</div>
                     ) : (
@@ -388,7 +388,7 @@ const AgentGetNumber = () => {
                       ))
                     )}
                   </div>
-                  <div className="px-3 py-2 text-[10px] text-muted-foreground border-t border-white/[0.06] bg-white/[0.02]">
+                  <div className="px-3 py-2 text-[10px] text-muted-foreground border-t border-white/[0.06] bg-[hsl(var(--card))]">
                     {filteredCountries.length} of {countries.length} countries
                   </div>
                 </div>
