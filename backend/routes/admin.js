@@ -264,7 +264,34 @@ router.post('/ims-stop', async (req, res) => {
   }
 });
 
-// GET /api/admin/ims-credentials — return saved (masked) credentials
+// POST /api/admin/ims-scrape-now — trigger an immediate single scrape cycle
+router.post('/ims-scrape-now', async (req, res) => {
+  try {
+    const { scrapeNow } = require('../workers/imsBot');
+    const result = await scrapeNow();
+    logFromReq(req, 'ims_scrape_now', { meta: result });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/ims-pool-breakdown — pool size grouped by range (operator)
+router.get('/ims-pool-breakdown', (req, res) => {
+  const ranges = db.prepare(`
+    SELECT
+      COALESCE(operator, 'Unknown') AS name,
+      COUNT(*) AS count,
+      MAX(allocated_at) AS last_added
+    FROM allocations
+    WHERE provider = 'ims' AND status = 'pool'
+    GROUP BY COALESCE(operator, 'Unknown')
+    ORDER BY count DESC
+  `).all();
+  const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='active'`).get().c;
+  res.json({ ranges, totalActive });
+});
+
 router.get('/ims-credentials', (req, res) => {
   const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
   const username = get('ims_username') || process.env.IMS_USERNAME || '';

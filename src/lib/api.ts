@@ -249,8 +249,9 @@ export const api = {
   countries: (provider: string) => request<{ countries: any[] }>(`/numbers/countries/${provider}`),
   operators: (provider: string, countryId: number) =>
     request<{ operators: any[] }>(`/numbers/operators/${provider}/${countryId}`),
-  getNumber: (body: { provider: string; country_id?: number; operator_id?: number; count?: number }) =>
+  getNumber: (body: { provider: string; country_id?: number; operator_id?: number; range?: string; count?: number }) =>
     request<{ allocated: any[]; errors: string[] }>("/numbers/get", { method: "POST", body: JSON.stringify(body) }),
+  imsRanges: () => request<{ ranges: { name: string; count: number }[] }>("/numbers/ims/ranges"),
   myNumbers: () => request<{ numbers: Allocation[] }>("/numbers/my"),
   releaseNumber: (id: number) => request(`/numbers/release/${id}`, { method: "POST" }),
   numberSummary: () => request<{ today: { c: number; s: number }; week: { c: number; s: number }; month: { c: number; s: number }; active: number }>("/numbers/summary"),
@@ -360,6 +361,8 @@ export const api = {
     imsRestart: () => request<{ ok: boolean }>("/admin/ims-restart", { method: "POST" }),
     imsStart: () => request<{ ok: boolean }>("/admin/ims-start", { method: "POST" }),
     imsStop: () => request<{ ok: boolean }>("/admin/ims-stop", { method: "POST" }),
+    imsScrapeNow: () => request<{ ok: boolean; added?: number; otps?: number; error?: string }>("/admin/ims-scrape-now", { method: "POST" }),
+    imsPoolBreakdown: () => request<{ ranges: { name: string; count: number; last_added: number }[]; totalActive: number }>("/admin/ims-pool-breakdown"),
     imsCredentials: () => request<{
       enabled: boolean; base_url: string; username: string;
       password_masked: string; has_password: boolean;
