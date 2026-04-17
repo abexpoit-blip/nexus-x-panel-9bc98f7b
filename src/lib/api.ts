@@ -155,8 +155,15 @@ function demoRoute(path: string, opts: RequestInit): any {
 
   if (path === "/numbers/providers") return demoData.providers();
   if (path.startsWith("/numbers/countries/")) return demoData.countries();
-  if (path.startsWith("/numbers/operators/")) return demoData.operators();
-  if (path === "/numbers/get" && method === "POST") return demoData.getNumber();
+  if (path.startsWith("/numbers/operators/")) {
+    const parts = path.split("/");
+    const cid = Number(parts[parts.length - 1]);
+    return demoData.operators(Number.isFinite(cid) ? cid : undefined);
+  }
+  if (path === "/numbers/get" && method === "POST") {
+    const b = (body || {}) as { country_id?: number; operator_id?: number };
+    return demoData.getNumber(b.country_id, b.operator_id);
+  }
   if (path === "/numbers/my") return demoData.myNumbers();
   if (path === "/numbers/summary") return demoData.numberSummary();
   if (path === "/otp/sync" && method === "POST") return demoData.syncOtp();
