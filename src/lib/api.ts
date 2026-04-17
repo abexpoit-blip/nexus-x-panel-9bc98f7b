@@ -81,8 +81,12 @@ function demoRoute(path: string, opts: RequestInit): any {
   if (path === "/withdrawals" || path === "/withdrawals/pending" || path === "/withdrawals/mine") return demoData.withdrawals();
 
   if (path === "/numbers/providers") return demoData.providers();
+  if (path.startsWith("/numbers/countries/")) return demoData.countries();
+  if (path.startsWith("/numbers/operators/")) return demoData.operators();
+  if (path === "/numbers/get" && method === "POST") return demoData.getNumber();
   if (path === "/numbers/my") return demoData.myNumbers();
   if (path === "/numbers/summary") return demoData.numberSummary();
+  if (path === "/otp/sync" && method === "POST") return { updated: 0 };
 
   if (path === "/notifications") return demoData.notifications();
   if (path.startsWith("/audit")) return demoData.audit();

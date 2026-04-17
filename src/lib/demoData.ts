@@ -143,6 +143,35 @@ export const demoData = {
   providers: () => ({
     providers: PROVIDERS.map(id => ({ id, name: id.replace("_", " ").toUpperCase() })),
   }),
+  countries: () => ({
+    countries: [
+      { id: 1, name: "Bangladesh", code: "BD" },
+      { id: 2, name: "India", code: "IN" },
+      { id: 3, name: "Pakistan", code: "PK" },
+      { id: 4, name: "Indonesia", code: "ID" },
+      { id: 5, name: "Philippines", code: "PH" },
+      { id: 6, name: "Vietnam", code: "VN" },
+    ],
+  }),
+  operators: () => ({
+    operators: [
+      { id: 1, name: "Grameenphone" },
+      { id: 2, name: "Robi" },
+      { id: 3, name: "Banglalink" },
+      { id: 4, name: "Airtel" },
+      { id: 5, name: "Any" },
+    ],
+  }),
+  getNumber: () => ({
+    allocated: [{
+      id: Date.now(),
+      phone_number: `+88017${rand(10000000, 99999999)}`,
+      operator: pick(["Grameen", "Robi", "Banglalink"]),
+      otp: null,
+      status: "active",
+    }],
+    errors: [] as string[],
+  }),
   settings: () => ({ signup_enabled: true }),
   settingsAll: () => ({ settings: { signup_enabled: "true" } }),
 };
