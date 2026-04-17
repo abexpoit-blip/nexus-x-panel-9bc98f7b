@@ -197,10 +197,16 @@ module.exports = {
       return { balance: this._balCache.value, currency: this._balCache.currency, cached: true };
     }
     const candidates = [
+      '/api/freelancer/get-page/user-info',
       '/api/freelancer/get-page/profile',
+      '/api/freelancer/get-page/dashboard',
+      '/api/freelancer/get-page/wallet',
+      '/api/freelancer/get-page/account',
       '/api/freelancer/profile',
       '/api/freelancer/balance',
-      '/api/freelancer/get-page/dashboard',
+      '/api/freelancer/wallet',
+      '/api/auth/me',
+      '/api/user/me',
     ];
     let lastErr = null;
     for (const path of candidates) {
@@ -208,8 +214,10 @@ module.exports = {
         const data = await authedRequest('GET', path);
         // Try common shapes: data.balance | data.data.balance | data.user.balance
         const d = data?.data || data;
-        const bal = d?.balance ?? d?.user?.balance ?? d?.wallet_balance ?? null;
-        const cur = d?.currency || d?.user?.currency || 'USD';
+        const u = d?.user || d;
+        const bal = d?.balance ?? u?.balance ?? d?.wallet_balance ?? u?.wallet_balance
+                  ?? d?.amount ?? u?.amount ?? d?.account_balance ?? u?.account_balance ?? null;
+        const cur = d?.currency || u?.currency || 'USD';
         if (bal !== null && bal !== undefined) {
           this._balCache = { at: now, value: Number(bal), currency: cur, error: null };
           return { balance: Number(bal), currency: cur, cached: false };
