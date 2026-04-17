@@ -177,6 +177,12 @@ export const demoData = {
   numberSummary: () => ({
     today: { c: 23, s: 18 }, week: { c: 142, s: 118 },
     month: { c: 587, s: 487 }, active: 7,
+    wait_time: {
+      today:    { avg_sec: 12, min_sec: 4,  max_sec: 87,  samples: 23 },
+      week:     { avg_sec: 14, min_sec: 3,  max_sec: 142, samples: 142 },
+      month:    { avg_sec: 16, min_sec: 3,  max_sec: 287, samples: 587 },
+      all_time: { avg_sec: 17, min_sec: 3,  max_sec: 412, samples: 1893 },
+    },
   }),
   myNumbers: () => ({ numbers: demoAllocations.list() }),
   myCdr: () => demoData.cdr(),
