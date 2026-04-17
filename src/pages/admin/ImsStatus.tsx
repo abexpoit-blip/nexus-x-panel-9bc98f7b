@@ -142,6 +142,9 @@ const AdminImsStatus = () => {
             <Pill ok={s.lastScrapeOk} label={s.lastScrapeOk ? "Last scrape OK" : "Last scrape failed"} />
           </div>
 
+          {/* Credentials editor */}
+          <CredentialsEditor onSaved={() => refetch()} />
+
           {/* Auto-pause meter */}
           {(s.emptyLimit ?? 0) > 0 && (
             <div className="glass-card border border-white/[0.06] rounded-xl p-4">
