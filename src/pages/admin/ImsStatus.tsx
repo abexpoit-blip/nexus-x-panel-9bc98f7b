@@ -25,6 +25,8 @@ type ImsStatus = {
   poolSize: number;
   activeAssigned: number;
   otpReceived: number;
+  emptyStreak?: number;
+  emptyLimit?: number;
   events?: { ts: number; level: string; message: string; meta: unknown }[];
 };
 

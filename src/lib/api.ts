@@ -53,6 +53,8 @@ const demoImsState = (() => {
         poolSize: 47,
         activeAssigned: 12,
         otpReceived: otpsDelivered,
+        emptyStreak: running ? 2 : 0,
+        emptyLimit: 10,
         events: events.slice(0, 20),
       };
     },
