@@ -3,9 +3,9 @@
 //
 // Real IMS panel structure (verified by user screenshot):
 //   /login           → form with username, password, and a CALCULATOR CAPTCHA (e.g. "5 + 3 = ?")
-//   /client/SMSCDRStats → "SMS CDRs" page (DATE | RANGE | NUMBER | CLI | SMS | CURRENCY | MY PAYOUT)
-//                          The "SMS" cell contains the OTP text — we extract digits.
-//   /client/SMSNumbers  → "SMS Numbers" page (list of available phone numbers)
+//   /client/SMSCDRStats  → "SMS CDR Stats" (DATE | RANGE | NUMBER | CLI | SMS | CURRENCY | MY PAYOUT)
+//                           The "SMS" cell contains the OTP text — we extract digits.
+//   /client/MySMSNumbers → "My SMS Numbers" (RANGE | PREFIX | NUMBER | MY PAYTERM | MY PAYOUT | LIMITS)
 //
 // Required env (backend/.env on VPS):
 //   IMS_ENABLED=true
@@ -247,7 +247,7 @@ async function login() {
 
 // ---- Scrape SMS Numbers page (the manager's available numbers) ----
 async function scrapeNumbers() {
-  await page.goto(`${BASE_URL}/client/SMSNumbers`, { waitUntil: 'networkidle2', timeout: 25000 }).catch(() => null);
+  await page.goto(`${BASE_URL}/client/MySMSNumbers`, { waitUntil: 'networkidle2', timeout: 25000 }).catch(() => null);
   // If session died, will redirect to /login → re-login next tick
   if (/\/login/i.test(page.url())) { loggedIn = false; return []; }
   return await page.evaluate(() => {
@@ -457,7 +457,7 @@ if (require.main === module && (process.argv.includes('--inspect') || process.ar
 
     if (dumpMode) {
       // Try common IMS paths and dump whichever loads
-      const paths = ['/client/SMSNumbers', '/client/Numbers', '/client/MyNumbers', '/client/SMSNumberList', '/client/SMSCDRStats'];
+      const paths = ['/client/MySMSNumbers', '/client/SMSNumbers', '/client/Numbers', '/client/MyNumbers', '/client/SMSNumberList', '/client/SMSCDRStats'];
       for (const p of paths) {
         try {
           const url = `${BASE_URL}${p}`;
