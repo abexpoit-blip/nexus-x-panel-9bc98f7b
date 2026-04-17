@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Users, UserCheck, Hash, Activity, MessageSquare, TrendingUp, Wallet, Trophy, Globe, Zap, Server, ShieldCheck, Coins, Clock } from "lucide-react";
-import { RevenueArea, OtpLine, TopAgentsBar, CountryPie, SuccessGauge } from "@/components/charts/Charts";
+import { RevenueArea, OtpLine, TopAgentsBar, CountryPie, SuccessGauge, CommissionArea } from "@/components/charts/Charts";
 import { useMemo } from "react";
 import { GradientMesh, PageHeader, PremiumKpiCard, PremiumChartCard } from "@/components/premium";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ const AdminDashboard = () => {
   const { data } = useQuery({ queryKey: ["admin-stats"], queryFn: () => api.admin.stats(), refetchInterval: 15000 });
   const { data: lb } = useQuery({ queryKey: ["leaderboard"], queryFn: () => api.admin.leaderboard() });
   const { data: alloc } = useQuery({ queryKey: ["admin-allocations"], queryFn: () => api.admin.allocations(), refetchInterval: 30000 });
+  const { data: commTrend } = useQuery({ queryKey: ["commission-trend"], queryFn: () => api.admin.commissionTrend(14), refetchInterval: 60000 });
 
   const s = data || {
     totalAgents: 0, activeAgents: 0, totalAlloc: 0, activeAlloc: 0,
