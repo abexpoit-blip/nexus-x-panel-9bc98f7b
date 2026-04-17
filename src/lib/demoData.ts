@@ -143,28 +143,17 @@ export const demoData = {
   providers: () => ({
     providers: PROVIDERS.map(id => ({ id, name: id.replace("_", " ").toUpperCase() })),
   }),
-  countries: () => ({
-    countries: [
-      { id: 1, name: "Bangladesh (+880)", code: "880" },
-      { id: 2, name: "India (+91)", code: "91" },
-      { id: 3, name: "Pakistan (+92)", code: "92" },
-      { id: 4, name: "Indonesia (+62)", code: "62" },
-      { id: 5, name: "Philippines (+63)", code: "63" },
-      { id: 6, name: "Vietnam (+84)", code: "84" },
-      { id: 7, name: "Nigeria (+234)", code: "234" },
-      { id: 8, name: "Kenya (+254)", code: "254" },
-    ],
-  }),
-  operators: () => ({
-    operators: [
-      { id: 1, name: "Grameenphone" },
-      { id: 2, name: "Robi" },
-      { id: 3, name: "Banglalink" },
-      { id: 4, name: "Airtel" },
-      { id: 5, name: "Any" },
-    ],
-  }),
-  getNumber: () => ({ allocated: [demoAllocations.allocate()], errors: [] as string[] }),
+  countries: () => ({ countries: COUNTRY_CATALOG.map(({ id, name, code }) => ({ id, name, code })) }),
+  operators: (countryId?: number) => {
+    const c = COUNTRY_CATALOG.find(x => x.id === countryId);
+    const ops = c?.operators ?? ["Any"];
+    return { operators: ops.map((name, i) => ({ id: i + 1, name })) };
+  },
+  getNumber: (countryId?: number, operatorId?: number) => {
+    const c = COUNTRY_CATALOG.find(x => x.id === countryId);
+    const opName = c?.operators?.[(operatorId ?? 1) - 1] || "Any";
+    return { allocated: [demoAllocations.allocate(c?.code || "880", opName)], errors: [] as string[] };
+  },
   syncOtp: () => ({ updated: demoAllocations.tickOtp() }),
   settings: () => ({ signup_enabled: true }),
   settingsAll: () => ({ settings: { signup_enabled: "true" } }),
