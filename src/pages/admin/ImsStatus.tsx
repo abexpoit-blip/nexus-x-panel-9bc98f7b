@@ -58,12 +58,27 @@ const Stat = ({ icon, label, value, hint, accent }: {
 );
 
 const AdminImsStatus = () => {
+  const [restarting, setRestarting] = useState(false);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["ims-status"],
     queryFn: () => api.admin.imsStatus(),
     refetchInterval: 5000,
   });
   const s = data?.status as ImsStatus | undefined;
+
+  const handleRestart = async () => {
+    if (!confirm("Restart the IMS bot? Current scrape will be interrupted.")) return;
+    setRestarting(true);
+    try {
+      await api.admin.imsRestart();
+      toast.success("Bot restart initiated");
+      setTimeout(() => refetch(), 2000);
+    } catch (e) {
+      toast.error("Restart failed: " + (e as Error).message);
+    } finally {
+      setRestarting(false);
+    }
+  };
 
   return (
     <div className="relative space-y-6">
@@ -74,12 +89,21 @@ const AdminImsStatus = () => {
         description="Headless browser scraper running on the VPS — live numbers + OTP delivery"
         icon={<Bot className="w-5 h-5 text-neon-magenta" />}
         actions={
-          <button
-            onClick={() => refetch()}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition"
-          >
-            <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRestart}
+              disabled={restarting}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-magenta/10 border border-neon-magenta/30 text-neon-magenta hover:bg-neon-magenta/20 transition disabled:opacity-50"
+            >
+              <Power className={cn("w-3.5 h-3.5", restarting && "animate-spin")} /> {restarting ? "Restarting…" : "Restart Bot"}
+            </button>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} /> Refresh
+            </button>
+          </div>
         }
       />
 
