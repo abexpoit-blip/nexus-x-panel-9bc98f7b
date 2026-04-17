@@ -222,8 +222,12 @@ module.exports = {
     return { balance: null, currency: 'USD', error: this._balCache.error };
   },
 
+  // Reset cached token (admin updates credentials)
+  resetAuth,
+
   // Status snapshot for admin panel
   async getStatus() {
+    const { BASE_URL, USERNAME, PASSWORD, source } = resolveCreds();
     const configured = !!(USERNAME && PASSWORD);
     const out = {
       id: 'acchub',
@@ -235,15 +239,17 @@ module.exports = {
       tokenExpiresAt: tokenExpiresAt || null,
       balance: null,
       currency: 'USD',
-      lastError: null,
+      lastError: lastLoginError,
       otpHistoryCount: this._otpCache.items.length,
+      source,
     };
-    if (!configured) { out.lastError = 'ACCHUB_USERNAME / ACCHUB_PASSWORD not set'; return out; }
+    if (!configured) { out.lastError = 'ACCHUB_USERNAME / ACCHUB_PASSWORD not set (use Providers page Edit)'; return out; }
     try {
       const b = await this.getBalance();
       out.balance = b.balance;
       out.currency = b.currency;
       if (b.error) out.lastError = b.error;
+      else if (cachedToken) lastLoginError = null;
     } catch (e) {
       out.lastError = e.message || String(e);
     }
