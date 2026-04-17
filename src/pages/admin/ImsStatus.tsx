@@ -62,6 +62,7 @@ const Stat = ({ icon, label, value, hint, accent }: {
 const AdminImsStatus = () => {
   const [restarting, setRestarting] = useState(false);
   const [scraping, setScraping] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["ims-status"],
     queryFn: () => api.admin.imsStatus(),
@@ -109,6 +110,33 @@ const AdminImsStatus = () => {
     }
   };
 
+  const handleSyncLive = async () => {
+    if (!confirm(
+      "Live Sync will:\n" +
+      "  • ADD any new numbers IMS has\n" +
+      "  • REMOVE pool numbers that are NO LONGER in IMS\n" +
+      "  • Active assigned numbers are NEVER touched\n\n" +
+      "Continue?"
+    )) return;
+    setSyncing(true);
+    try {
+      const r = await api.admin.imsSyncLive();
+      if (r.ok) {
+        toast.success(
+          `Live sync done: +${r.added ?? 0} added · -${r.removed ?? 0} removed · ${r.kept ?? 0} kept (${r.scraped ?? 0} live in IMS)`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(r.error || "Live sync failed");
+      }
+      refetch(); refetchPool();
+    } catch (e) {
+      toast.error("Live sync failed: " + (e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="relative space-y-6">
       <GradientMesh variant="default" />
@@ -144,6 +172,15 @@ const AdminImsStatus = () => {
             >
               <Zap className={cn("w-3.5 h-3.5", scraping && "animate-pulse")} />
               {scraping ? "Scraping…" : "Scrape Now"}
+            </button>
+            <button
+              onClick={handleSyncLive}
+              disabled={syncing || !s?.running}
+              title={!s?.running ? "Start the bot first" : "Add new numbers + remove pool numbers IMS no longer has"}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-amber/10 border border-neon-amber/30 text-neon-amber hover:bg-neon-amber/20 transition disabled:opacity-50"
+            >
+              <Sparkles className={cn("w-3.5 h-3.5", syncing && "animate-pulse")} />
+              {syncing ? "Syncing…" : "Sync Live"}
             </button>
             <button
               onClick={() => handleAction("restart")}
