@@ -67,9 +67,9 @@ function getStatus() {
     const poolSize = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='pool'").get().c;
     const activeAssigned = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='active'").get().c;
     const otpReceived = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='received'").get().c;
-    return { ...status, poolSize, activeAssigned, otpReceived, events: events.slice() };
+    return { ...status, poolSize, activeAssigned, otpReceived, emptyStreak, emptyLimit: EMPTY_LIMIT, events: events.slice() };
   } catch (_) {
-    return { ...status, poolSize: 0, activeAssigned: 0, otpReceived: 0, events: events.slice() };
+    return { ...status, poolSize: 0, activeAssigned: 0, otpReceived: 0, emptyStreak, emptyLimit: EMPTY_LIMIT, events: events.slice() };
   }
 }
 
