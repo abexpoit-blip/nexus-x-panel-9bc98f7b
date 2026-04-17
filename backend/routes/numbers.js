@@ -81,7 +81,7 @@ router.post('/get', authRequired, async (req, res) => {
   res.json({ allocated, errors });
 });
 
-// GET /api/numbers/my — agent's own numbers
+// GET /api/numbers/my — agent's own numbers (provider name hidden from agents)
 router.get('/my', authRequired, (req, res) => {
   const numbers = db.prepare(`
     SELECT id, phone_number, operator, country_code, otp, status, allocated_at, otp_received_at

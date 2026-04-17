@@ -97,7 +97,6 @@ const AgentMyNumbers = () => {
       <DataTable
         columns={[
           { key: "phone_number", header: "Number", render: (r) => <span className="font-mono text-foreground">{r.phone_number}</span> },
-          { key: "provider", header: "Provider", render: (r) => <span className="uppercase text-xs">{r.provider}</span> },
           { key: "country_code", header: "Country", render: (r) => r.country_code || "—" },
           { key: "operator", header: "Operator", render: (r) => r.operator || "—" },
           {
