@@ -453,6 +453,27 @@ async function tick() {
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
     status.lastScrapeOk = true;
     status.totalScrapes++;
+
+    // Low-pool alert — fire once per cooldown window when pool drops below threshold.
+    // Threshold + cooldown live in `settings` so admin can tweak from the UI later.
+    try {
+      const threshold = +(readSetting('ims_low_pool_threshold') || 100);
+      const cooldownMin = +(readSetting('ims_low_pool_cooldown_min') || 60);
+      const poolSize = db.prepare(
+        "SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='pool'"
+      ).get().c;
+      const now = Math.floor(Date.now() / 1000);
+      if (
+        threshold > 0 &&
+        poolSize < threshold &&
+        (now - lastLowPoolAlertAt) >= cooldownMin * 60
+      ) {
+        lastLowPoolAlertAt = now;
+        const msg = `IMS pool is low: only ${poolSize} numbers left (threshold: ${threshold}). Consider scraping IMS or adding manually.`;
+        logEvent('warn', `Low-pool alert: ${poolSize} < ${threshold}`);
+        notifyAdmins('⚠️ IMS Pool Low', msg, 'warning');
+      }
+    } catch (_) { /* don't fail the tick on alert errors */ }
   } catch (e) {
     consecFail++;
     status.consecFail = consecFail;
