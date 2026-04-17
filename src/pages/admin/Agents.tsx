@@ -8,7 +8,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Users, Plus, Pencil, Trash2, Search, Wallet, UserCheck, UserX, Power, LogIn } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Search, Wallet, UserCheck, UserX, Power, LogIn, Clock, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { GradientMesh, PageHeader, PremiumKpiCard } from "@/components/premium";
@@ -32,7 +32,7 @@ const AdminAgents = () => {
   const navigate = useNavigate();
   const { loginAsAgent } = useAuth();
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "active" | "suspended">("all");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<AgentForm>(empty);
   const [topup, setTopup] = useState<{ id: number; username: string } | null>(null);
@@ -75,6 +75,24 @@ const AdminAgents = () => {
     },
   });
 
+  const approve = useMutation({
+    mutationFn: (id: number) => api.admin.approveAgent(id),
+    onSuccess: () => {
+      toast.success("Agent approved — they can now log in");
+      qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Approve failed"),
+  });
+
+  const reject = useMutation({
+    mutationFn: (id: number) => api.admin.rejectAgent(id),
+    onSuccess: () => {
+      toast.success("Pending agent rejected");
+      qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Reject failed"),
+  });
+
   const topupMutation = useMutation({
     mutationFn: (body: { user_id: number; amount_bdt: number; note?: string }) =>
       api.payments.topup({ ...body, method: "admin", reference: "manual-topup" }),
@@ -91,6 +109,7 @@ const AdminAgents = () => {
   const allAgents = data?.agents || [];
   const stats = useMemo(() => ({
     total: allAgents.length,
+    pending: allAgents.filter((a) => a.status === "pending").length,
     active: allAgents.filter((a) => a.status === "active").length,
     suspended: allAgents.filter((a) => a.status === "suspended").length,
   }), [allAgents]);
@@ -117,8 +136,9 @@ const AdminAgents = () => {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <PremiumKpiCard label="Total Agents" value={stats.total} icon={Users} tone="cyan" />
+        <PremiumKpiCard label="Pending Approval" value={stats.pending} icon={Clock} tone="magenta" />
         <PremiumKpiCard label="Active" value={stats.active} icon={UserCheck} tone="green" />
         <PremiumKpiCard label="Suspended" value={stats.suspended} icon={UserX} tone="magenta" />
       </div>
@@ -135,6 +155,7 @@ const AdminAgents = () => {
             className="h-10 px-3 rounded-md bg-white/[0.04] border border-white/[0.08] text-sm text-foreground"
           >
             <option value="all">All status</option>
+            <option value="pending">Pending approval</option>
             <option value="active">Active only</option>
             <option value="suspended">Suspended only</option>
           </select>
