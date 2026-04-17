@@ -249,6 +249,62 @@ const AdminImsStatus = () => {
             </div>
           </div>
 
+          {/* Pool breakdown by range */}
+          <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Layers className="w-4 h-4 text-neon-magenta" /> Pool by Range
+              <span className="text-xs text-muted-foreground/60 normal-case font-normal">
+                (live count of unassigned numbers per IMS range)
+              </span>
+            </h3>
+            {!poolData || poolData.ranges.length === 0 ? (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <Info className="w-4 h-4" /> No numbers in pool. Click <strong>Scrape Now</strong> or wait for the auto-scrape cycle.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-wider text-muted-foreground border-b border-white/[0.06]">
+                      <th className="text-left py-2 font-medium">Range</th>
+                      <th className="text-right py-2 font-medium">Available</th>
+                      <th className="text-right py-2 font-medium">Last Refilled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {poolData.ranges.map((r) => (
+                      <tr key={r.name} className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02]">
+                        <td className="py-2 font-medium text-foreground">{r.name}</td>
+                        <td className="py-2 text-right">
+                          <span className={cn(
+                            "inline-block px-2 py-0.5 rounded font-mono text-xs font-semibold",
+                            r.count > 50 ? "bg-neon-green/15 text-neon-green" :
+                            r.count > 10 ? "bg-neon-amber/15 text-neon-amber" :
+                            "bg-destructive/15 text-destructive"
+                          )}>
+                            {r.count}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right text-xs text-muted-foreground font-mono">{fmtAgo(r.last_added)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-white/[0.08] text-xs">
+                      <td className="py-2 font-semibold text-muted-foreground uppercase tracking-wider">Total</td>
+                      <td className="py-2 text-right font-mono font-bold text-neon-cyan">
+                        {poolData.ranges.reduce((s, r) => s + r.count, 0)}
+                      </td>
+                      <td className="py-2 text-right text-muted-foreground">
+                        {poolData.totalActive} assigned to agents
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Activity log */}
           <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
