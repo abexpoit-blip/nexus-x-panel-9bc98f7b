@@ -159,6 +159,19 @@ const AgentGetNumber = () => {
         <p className="text-sm text-muted-foreground mt-1">Search a country, pick an operator, and request a fresh number</p>
       </div>
 
+      {maintenanceMode && (
+        <GlassCard className="border-neon-amber/40 bg-neon-amber/[0.06]">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-neon-amber shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-display font-semibold text-neon-amber">Maintenance Mode Active</h3>
+              <p className="text-sm text-muted-foreground mt-1">{maintenanceMessage}</p>
+              <p className="text-xs text-muted-foreground mt-2">Number allocation is temporarily disabled. Please check back soon.</p>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
       <GlassCard glow="cyan">
         <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_auto] gap-4 items-end">
           {/* Country searchable combobox */}
@@ -242,19 +255,48 @@ const AgentGetNumber = () => {
 
           <Button
             onClick={handleGetNumber}
-            disabled={loading || usedToday >= dailyLimit || !operatorId}
-            className="h-11 bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0 min-w-[160px]"
+            disabled={loading || maintenanceMode || usedToday >= dailyLimit || !operatorId}
+            className="h-11 bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0 min-w-[180px]"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
             ) : (
               <>
                 <Hash className="w-4 h-4 mr-2" />
-                Get Number{cost != null ? ` · ৳${cost}` : ""}
+                Get {quantity > 1 ? `${quantity} Numbers` : "Number"}
+                {totalCost != null ? ` · ৳${totalCost}` : ""}
               </>
             )}
           </Button>
         </div>
+
+        {/* Bulk quantity selector */}
+        {quantityOptions.length > 1 && (
+          <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-white/[0.06] flex-wrap">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-neon-cyan" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bulk request</span>
+            </div>
+            <div className="flex gap-2">
+              {quantityOptions.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setQuantity(q)}
+                  disabled={maintenanceMode}
+                  className={cn(
+                    "min-w-[64px] h-9 px-3 rounded-lg text-xs font-bold transition-all border",
+                    quantity === q
+                      ? "bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground border-transparent shadow-[0_0_18px_-4px_hsl(var(--primary)/0.6)]"
+                      : "bg-white/[0.03] text-foreground border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.16]",
+                    maintenanceMode && "opacity-40 cursor-not-allowed",
+                  )}
+                >
+                  {q}× {cost != null && <span className="ml-1 opacity-80">৳{cost * q}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.06] flex-wrap gap-3">
           <div className="flex gap-6 flex-wrap">

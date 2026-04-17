@@ -162,8 +162,11 @@ function demoRoute(path: string, opts: RequestInit): any {
     return demoData.operators(Number.isFinite(cid) ? cid : undefined);
   }
   if (path === "/numbers/get" && method === "POST") {
-    const b = (body || {}) as { country_id?: number; operator_id?: number };
-    return demoData.getNumber(b.country_id, b.operator_id);
+    const b = (body || {}) as { country_id?: number; operator_id?: number; count?: number };
+    const count = Math.max(1, Math.min(b.count || 1, 15));
+    const allocated: any[] = [];
+    for (let i = 0; i < count; i++) allocated.push(...demoData.getNumber(b.country_id, b.operator_id).allocated);
+    return { allocated, errors: [] as string[] };
   }
   if (path === "/numbers/my") return demoData.myNumbers();
   if (path === "/numbers/summary") return demoData.numberSummary();
