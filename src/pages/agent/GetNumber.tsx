@@ -187,6 +187,29 @@ const AgentGetNumber = () => {
       )}
 
       <GlassCard glow="cyan">
+        {/* Server selector — Server A = AccHub, Server B = IMS (real names hidden) */}
+        <div className="flex items-center gap-2 mb-4 pb-4 border-b border-white/[0.06]">
+          <Server className="w-4 h-4 text-neon-cyan" />
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-2">Source</span>
+          <div className="flex gap-2">
+            {SERVERS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setProvider(s.id)}
+                className={cn(
+                  "px-4 h-9 rounded-lg text-xs font-bold transition-all border",
+                  provider === s.id
+                    ? "bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground border-transparent shadow-[0_0_18px_-4px_hsl(var(--primary)/0.6)]"
+                    : "bg-white/[0.03] text-foreground border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.16]",
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_auto] gap-4 items-end">
           {/* Country searchable combobox */}
           <div className="space-y-2 relative" ref={countryRef}>
