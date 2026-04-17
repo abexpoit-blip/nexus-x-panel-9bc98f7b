@@ -375,6 +375,14 @@ export const api = {
     imsCredentialsSave: (body: { username?: string; password?: string; base_url?: string; enabled?: boolean }) =>
       request<{ ok: boolean }>("/admin/ims-credentials", { method: "PUT", body: JSON.stringify(body) }),
     providerStatus: () => request<{ providers: ProviderStatus[] }>("/admin/provider-status"),
+    acchubCredentials: () => request<{
+      base_url: string; username: string;
+      password_masked: string; has_password: boolean;
+      source: { base_url: string; username: string; password: string };
+    }>("/admin/acchub-credentials"),
+    acchubCredentialsSave: (body: { username?: string; password?: string; base_url?: string }) =>
+      request<{ ok: boolean }>("/admin/acchub-credentials", { method: "PUT", body: JSON.stringify(body) }),
+    acchubTest: () => request<{ ok: boolean; status?: ProviderStatus; error?: string }>("/admin/acchub-test", { method: "POST" }),
   },
 };
 
