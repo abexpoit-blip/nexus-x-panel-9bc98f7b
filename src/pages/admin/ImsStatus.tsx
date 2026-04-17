@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { GradientMesh, PageHeader } from "@/components/premium";
-import { Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText, AlertTriangle, RefreshCw, Power, Info, Play, Square, KeyRound, Save, Eye, EyeOff, Zap, Layers, ClipboardPaste, Plus } from "lucide-react";
+import { Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText, AlertTriangle, RefreshCw, Power, Info, Play, Square, KeyRound, Save, Eye, EyeOff, Zap, Layers, ClipboardPaste, Plus, Trash2, Broom } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
