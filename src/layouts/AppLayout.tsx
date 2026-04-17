@@ -5,14 +5,15 @@ import { useAuth, type UserRole } from "@/contexts/AuthContext";
 import { AppSidebar } from "./Sidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
-import { Menu, Wallet, Search } from "lucide-react";
+import { Menu, Wallet, Search, Wrench } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
   requiredRole: UserRole;
 }
 
 export const AppLayout = ({ requiredRole }: AppLayoutProps) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, maintenanceMode, maintenanceMessage } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
