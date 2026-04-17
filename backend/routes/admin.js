@@ -529,6 +529,7 @@ router.put('/ims-otp-interval', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
 
 // GET /api/admin/provider-status — health for all configured providers (AccHub balance, IMS bot, etc.)
 router.get('/provider-status', async (req, res) => {
