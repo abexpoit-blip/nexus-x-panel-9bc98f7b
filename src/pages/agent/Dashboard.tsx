@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { OtpLine, SuccessGauge } from "@/components/charts/Charts";
+import { AvgOtpWaitTime } from "@/components/AvgOtpWaitTime";
 import { useMemo } from "react";
 
 const AgentDashboard = () => {
@@ -91,8 +92,24 @@ const AgentDashboard = () => {
         </GlassCard>
       </div>
 
+      {/* Avg OTP Wait Time + Earnings */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AvgOtpWaitTime data={summary?.wait_time} />
+        <GlassCard className="p-6">
+          <h3 className="font-display font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-neon-amber" /> Earnings This Period
+          </h3>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Today earned</span><span className="font-bold text-neon-green">+৳{s.today.s.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">7-day earned</span><span className="font-bold text-neon-green">+৳{s.week.s.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">30-day earned</span><span className="font-bold text-neon-green">+৳{s.month.s.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">30-day OTPs</span><span className="font-bold">{s.month.c}</span></div>
+          </div>
+        </GlassCard>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <GlassCard className="lg:col-span-2 p-6">
+        <GlassCard className="lg:col-span-3 p-6">
           <h3 className="font-display font-semibold text-foreground mb-4 flex items-center gap-2">
             <Clock className="w-4 h-4 text-primary" /> Recent Numbers
           </h3>
