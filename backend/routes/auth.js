@@ -126,4 +126,31 @@ router.post('/exit-impersonation', authRequired, (req, res) => {
   res.json({ token, user: safe });
 });
 
+// POST /api/auth/change-password — any authenticated user changes their own password
+router.post('/change-password', authRequired, (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (typeof current_password !== 'string' || typeof new_password !== 'string') {
+    return res.status(400).json({ error: 'current_password and new_password required' });
+  }
+  if (new_password.length < 8 || new_password.length > 200) {
+    return res.status(400).json({ error: 'New password must be 8-200 characters' });
+  }
+  if (new_password === current_password) {
+    return res.status(400).json({ error: 'New password must differ from current' });
+  }
+  if (!bcrypt.compareSync(current_password, req.user.password_hash)) {
+    logFromReq(req, 'password_change_failed');
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+  const hash = bcrypt.hashSync(new_password, 10);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+
+  // Revoke all OTHER sessions on this account (keep current session alive)
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?')
+    .run(req.user.id, hashToken(req.token));
+
+  logFromReq(req, 'password_changed');
+  res.json({ ok: true, message: 'Password changed. Other devices have been signed out.' });
+});
+
 module.exports = router;
