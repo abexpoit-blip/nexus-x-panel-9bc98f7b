@@ -36,6 +36,7 @@ const AdminSecurity = () => {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"audit" | "sessions" | "impersonation" | "settings" | "maintenance">("audit");
   const [auditSearch, setAuditSearch] = useState("");
+  const [auditCategory, setAuditCategory] = useState<"all" | "pool_cleanup" | "ims_bot" | "auth" | "agents" | "settings">("all");
   const { signupEnabled, setSignupEnabled, maintenanceMode, maintenanceMessage, setMaintenanceMode } = useAuth();
   const [draftMsg, setDraftMsg] = useState(maintenanceMessage);
 
