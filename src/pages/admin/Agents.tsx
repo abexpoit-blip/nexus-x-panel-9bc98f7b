@@ -176,7 +176,9 @@ const AdminAgents = () => {
             render: (r) => (
               <span className={cn(
                 "px-2 py-0.5 rounded text-xs font-semibold uppercase",
-                r.status === "active" ? "bg-neon-green/15 text-neon-green" : "bg-destructive/15 text-destructive"
+                r.status === "active" && "bg-neon-green/15 text-neon-green",
+                r.status === "pending" && "bg-neon-amber/15 text-neon-amber animate-pulse",
+                r.status === "suspended" && "bg-destructive/15 text-destructive",
               )}>{r.status}</span>
             ),
           },
@@ -185,43 +187,64 @@ const AdminAgents = () => {
             header: "",
             render: (r) => (
               <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Login as ${r.username}? Your admin session will be preserved — exit anytime from the top banner.`)) return;
-                    const ok = await loginAsAgent(r.id);
-                    if (ok) {
-                      toast.success(`Now viewing as ${r.username}`);
-                      navigate("/agent/dashboard");
-                    } else {
-                      toast.error("Login as agent failed");
-                    }
-                  }}
-                  className="text-neon-cyan hover:underline text-xs flex items-center gap-1"
-                  title="Login as this agent (impersonate)"
-                  disabled={r.status !== "active"}
-                >
-                  <LogIn className="w-3 h-3" /> Login as
-                </button>
-                <button
-                  onClick={() => { setTopup({ id: r.id, username: r.username }); setTopupAmount(""); setTopupNote(""); }}
-                  className="text-neon-green hover:underline text-xs flex items-center gap-1"
-                  title="Top up balance"
-                >
-                  <Wallet className="w-3 h-3" /> Top-up
-                </button>
-                <button
-                  onClick={() => toggleStatus.mutate({ id: r.id, status: r.status })}
-                  className={cn("hover:underline text-xs flex items-center gap-1", r.status === "active" ? "text-neon-amber" : "text-neon-green")}
-                  title={r.status === "active" ? "Suspend" : "Activate"}
-                >
-                  <Power className="w-3 h-3" /> {r.status === "active" ? "Suspend" : "Activate"}
-                </button>
-                <button onClick={() => { setForm({ ...r, password: "" }); setOpen(true); }} className="text-primary hover:underline text-xs flex items-center gap-1">
-                  <Pencil className="w-3 h-3" /> Edit
-                </button>
-                <button onClick={() => { if (confirm(`Delete ${r.username}? This will cascade-delete all their data.`)) del.mutate(r.id); }} className="text-destructive hover:underline text-xs flex items-center gap-1">
-                  <Trash2 className="w-3 h-3" /> Delete
-                </button>
+                {r.status === "pending" ? (
+                  <>
+                    <button
+                      onClick={() => { if (confirm(`Approve ${r.username}? They will be able to log in.`)) approve.mutate(r.id); }}
+                      className="text-neon-green hover:underline text-xs flex items-center gap-1 font-semibold"
+                      title="Approve agent"
+                    >
+                      <Check className="w-3 h-3" /> Approve
+                    </button>
+                    <button
+                      onClick={() => { if (confirm(`Reject and delete ${r.username}'s signup?`)) reject.mutate(r.id); }}
+                      className="text-destructive hover:underline text-xs flex items-center gap-1 font-semibold"
+                      title="Reject signup"
+                    >
+                      <X className="w-3 h-3" /> Reject
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Login as ${r.username}? Your admin session will be preserved — exit anytime from the top banner.`)) return;
+                        const ok = await loginAsAgent(r.id);
+                        if (ok) {
+                          toast.success(`Now viewing as ${r.username}`);
+                          navigate("/agent/dashboard");
+                        } else {
+                          toast.error("Login as agent failed");
+                        }
+                      }}
+                      className="text-neon-cyan hover:underline text-xs flex items-center gap-1"
+                      title="Login as this agent (impersonate)"
+                      disabled={r.status !== "active"}
+                    >
+                      <LogIn className="w-3 h-3" /> Login as
+                    </button>
+                    <button
+                      onClick={() => { setTopup({ id: r.id, username: r.username }); setTopupAmount(""); setTopupNote(""); }}
+                      className="text-neon-green hover:underline text-xs flex items-center gap-1"
+                      title="Top up balance"
+                    >
+                      <Wallet className="w-3 h-3" /> Top-up
+                    </button>
+                    <button
+                      onClick={() => toggleStatus.mutate({ id: r.id, status: r.status })}
+                      className={cn("hover:underline text-xs flex items-center gap-1", r.status === "active" ? "text-neon-amber" : "text-neon-green")}
+                      title={r.status === "active" ? "Suspend" : "Activate"}
+                    >
+                      <Power className="w-3 h-3" /> {r.status === "active" ? "Suspend" : "Activate"}
+                    </button>
+                    <button onClick={() => { setForm({ ...r, password: "" }); setOpen(true); }} className="text-primary hover:underline text-xs flex items-center gap-1">
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                    <button onClick={() => { if (confirm(`Delete ${r.username}? This will cascade-delete all their data.`)) del.mutate(r.id); }} className="text-destructive hover:underline text-xs flex items-center gap-1">
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
+                  </>
+                )}
               </div>
             ),
           },
