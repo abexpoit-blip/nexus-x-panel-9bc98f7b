@@ -120,4 +120,30 @@ router.post('/ims-restart', async (req, res) => {
   }
 });
 
+// POST /api/admin/ims-start — start bot (e.g., after manual stop)
+router.post('/ims-start', async (req, res) => {
+  try {
+    const bot = require('../workers/imsBot');
+    bot.start();
+    bot.logEvent && bot.logEvent('success', 'Bot started by admin');
+    logFromReq(req, 'ims_bot_start');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/ims-stop — stop bot (when IMS has no numbers, save resources)
+router.post('/ims-stop', async (req, res) => {
+  try {
+    const bot = require('../workers/imsBot');
+    await bot.stop();
+    bot.logEvent && bot.logEvent('warn', 'Bot stopped by admin');
+    logFromReq(req, 'ims_bot_stop');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
