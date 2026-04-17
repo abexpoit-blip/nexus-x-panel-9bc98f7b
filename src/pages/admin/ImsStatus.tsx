@@ -255,6 +255,12 @@ const AdminImsStatus = () => {
             </div>
           </div>
 
+          {/* Pool cleanup tools */}
+          <PoolCleanup
+            ranges={poolData?.ranges?.map(r => r.name) ?? []}
+            onCleaned={() => { refetch(); refetchPool(); }}
+          />
+
           {/* Pool breakdown by range */}
           <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
