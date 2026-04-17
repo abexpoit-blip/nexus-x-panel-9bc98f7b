@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
-/** Soft "ding-ding" alert tone using WebAudio (no asset needed) */
+/** Soft "ding-ding" alert tone for normal notifications */
 function playAlertSound(volume = 0.4) {
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -27,61 +27,90 @@ function playAlertSound(volume = 0.4) {
       osc.stop(now + delay + 0.3);
     });
     setTimeout(() => ctx.close().catch(() => {}), 800);
-  } catch {
-    /* audio not available */
-  }
+  } catch { /* audio not available */ }
 }
 
+/** Triple-chime urgent tone for pending approvals / withdrawals */
+function playUrgentSound(volume = 0.55) {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    [0, 0.15, 0.3].forEach((delay) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(1320, now + delay);
+      osc.frequency.exponentialRampToValueAtTime(1760, now + delay + 0.1);
+      gain.gain.setValueAtTime(volume, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.22);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.25);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 1200);
+  } catch { /* audio not available */ }
+}
+
+const isUrgent = (title: string) =>
+  /withdrawal|signup|approval|pending/i.test(title);
+
 export const NotificationBell = () => {
-  const { togglePanel } = useNotifications();
+  const { togglePanel, setUnreadFromServer, preferences } = useNotifications();
   const { user } = useAuth();
 
-  // Poll real backend notifications every 15 s when logged in
+  // Poll real backend notifications every 5 s when logged in (real-time-ish)
   const { data } = useQuery({
     queryKey: ["nav-notifications", user?.id],
     queryFn: () => api.notifications.list(),
     enabled: !!user,
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: 5000,
+    staleTime: 3000,
   });
 
   const unread = data?.unread ?? 0;
-  const lastUnreadRef = useRef<number>(unread);
   const seenIdsRef = useRef<Set<number>>(new Set());
   const initializedRef = useRef(false);
+
+  // Push real unread to context for tab title
+  useEffect(() => { setUnreadFromServer(unread); }, [unread, setUnreadFromServer]);
 
   useEffect(() => {
     if (!data?.notifications) return;
 
-    // First load — just record IDs, no alert
+    // First load — record IDs without alerting
     if (!initializedRef.current) {
       data.notifications.forEach((n) => seenIdsRef.current.add(n.id));
       initializedRef.current = true;
-      lastUnreadRef.current = unread;
       return;
     }
 
-    // New unread items detected → fire alert
     const fresh = data.notifications.filter(
       (n) => !seenIdsRef.current.has(n.id) && !n.is_read,
     );
     if (fresh.length > 0) {
-      playAlertSound();
       const top = fresh[0];
-      const toastFn =
-        top.type === "error" ? toast.error :
-        top.type === "warning" ? toast.warning :
-        top.type === "success" ? toast.success :
-        toast.info;
-      toastFn(top.title, {
-        description: top.message,
-        duration: 5000,
-        action: { label: "View", onClick: () => togglePanel() },
-      });
+      const urgent = isUrgent(top.title);
+      if (preferences.soundEnabled) {
+        const vol = preferences.soundVolume / 100;
+        if (urgent) playUrgentSound(vol * 0.55); else playAlertSound(vol * 0.4);
+      }
+      if (preferences.toastsEnabled) {
+        const toastFn =
+          top.type === "error" ? toast.error :
+          top.type === "warning" ? toast.warning :
+          top.type === "success" ? toast.success :
+          toast.info;
+        toastFn(top.title, {
+          description: fresh.length > 1 ? `${top.message} (+${fresh.length - 1} more)` : top.message,
+          duration: urgent ? 8000 : 5000,
+          action: { label: "View", onClick: () => togglePanel() },
+        });
+      }
     }
     data.notifications.forEach((n) => seenIdsRef.current.add(n.id));
-    lastUnreadRef.current = unread;
-  }, [data, unread, togglePanel]);
+  }, [data, togglePanel, preferences]);
 
   return (
     <button
