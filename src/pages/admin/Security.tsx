@@ -36,6 +36,7 @@ const AdminSecurity = () => {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"audit" | "sessions" | "impersonation" | "settings" | "maintenance">("audit");
   const [auditSearch, setAuditSearch] = useState("");
+  const [auditCategory, setAuditCategory] = useState<"all" | "pool_cleanup" | "ims_bot" | "auth" | "agents" | "settings">("all");
   const { signupEnabled, setSignupEnabled, maintenanceMode, maintenanceMessage, setMaintenanceMode } = useAuth();
   const [draftMsg, setDraftMsg] = useState(maintenanceMessage);
 
@@ -63,9 +64,19 @@ const AdminSecurity = () => {
     toast.success(signupEnabled ? "Registration disabled" : "Registration enabled");
   };
 
-  const logs = (auditData?.logs || []).filter((l) =>
-    !auditSearch || `${l.action} ${l.username || ""} ${l.target_type || ""}`.toLowerCase().includes(auditSearch.toLowerCase())
-  );
+  const categoryMatcher: Record<typeof auditCategory, (action: string) => boolean> = {
+    all: () => true,
+    pool_cleanup: (a) => /pool_cleanup|cleanup/i.test(a),
+    ims_bot: (a) => /^ims_/i.test(a),
+    auth: (a) => /login|logout|register|impersonation|session/i.test(a),
+    agents: (a) => /agent_|topup|withdraw|credit/i.test(a),
+    settings: (a) => /setting|credentials_updated/i.test(a),
+  };
+  const logs = (auditData?.logs || [])
+    .filter((l) => categoryMatcher[auditCategory](l.action))
+    .filter((l) =>
+      !auditSearch || `${l.action} ${l.username || ""} ${l.target_type || ""} ${l.meta || ""}`.toLowerCase().includes(auditSearch.toLowerCase())
+    );
   const sessions = sessData?.sessions || [];
 
   const impersonations = impData?.impersonations || [];
@@ -117,12 +128,38 @@ const AdminSecurity = () => {
 
       {tab === "audit" && (
         <>
+          {/* Category filter chips */}
+          <div className="flex flex-wrap gap-2">
+            {([
+              { k: "all", label: "All", count: (auditData?.logs || []).length },
+              { k: "pool_cleanup", label: "🧹 Pool Cleanup", count: (auditData?.logs || []).filter(l => /pool_cleanup|cleanup/i.test(l.action)).length },
+              { k: "ims_bot", label: "🤖 IMS Bot", count: (auditData?.logs || []).filter(l => /^ims_/i.test(l.action)).length },
+              { k: "auth", label: "🔐 Auth", count: (auditData?.logs || []).filter(l => /login|logout|register|impersonation|session/i.test(l.action)).length },
+              { k: "agents", label: "👥 Agents", count: (auditData?.logs || []).filter(l => /agent_|topup|withdraw|credit/i.test(l.action)).length },
+              { k: "settings", label: "⚙️ Settings", count: (auditData?.logs || []).filter(l => /setting|credentials_updated/i.test(l.action)).length },
+            ] as const).map((c) => (
+              <button
+                key={c.k}
+                onClick={() => setAuditCategory(c.k)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition border",
+                  auditCategory === c.k
+                    ? "bg-primary/15 text-primary border-primary/30"
+                    : "bg-white/[0.04] text-muted-foreground border-white/[0.08] hover:bg-white/[0.08] hover:text-foreground"
+                )}
+              >
+                {c.label}
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-black/30">{c.count}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               value={auditSearch}
               onChange={(e) => setAuditSearch(e.target.value)}
-              placeholder="Search by action, user, target…"
+              placeholder="Search by action, user, target, or meta…"
               className="pl-10 bg-white/[0.04] border-white/[0.1] h-11"
             />
           </div>
