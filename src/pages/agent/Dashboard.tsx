@@ -60,8 +60,12 @@ const AgentDashboard = () => {
         <StatCard label="Active Numbers" value={s.active} icon={Hash} color="cyan" />
         <StatCard label="Today OTP" value={s.today.c} icon={MessageSquare} color="magenta" />
         <StatCard label="7-Day OTP" value={s.week.c} icon={TrendingUp} color="green" />
-        <StatCard label="Balance" value={`৳${user?.balance.toFixed(2) || "0.00"}`} icon={Wallet} color="amber" />
+        <StatCard label="Earnings (Withdrawable)" value={`৳${user?.balance.toFixed(2) || "0.00"}`} icon={Wallet} color="amber" />
       </div>
+
+      <p className="text-xs text-muted-foreground -mt-2">
+        💡 Numbers are <span className="text-neon-green font-semibold">100% free</span> — you only earn when an OTP is successfully received. No balance is deducted to get a number.
+      </p>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
