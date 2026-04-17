@@ -257,7 +257,7 @@ const AdminSecurity = () => {
         </GlassCard>
       )}
       {tab === "maintenance" && (
-        <GlassCard glow={maintenanceMode ? "amber" : undefined}>
+        <GlassCard className={maintenanceMode ? "border-neon-amber/40 bg-neon-amber/[0.04]" : ""}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className={cn(
