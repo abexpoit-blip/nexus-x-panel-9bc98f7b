@@ -1,5 +1,9 @@
-// IMS provider — MANUAL MODE (admin pastes numbers from manager)
-// Numbers added via admin UI go into a "pool" that agents can claim.
+// IMS provider — HYBRID MODE
+//   • Auto: imsBot scrapes numbers + OTP from imssms.org into the pool
+//   • Manual: admin can paste numbers OR push OTPs via admin endpoints
+//
+// Agents pick a RANGE (e.g. "Peru Bitel TF04") instead of country/operator,
+// because IMS organizes inventory by Range (= operator/carrier label).
 const db = require('../lib/db');
 
 module.exports = {
@@ -8,7 +12,7 @@ module.exports = {
   mode: 'manual',
 
   async listCountries() {
-    // Distinct countries from existing rates for IMS
+    // Distinct countries from existing rates for IMS (kept for compatibility)
     return db.prepare(`
       SELECT DISTINCT country_code as code, COALESCE(country_name, country_code) as name
       FROM rates WHERE provider = 'ims' AND country_code IS NOT NULL
@@ -22,26 +26,49 @@ module.exports = {
     `).all();
   },
 
-  // Pull next available number from manual IMS pool (FIFO)
-  async getNumber({ countryCode, operator } = {}) {
+  // Distinct ranges currently sitting in the pool (status='pool')
+  // Returns: [{ name: 'Peru Bitel TF04', count: 247 }, ...]
+  async listRanges() {
+    return db.prepare(`
+      SELECT
+        COALESCE(operator, 'Unknown') AS name,
+        COUNT(*) AS count
+      FROM allocations
+      WHERE provider = 'ims' AND status = 'pool'
+      GROUP BY COALESCE(operator, 'Unknown')
+      HAVING count > 0
+      ORDER BY name ASC
+    `).all();
+  },
+
+  // Pull next available number from manual IMS pool (FIFO).
+  // Accepts: { range } — exact match against the operator column, OR
+  //          { countryCode, operator } for legacy callers.
+  async getNumber({ range, countryCode, operator } = {}) {
     let q = "SELECT * FROM allocations WHERE provider = 'ims' AND status = 'pool'";
     const params = [];
-    if (countryCode) { q += ' AND country_code = ?'; params.push(countryCode); }
-    if (operator) { q += ' AND operator = ?'; params.push(operator); }
+    if (range) { q += ' AND COALESCE(operator, \'Unknown\') = ?'; params.push(range); }
+    else {
+      if (countryCode) { q += ' AND country_code = ?'; params.push(countryCode); }
+      if (operator) { q += ' AND operator = ?'; params.push(operator); }
+    }
     q += ' ORDER BY allocated_at ASC LIMIT 1';
     const row = db.prepare(q).get(...params);
-    if (!row) throw new Error('No IMS numbers available — ask admin to add more');
+    if (!row) {
+      throw new Error(range
+        ? `Range "${range}" is empty — admin needs to refill`
+        : 'No IMS numbers available — ask admin to add more');
+    }
     return {
       provider_ref: String(row.id),
       phone_number: row.phone_number,
       operator: row.operator,
       country_code: row.country_code,
-      __pool_id: row.id,  // used by routes/numbers.js to mark assigned
+      __pool_id: row.id,
     };
   },
 
   async checkOtp() {
-    // OTP for manual mode is updated by admin via /numbers/sync endpoint
     return { otp: null, status: 'waiting' };
   },
 

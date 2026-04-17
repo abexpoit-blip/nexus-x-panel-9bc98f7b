@@ -30,9 +30,18 @@ router.get('/operators/:provider/:countryId', authRequired, async (req, res) => 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/numbers/ims/ranges — agent-facing list of available ranges (with counts)
+router.get('/ims/ranges', authRequired, async (req, res) => {
+  try {
+    const provider = providers.get('ims');
+    const ranges = await provider.listRanges();
+    res.json({ ranges });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/numbers/get — agent allocates a fresh number
 router.post('/get', authRequired, async (req, res) => {
-  const { provider: providerId, country_id, operator_id, country_code, operator, count = 1 } = req.body || {};
+  const { provider: providerId, country_id, operator_id, country_code, operator, range, count = 1 } = req.body || {};
   const userId = req.user.id;
 
   // Block when maintenance mode is on (admins bypass)
@@ -65,7 +74,7 @@ router.post('/get', authRequired, async (req, res) => {
   const errors = [];
   for (let i = 0; i < requested; i++) {
     try {
-      const r = await provider.getNumber({ countryId: country_id, operatorId: operator_id, countryCode: country_code, operator });
+      const r = await provider.getNumber({ countryId: country_id, operatorId: operator_id, countryCode: country_code, operator, range });
       // Insert/upgrade allocation
       let id;
       if (r.__pool_id) {
