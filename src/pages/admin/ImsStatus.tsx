@@ -214,6 +214,9 @@ const AdminImsStatus = () => {
           {/* Credentials editor */}
           <CredentialsEditor onSaved={() => refetch()} />
 
+          {/* OTP poll interval setting */}
+          <OtpIntervalSetting onSaved={() => refetch()} />
+
           {/* Manual paste-numbers */}
           <ManualPastePool
             existingRanges={poolData?.ranges?.map(r => r.name) ?? []}
