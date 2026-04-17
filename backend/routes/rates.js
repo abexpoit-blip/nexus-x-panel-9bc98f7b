@@ -11,7 +11,7 @@ router.get('/', authRequired, (req, res) => {
   res.json({ rates });
 });
 
-router.use(adminOnly); // below = admin only
+router.use(authRequired, adminOnly); // below = admin only (must auth first)
 
 // POST /api/rates
 router.post('/', (req, res) => {
