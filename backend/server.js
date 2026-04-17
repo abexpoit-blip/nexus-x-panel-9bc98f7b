@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 
 // Ensure DB exists & schema applied + admin seeded
 require('./db/init');
@@ -32,10 +33,13 @@ if (process.env.NODE_ENV === 'production' && !corsOrigins) {
 }
 
 app.use(cors({
-  origin: corsOrigins || true,
+  // When credentials:true the browser requires an explicit origin (no '*'),
+  // so in dev we reflect the request origin instead of using `true`.
+  origin: corsOrigins || ((origin, cb) => cb(null, origin || true)),
   credentials: true,
 }));
 
+app.use(cookieParser());                     // read httpOnly auth cookie
 app.use(express.json({ limit: '256kb' }));   // tighter body cap
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 

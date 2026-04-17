@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { DataTable } from "@/components/DataTable";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Users, Plus, Pencil, Trash2, Search, Wallet, UserCheck, UserX, Power } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Search, Wallet, UserCheck, UserX, Power, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { GradientMesh, PageHeader, PremiumKpiCard } from "@/components/premium";
@@ -27,6 +29,8 @@ const empty: AgentForm = { username: "", password: "", daily_limit: 100, per_req
 
 const AdminAgents = () => {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { loginAsAgent } = useAuth();
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
   const [open, setOpen] = useState(false);
@@ -160,6 +164,23 @@ const AdminAgents = () => {
             header: "",
             render: (r) => (
               <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Login as ${r.username}? Your admin session will be preserved — exit anytime from the top banner.`)) return;
+                    const ok = await loginAsAgent(r.id);
+                    if (ok) {
+                      toast.success(`Now viewing as ${r.username}`);
+                      navigate("/agent/dashboard");
+                    } else {
+                      toast.error("Login as agent failed");
+                    }
+                  }}
+                  className="text-neon-cyan hover:underline text-xs flex items-center gap-1"
+                  title="Login as this agent (impersonate)"
+                  disabled={r.status !== "active"}
+                >
+                  <LogIn className="w-3 h-3" /> Login as
+                </button>
                 <button
                   onClick={() => { setTopup({ id: r.id, username: r.username }); setTopupAmount(""); setTopupNote(""); }}
                   className="text-neon-green hover:underline text-xs flex items-center gap-1"

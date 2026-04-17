@@ -25,6 +25,10 @@ export interface AuthContextType {
   maintenanceMode: boolean;
   maintenanceMessage: string;
   setMaintenanceMode: (enabled: boolean, message?: string) => void;
+  // Impersonation
+  impersonator: { id: number; username: string } | null;
+  loginAsAgent: (agentId: number) => Promise<boolean>;
+  exitImpersonation: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);

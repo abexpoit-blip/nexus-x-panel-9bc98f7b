@@ -1,11 +1,33 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../lib/db');
-const { authRequired, adminOnly } = require('../middleware/auth');
+const {
+  authRequired, adminOnly,
+  signImpersonationToken, recordSession, setAuthCookie,
+} = require('../middleware/auth');
 const { logFromReq } = require('../lib/audit');
 
 const router = express.Router();
 router.use(authRequired, adminOnly);
+
+// POST /api/admin/login-as/:id — admin starts impersonation
+router.post('/login-as/:id', (req, res) => {
+  const id = +req.params.id;
+  const target = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'agent'").get(id);
+  if (!target) return res.status(404).json({ error: 'Agent not found' });
+  if (target.status !== 'active') return res.status(403).json({ error: 'Agent suspended' });
+
+  const token = signImpersonationToken(target, req.user);
+  recordSession(target.id, token, req);
+  setAuthCookie(res, token);
+
+  logFromReq(req, 'impersonation_start', {
+    targetType: 'user', targetId: target.id, meta: { username: target.username },
+  });
+
+  const { password_hash, ...safe } = target;
+  res.json({ token, user: safe, impersonator: { id: req.user.id, username: req.user.username } });
+});
 
 // GET /api/admin/stats — dashboard KPIs
 router.get('/stats', (req, res) => {

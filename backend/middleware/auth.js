@@ -37,12 +37,39 @@ function recordSession(userId, token, req) {
   `).run(userId, hashToken(token), req.ip || null, req.headers['user-agent'] || null, expiresAt);
 }
 
-function authRequired(req, res, next) {
+// Cookie name used for httpOnly JWT
+const COOKIE_NAME = 'nexus_token';
+
+function cookieOptions() {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProd,                    // HTTPS only in prod
+    sameSite: isProd ? 'lax' : 'lax',  // 'lax' works for top-level navigations + same-site XHR
+    path: '/',
+    maxAge: 30 * 24 * 3600 * 1000,     // 30 days
+  };
+}
+
+function setAuthCookie(res, token) {
+  res.cookie(COOKIE_NAME, token, cookieOptions());
+}
+
+function clearAuthCookie(res) {
+  res.clearCookie(COOKIE_NAME, { ...cookieOptions(), maxAge: 0 });
+}
+
+function extractToken(req) {
+  // Priority: cookie > Authorization header (so cookie clients win seamlessly)
+  if (req.cookies && req.cookies[COOKIE_NAME]) return req.cookies[COOKIE_NAME];
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing token' });
-  }
-  const token = header.slice(7);
+  if (header?.startsWith('Bearer ')) return header.slice(7);
+  return null;
+}
+
+function authRequired(req, res, next) {
+  const token = extractToken(req);
+  if (!token) return res.status(401).json({ error: 'Missing token' });
   try {
     const payload = jwt.verify(token, SECRET);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
@@ -50,6 +77,8 @@ function authRequired(req, res, next) {
     if (user.status !== 'active') return res.status(403).json({ error: 'Account suspended' });
     req.user = user;
     req.token = token;
+    // Pass impersonation context (set by login-as)
+    if (payload.act) req.impersonator = payload.act; // { id, username }
 
     // Update session last_seen (best effort)
     db.prepare("UPDATE sessions SET last_seen_at = strftime('%s','now') WHERE token_hash = ?")
@@ -68,4 +97,21 @@ function adminOnly(req, res, next) {
   next();
 }
 
-module.exports = { authRequired, adminOnly, signToken, recordSession, hashToken, JWT_SECRET: SECRET };
+function signImpersonationToken(targetUser, adminUser) {
+  return jwt.sign(
+    {
+      sub: targetUser.id,
+      username: targetUser.username,
+      role: targetUser.role,
+      act: { id: adminUser.id, username: adminUser.username }, // "actor" claim
+    },
+    SECRET,
+    { expiresIn: '2h' }   // shorter for safety
+  );
+}
+
+module.exports = {
+  authRequired, adminOnly, signToken, recordSession, hashToken,
+  JWT_SECRET: SECRET, COOKIE_NAME, setAuthCookie, clearAuthCookie,
+  extractToken, signImpersonationToken,
+};

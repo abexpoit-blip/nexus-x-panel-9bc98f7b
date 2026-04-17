@@ -1,12 +1,14 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../lib/db');
-const { signToken, recordSession, authRequired, hashToken } = require('../middleware/auth');
+const {
+  signToken, recordSession, authRequired, hashToken,
+  setAuthCookie, clearAuthCookie, signImpersonationToken,
+} = require('../middleware/auth');
 const { log, logFromReq } = require('../lib/audit');
 
 const router = express.Router();
 
-// Username: 3-32 chars, alphanumeric + underscore
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,32}$/;
 
 // POST /api/auth/login
@@ -16,7 +18,7 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
   if (username.length > 64 || password.length > 200) {
-    return res.status(400).json({ error: 'Invalid credentials' });
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
@@ -32,13 +34,14 @@ router.post('/login', (req, res) => {
 
   const token = signToken(user);
   recordSession(user.id, token, req);
+  setAuthCookie(res, token);                                   // ⬅ httpOnly cookie
   log({ userId: user.id, action: 'login', ip: req.ip, userAgent: req.headers['user-agent'] });
 
   const { password_hash, ...safe } = user;
-  res.json({ token, user: safe });
+  res.json({ token, user: safe });                             // token also returned for legacy clients
 });
 
-// POST /api/auth/register (agents only — admin enables/disables via settings)
+// POST /api/auth/register
 router.post('/register', (req, res) => {
   const setting = db.prepare("SELECT value FROM settings WHERE key = 'signup_enabled'").get();
   if (setting?.value !== 'true') return res.status(403).json({ error: 'Registration disabled' });
@@ -69,23 +72,46 @@ router.post('/register', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
   const token = signToken(user);
   recordSession(user.id, token, req);
+  setAuthCookie(res, token);
   log({ userId: user.id, action: 'register', ip: req.ip });
 
   const { password_hash, ...safe } = user;
   res.status(201).json({ token, user: safe });
 });
 
-// GET /api/auth/me
+// GET /api/auth/me — also returns impersonator info if applicable
 router.get('/me', authRequired, (req, res) => {
   const { password_hash, ...safe } = req.user;
-  res.json({ user: safe });
+  res.json({
+    user: safe,
+    impersonator: req.impersonator || null,
+  });
 });
 
 // POST /api/auth/logout
 router.post('/logout', authRequired, (req, res) => {
   db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(req.token));
+  clearAuthCookie(res);
   logFromReq(req, 'logout');
   res.json({ ok: true });
+});
+
+// POST /api/auth/exit-impersonation — restore original admin
+router.post('/exit-impersonation', authRequired, (req, res) => {
+  if (!req.impersonator) return res.status(400).json({ error: 'Not impersonating' });
+  const admin = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'admin'").get(req.impersonator.id);
+  if (!admin) return res.status(404).json({ error: 'Original admin not found' });
+
+  const token = signToken(admin);
+  recordSession(admin.id, token, req);
+  setAuthCookie(res, token);
+
+  logFromReq(req, 'impersonation_end', {
+    targetType: 'user', targetId: req.user.id, meta: { agent: req.user.username },
+  });
+
+  const { password_hash, ...safe } = admin;
+  res.json({ token, user: safe });
 });
 
 module.exports = router;

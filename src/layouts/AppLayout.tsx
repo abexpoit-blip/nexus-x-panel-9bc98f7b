@@ -1,23 +1,31 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { AnimatedOutlet } from "@/components/AnimatedOutlet";
 import { useAuth, type UserRole } from "@/contexts/AuthContext";
 import { AppSidebar } from "./Sidebar";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
-import { Menu, Wallet, Search, Wrench } from "lucide-react";
+import { Menu, Wallet, Search, Wrench, ShieldAlert, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface AppLayoutProps {
   requiredRole: UserRole;
 }
 
 export const AppLayout = ({ requiredRole }: AppLayoutProps) => {
-  const { user, isAuthenticated, maintenanceMode, maintenanceMessage } = useAuth();
+  const { user, isAuthenticated, maintenanceMode, maintenanceMessage, impersonator, exitImpersonation } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user?.role !== requiredRole) return <Navigate to={`/${user?.role}/dashboard`} replace />;
+
+  const handleExit = async () => {
+    await exitImpersonation();
+    toast.success("Returned to admin account");
+    navigate("/admin/agents");
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -25,6 +33,22 @@ export const AppLayout = ({ requiredRole }: AppLayoutProps) => {
       <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {impersonator && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 bg-neon-amber/15 border-b border-neon-amber/40 text-neon-amber text-xs sm:text-sm font-semibold">
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                Viewing as <span className="font-mono">{user?.username}</span> — original admin: <span className="font-mono">{impersonator.username}</span>
+              </span>
+            </div>
+            <button
+              onClick={handleExit}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-neon-amber text-background hover:opacity-90 shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Exit
+            </button>
+          </div>
+        )}
         {/* Header */}
         <header className="h-14 flex items-center justify-between px-4 md:px-6 border-b border-white/[0.06] bg-background/80 backdrop-blur-md shrink-0">
           <button
