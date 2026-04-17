@@ -83,15 +83,19 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   amount_bdt REAL NOT NULL,
-  method TEXT NOT NULL,                        -- 'bkash' | 'nagad' | 'bank'
+  method TEXT NOT NULL,                        -- 'bkash' | 'nagad' | 'rocket' | 'bank' | 'crypto'
   account_name TEXT,
   account_number TEXT,
   status TEXT NOT NULL DEFAULT 'pending',      -- 'pending' | 'approved' | 'rejected'
   note TEXT,
+  admin_note TEXT,
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
   processed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_wd_status ON withdrawals(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_wd_user ON withdrawals(user_id, created_at);
 
 CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
