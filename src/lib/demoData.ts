@@ -136,7 +136,7 @@ export const demoData = {
     today: { c: 23, s: 18 }, week: { c: 142, s: 118 },
     month: { c: 587, s: 487 }, active: 7,
   }),
-  myNumbers: () => demoData.allocations(),
+  myNumbers: () => ({ numbers: demoData.allocations().allocations }),
   myCdr: () => demoData.cdr(),
   myPayments: () => demoData.payments(),
   myWithdrawals: () => demoData.withdrawals(),
