@@ -38,6 +38,25 @@ export const RevenueArea = ({ data, height = 220 }: RevenueLineProps) => (
   </ResponsiveContainer>
 );
 
+export const CommissionArea = ({ data, height = 240 }: RevenueLineProps) => (
+  <ResponsiveContainer width="100%" height={height}>
+    <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+      <defs>
+        <linearGradient id="commGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="hsl(300 100% 55%)" stopOpacity={0.55} />
+          <stop offset="100%" stopColor="hsl(300 100% 55%)" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(240 10% 18%)" vertical={false} />
+      <XAxis dataKey="label" stroke="hsl(215 20% 55%)" fontSize={11} tickLine={false} axisLine={false} />
+      <YAxis stroke="hsl(215 20% 55%)" fontSize={11} tickLine={false} axisLine={false}
+        tickFormatter={(v) => `৳${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v}`} />
+      <Tooltip content={<ChartTooltip />} cursor={{ stroke: "hsl(300 100% 55% / 0.3)" }} />
+      <Area type="monotone" dataKey="value" name="Commission" stroke="hsl(300 100% 55%)" strokeWidth={2} fill="url(#commGrad)" />
+    </AreaChart>
+  </ResponsiveContainer>
+);
+
 export const OtpLine = ({ data, height = 220 }: RevenueLineProps) => (
   <ResponsiveContainer width="100%" height={height}>
     <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
