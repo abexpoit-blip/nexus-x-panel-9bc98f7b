@@ -243,6 +243,11 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   exitImpersonation: () =>
     request<{ token: string; user: any }>("/auth/exit-impersonation", { method: "POST" }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: boolean; message: string }>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
 
   // Numbers
   providers: () => request<{ providers: { id: string; name: string }[] }>("/numbers/providers"),
@@ -364,6 +369,7 @@ export const api = {
     imsStart: () => request<{ ok: boolean }>("/admin/ims-start", { method: "POST" }),
     imsStop: () => request<{ ok: boolean }>("/admin/ims-stop", { method: "POST" }),
     imsScrapeNow: () => request<{ ok: boolean; added?: number; otps?: number; error?: string }>("/admin/ims-scrape-now", { method: "POST" }),
+    imsSyncLive: () => request<{ ok: boolean; added?: number; removed?: number; kept?: number; scraped?: number; ranges?: string[]; error?: string }>("/admin/ims-sync-live", { method: "POST" }),
     imsPoolBreakdown: () => request<{ ranges: { name: string; count: number; last_added: number }[]; totalActive: number }>("/admin/ims-pool-breakdown"),
     imsPoolCleanup: (body: { mode: "expired" | "older_than" | "range" | "all_pool"; hours?: number; range?: string }) =>
       request<{ ok: boolean; removed: number; description: string }>("/admin/ims-pool-cleanup", {
