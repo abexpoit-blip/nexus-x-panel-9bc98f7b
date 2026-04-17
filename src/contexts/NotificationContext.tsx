@@ -154,8 +154,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   return (
     <NotificationContext.Provider value={{
-      notifications, announcements, unreadCount, panelOpen, preferences,
-      addNotification, sendAnnouncement, markAsRead, markAllRead, markAnnouncementRead,
+      notifications, announcements, unreadCount, serverUnread, panelOpen, preferences,
+      addNotification, sendAnnouncement, setUnreadFromServer,
+      markAsRead, markAllRead, markAnnouncementRead,
       clearAll, togglePanel, closePanel, updatePreferences,
     }}>
       {children}

@@ -35,10 +35,12 @@ export interface NotificationContextType {
   notifications: Notification[];
   announcements: Announcement[];
   unreadCount: number;
+  serverUnread: number;
   panelOpen: boolean;
   preferences: NotificationPreferences;
   addNotification: (n: Omit<Notification, "id" | "time" | "read">) => void;
   sendAnnouncement: (n: Omit<Announcement, "id" | "time" | "read">) => void;
+  setUnreadFromServer: (n: number) => void;
   markAsRead: (id: string) => void;
   markAllRead: () => void;
   markAnnouncementRead: (id: string) => void;
