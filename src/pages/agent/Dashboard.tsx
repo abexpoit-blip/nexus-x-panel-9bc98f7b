@@ -108,47 +108,33 @@ const AgentDashboard = () => {
         </GlassCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <GlassCard className="lg:col-span-3 p-6">
-          <h3 className="font-display font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" /> Recent Numbers
-          </h3>
-          {!recent.length && <p className="text-sm text-muted-foreground/60 text-center py-12">No activity yet — go to Get Number to start</p>}
-          <div className="space-y-2">
-            {recent.map((item) => (
-              <div key={item.id} className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/[0.02] border-b border-white/[0.04] last:border-0">
-                <div className="flex items-center gap-3">
-                  <span className={cn("w-2 h-2 rounded-full",
-                    item.status === "received" ? "bg-neon-green" : item.status === "active" ? "bg-neon-amber animate-pulse" : "bg-muted-foreground"
-                  )} />
-                  <div>
-                    <p className="text-sm font-mono text-foreground">{item.phone_number}</p>
-                    <p className="text-xs text-muted-foreground">{item.operator || "—"}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={cn("text-sm font-mono",
-                    item.otp ? "text-neon-green" : "text-muted-foreground"
-                  )}>{item.otp || "waiting…"}</p>
-                  <p className="text-xs text-muted-foreground">{new Date(item.allocated_at * 1000).toLocaleTimeString()}</p>
+      <GlassCard className="p-6">
+        <h3 className="font-display font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" /> Recent Numbers
+        </h3>
+        {!recent.length && <p className="text-sm text-muted-foreground/60 text-center py-12">No activity yet — go to Get Number to start</p>}
+        <div className="space-y-2">
+          {recent.map((item) => (
+            <div key={item.id} className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/[0.02] border-b border-white/[0.04] last:border-0">
+              <div className="flex items-center gap-3">
+                <span className={cn("w-2 h-2 rounded-full",
+                  item.status === "received" ? "bg-neon-green" : item.status === "active" ? "bg-neon-amber animate-pulse" : "bg-muted-foreground"
+                )} />
+                <div>
+                  <p className="text-sm font-mono text-foreground">{item.phone_number}</p>
+                  <p className="text-xs text-muted-foreground">{item.operator || "—"}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-6">
-          <h3 className="font-display font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-neon-amber" /> Earnings This Period
-          </h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Today earned</span><span className="font-bold text-neon-green">+৳{s.today.s.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">7-day earned</span><span className="font-bold text-neon-green">+৳{s.week.s.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">30-day earned</span><span className="font-bold text-neon-green">+৳{s.month.s.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">30-day OTPs</span><span className="font-bold">{s.month.c}</span></div>
-          </div>
-        </GlassCard>
-      </div>
+              <div className="text-right">
+                <p className={cn("text-sm font-mono",
+                  item.otp ? "text-neon-green" : "text-muted-foreground"
+                )}>{item.otp || "waiting…"}</p>
+                <p className="text-xs text-muted-foreground">{new Date(item.allocated_at * 1000).toLocaleTimeString()}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
     </div>
   );
 };
