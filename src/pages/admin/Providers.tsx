@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Settings, Trash2, CheckCircle, XCircle, Wifi, Server } from "lucide-react";
+import { Plus, Settings, Trash2, CheckCircle, XCircle, Wifi, Server, Wallet, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GradientMesh, PageHeader } from "@/components/premium";
+import { api } from "@/lib/api";
 
 interface Provider {
   id: string;
@@ -25,6 +27,11 @@ const MOCK_PROVIDERS: Provider[] = [
 const AdminProviders = () => {
   const [providers] = useState(MOCK_PROVIDERS);
   const [showAdd, setShowAdd] = useState(false);
+  const { data: liveStatus } = useQuery({
+    queryKey: ["provider-status"],
+    queryFn: () => api.admin.providerStatus(),
+    refetchInterval: 15000,
+  });
 
   return (
     <div className="relative space-y-6">
