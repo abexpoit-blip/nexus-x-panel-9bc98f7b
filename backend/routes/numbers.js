@@ -41,62 +41,78 @@ router.get('/ims/ranges', authRequired, async (req, res) => {
 
 // POST /api/numbers/get — agent allocates a fresh number
 router.post('/get', authRequired, async (req, res) => {
-  const { provider: providerId, country_id, operator_id, country_code, operator, range, count = 1 } = req.body || {};
-  const userId = req.user.id;
+  try {
+    const { provider: providerId, country_id, operator_id, country_code, operator, range, count = 1 } = req.body || {};
+    const userId = req.user.id;
 
-  // Block when maintenance mode is on (admins bypass)
-  if (req.user.role !== 'admin') {
-    const m = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_mode'").get();
-    if (m?.value === 'true') {
-      const msg = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_message'").get();
-      return res.status(503).json({ error: msg?.value || 'System is under maintenance' });
-    }
-  }
-
-  // Per-request limit
-  const perReq = req.user.per_request_limit || 5;
-  const requested = Math.min(+count || 1, perReq);
-
-  // Daily limit
-  const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
-  const usedToday = db.prepare(
-    "SELECT COUNT(*) c FROM allocations WHERE user_id = ? AND allocated_at >= ?"
-  ).get(userId, todayStart).c;
-  if (usedToday >= req.user.daily_limit) {
-    return res.status(429).json({ error: 'Daily limit reached' });
-  }
-
-  let provider;
-  try { provider = providers.get(providerId); }
-  catch (e) { return res.status(400).json({ error: e.message }); }
-
-  const allocated = [];
-  const errors = [];
-  for (let i = 0; i < requested; i++) {
-    try {
-      const r = await provider.getNumber({ countryId: country_id, operatorId: operator_id, countryCode: country_code, operator, range });
-      // Insert/upgrade allocation
-      let id;
-      if (r.__pool_id) {
-        // IMS manual pool — flip status from 'pool' to 'active' for this user
-        db.prepare(`UPDATE allocations SET user_id=?, status='active', allocated_at=strftime('%s','now') WHERE id=?`)
-          .run(userId, r.__pool_id);
-        id = r.__pool_id;
-      } else {
-        const result = db.prepare(`
-          INSERT INTO allocations (user_id, provider, provider_ref, phone_number, operator, country_code, status)
-          VALUES (?, ?, ?, ?, ?, ?, 'active')
-        `).run(userId, providerId, r.provider_ref, r.phone_number, r.operator, r.country_code);
-        id = result.lastInsertRowid;
+    // Block when maintenance mode is on (admins bypass)
+    if (req.user.role !== 'admin') {
+      const m = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_mode'").get();
+      if (m?.value === 'true') {
+        const msg = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_message'").get();
+        return res.status(503).json({ error: msg?.value || 'System is under maintenance' });
       }
-      allocated.push({ id, phone_number: r.phone_number, operator: r.operator, otp: null, status: 'active' });
-    } catch (e) {
-      errors.push(e.message);
     }
-  }
 
-  logFromReq(req, 'allocation', { meta: { provider: providerId, count: allocated.length, errors: errors.length } });
-  res.json({ allocated, errors });
+    // Per-request limit
+    const perReq = req.user.per_request_limit || 5;
+    const requested = Math.min(+count || 1, perReq);
+
+    // Daily limit
+    const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+    const usedToday = db.prepare(
+      "SELECT COUNT(*) c FROM allocations WHERE user_id = ? AND allocated_at >= ?"
+    ).get(userId, todayStart).c;
+    const dailyLimit = req.user.daily_limit || 100;
+    if (usedToday >= dailyLimit) {
+      return res.status(429).json({ error: `Daily limit reached (${usedToday}/${dailyLimit})` });
+    }
+
+    let provider;
+    try { provider = providers.get(providerId); }
+    catch (e) { return res.status(400).json({ error: e.message }); }
+
+    const allocated = [];
+    const errors = [];
+    for (let i = 0; i < requested; i++) {
+      try {
+        const r = await provider.getNumber({ countryId: country_id, operatorId: operator_id, countryCode: country_code, operator, range });
+        if (!r || !r.phone_number) {
+          errors.push('Provider returned no number');
+          continue;
+        }
+        // Insert/upgrade allocation
+        let id;
+        if (r.__pool_id) {
+          // IMS manual pool — flip status from 'pool' to 'active' for this user
+          db.prepare(`UPDATE allocations SET user_id=?, status='active', allocated_at=strftime('%s','now') WHERE id=?`)
+            .run(userId, r.__pool_id);
+          id = r.__pool_id;
+        } else {
+          const result = db.prepare(`
+            INSERT INTO allocations (user_id, provider, provider_ref, phone_number, operator, country_code, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'active')
+          `).run(userId, providerId, r.provider_ref || null, r.phone_number, r.operator || null, r.country_code || null);
+          id = result.lastInsertRowid;
+        }
+        allocated.push({ id, phone_number: r.phone_number, operator: r.operator, otp: null, status: 'active' });
+      } catch (e) {
+        // Extract clean message from axios errors / provider exceptions
+        const msg = e?.response?.data?.message
+                  || (typeof e?.response?.data === 'string' ? e.response.data : null)
+                  || e?.message
+                  || 'Unknown provider error';
+        errors.push(msg);
+      }
+    }
+
+    logFromReq(req, 'allocation', { meta: { provider: providerId, count: allocated.length, errors: errors.length, errorDetails: errors.slice(0, 3) } });
+    res.json({ allocated, errors });
+  } catch (fatal) {
+    // Final safety net — don't let ANY exception bubble up as 500
+    console.error('[/numbers/get] fatal:', fatal);
+    res.status(500).json({ error: fatal?.message || 'Internal error', allocated: [], errors: [fatal?.message || 'Internal error'] });
+  }
 });
 
 // GET /api/numbers/my — agent's own numbers (provider name hidden from agents)
