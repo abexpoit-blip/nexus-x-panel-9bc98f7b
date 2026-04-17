@@ -18,11 +18,22 @@ echo -e "${B}━━━━━━━━━━━━━━━━━━━━━━�
 
 cd "$PROJECT_DIR"
 
-# 1. Pull latest from GitHub
+# 1. Pull latest from GitHub (auto-stash any local edits — .env etc. stay safe)
 echo -e "\n${Y}▶ Pulling latest code from GitHub…${N}"
 BEFORE=$(git rev-parse --short HEAD)
-git pull --rebase
+# Stash any uncommitted local changes (preserves .env edits made on VPS)
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo -e "${Y}  ⚠ Local changes detected — auto-stashing${N}"
+  git stash push -u -m "auto-stash by deploy.sh $(date +%s)" || true
+  STASHED=1
+fi
+git fetch origin
+git reset --hard origin/main
 AFTER=$(git rev-parse --short HEAD)
+# Restore stash on top (your local .env edits survive)
+if [ "${STASHED:-0}" = "1" ]; then
+  git stash pop || echo -e "${Y}  ⚠ Stash pop had conflicts — check 'git stash list'${N}"
+fi
 if [ "$BEFORE" = "$AFTER" ]; then
   echo -e "${G}✓ Already up to date ($AFTER)${N}"
 else
