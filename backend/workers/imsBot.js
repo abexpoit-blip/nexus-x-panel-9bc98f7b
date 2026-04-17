@@ -344,6 +344,17 @@ async function tick() {
   }
 }
 
+// Notify all admins (broadcast-style — one row per admin user)
+function notifyAdmins(title, message, type = 'warning') {
+  try {
+    const admins = db.prepare("SELECT id FROM users WHERE role='admin'").all();
+    const ins = db.prepare("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)");
+    for (const a of admins) ins.run(a.id, title, message, type);
+  } catch (e) {
+    console.warn('[ims-bot] notifyAdmins failed:', e.message);
+  }
+}
+
 function start() {
   status.enabled = ENABLED;
   status.baseUrl = BASE_URL;
@@ -357,13 +368,16 @@ function start() {
     status.lastError = 'IMS_USERNAME / IMS_PASSWORD not set';
     return;
   }
+  if (scrapeTimer) { clearInterval(scrapeTimer); scrapeTimer = null; }
   status.running = true;
+  emptyStreak = 0;
   console.log(`✓ IMS bot starting (every ${INTERVAL}s, headless=${HEADLESS}, base=${BASE_URL})`);
   setTimeout(tick, 5000);
-  setInterval(tick, INTERVAL * 1000);
+  scrapeTimer = setInterval(tick, INTERVAL * 1000);
 }
 
 async function stop() {
+  if (scrapeTimer) { clearInterval(scrapeTimer); scrapeTimer = null; }
   try { await browser?.close(); } catch (_) {}
   browser = null; page = null; loggedIn = false;
   status.running = false;
