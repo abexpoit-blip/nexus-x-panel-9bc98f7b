@@ -81,34 +81,27 @@ const demoImsState = (() => {
 })();
 
 async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = tokenStore.get();
-  // If demo mode is on OR the token looks like a demo token, short-circuit to demo handler
-  if (demoMode.enabled() || (token && token.startsWith("demo_"))) {
-    const demo = demoRoute(path, opts);
-    if (demo !== undefined) return demo as T;
+  let token = tokenStore.get();
+
+  // Auto-clean stale demo tokens (legacy from preview/dev). Demo mode is fully off in production.
+  if (token && token.startsWith("demo_")) {
+    tokenStore.clear();
+    localStorage.removeItem("nexus_demo_mode");
+    token = null;
   }
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      ...opts,
-      credentials: "include",                    // ← send/receive httpOnly cookie
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(opts.headers || {}),
-      },
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error((data as any).error || `Request failed: ${res.status}`);
-    return data as T;
-  } catch (err: any) {
-    // Production: never fall back to demo data — surface the real error.
-    // Demo mode only activates if explicitly enabled via demoMode.enable() in dev.
-    if (demoMode.enabled() && /Failed to fetch|NetworkError|TypeError/.test(err?.message || "")) {
-      const demo = demoRoute(path, opts);
-      if (demo !== undefined) return demo as T;
-    }
-    throw err;
-  }
+
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    credentials: "include",                    // ← send/receive httpOnly cookie
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any).error || `Request failed: ${res.status}`);
+  return data as T;
 }
 
 /** Map an API path to a demo response. Returns undefined if no demo handler. */
