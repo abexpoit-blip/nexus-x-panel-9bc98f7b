@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Settings, Trash2, CheckCircle, XCircle, Wifi, Server } from "lucide-react";
+import { Plus, Settings, Trash2, CheckCircle, XCircle, Wifi, Server, Wallet, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GradientMesh, PageHeader } from "@/components/premium";
+import { api } from "@/lib/api";
 
 interface Provider {
   id: string;
@@ -25,6 +27,11 @@ const MOCK_PROVIDERS: Provider[] = [
 const AdminProviders = () => {
   const [providers] = useState(MOCK_PROVIDERS);
   const [showAdd, setShowAdd] = useState(false);
+  const { data: liveStatus } = useQuery({
+    queryKey: ["provider-status"],
+    queryFn: () => api.admin.providerStatus(),
+    refetchInterval: 15000,
+  });
 
   return (
     <div className="relative space-y-6">
@@ -44,6 +51,44 @@ const AdminProviders = () => {
           </Button>
         }
       />
+
+      {/* Live provider health (real backend status) */}
+      {liveStatus?.providers && liveStatus.providers.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {liveStatus.providers.map((p) => (
+            <div key={p.id} className="glass-card border border-white/[0.06] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-semibold text-foreground">{p.name}</span>
+                  <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                    p.lastError ? "bg-destructive/15 text-destructive" :
+                    p.configured ? "bg-neon-green/15 text-neon-green" : "bg-muted/30 text-muted-foreground"
+                  )}>
+                    {p.lastError ? <XCircle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                    {p.lastError ? "Error" : p.configured ? "Live" : "Not configured"}
+                  </span>
+                </div>
+                {p.balance !== null && p.balance !== undefined && (
+                  <div className="flex items-center gap-1.5 text-sm font-mono font-bold text-neon-green">
+                    <Wallet className="w-3.5 h-3.5" />
+                    ${p.balance.toFixed(2)} <span className="text-xs text-muted-foreground font-normal">{p.currency}</span>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {p.username && <div>User: <span className="font-mono text-foreground/80">{p.username}</span></div>}
+                {p.baseUrl && <div className="truncate">URL: <span className="font-mono text-foreground/60">{p.baseUrl}</span></div>}
+                {p.lastError && (
+                  <div className="flex items-start gap-1.5 mt-2 text-destructive">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span className="break-all">{p.lastError}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showAdd && (
         <GlassCard glow="cyan">

@@ -149,7 +149,67 @@ module.exports = {
 
   async releaseNumber(providerRef) {
     // AccHub UI has no explicit release endpoint we observed; mark released locally.
-    // (If/when AccHub exposes a cancel endpoint, add it here.)
     return;
+  },
+
+  // Account balance — try common endpoints; cached 30s
+  _balCache: { at: 0, value: null, currency: 'USD', error: null },
+  async getBalance() {
+    const now = Date.now();
+    if (now - this._balCache.at < 30000 && this._balCache.value !== null) {
+      return { balance: this._balCache.value, currency: this._balCache.currency, cached: true };
+    }
+    const candidates = [
+      '/api/freelancer/get-page/profile',
+      '/api/freelancer/profile',
+      '/api/freelancer/balance',
+      '/api/freelancer/get-page/dashboard',
+    ];
+    let lastErr = null;
+    for (const path of candidates) {
+      try {
+        const data = await authedRequest('GET', path);
+        // Try common shapes: data.balance | data.data.balance | data.user.balance
+        const d = data?.data || data;
+        const bal = d?.balance ?? d?.user?.balance ?? d?.wallet_balance ?? null;
+        const cur = d?.currency || d?.user?.currency || 'USD';
+        if (bal !== null && bal !== undefined) {
+          this._balCache = { at: now, value: Number(bal), currency: cur, error: null };
+          return { balance: Number(bal), currency: cur, cached: false };
+        }
+      } catch (e) {
+        lastErr = e?.response?.status === 404 ? null : (e.message || String(e));
+      }
+    }
+    this._balCache = { at: now, value: null, currency: 'USD', error: lastErr || 'Balance endpoint not found' };
+    return { balance: null, currency: 'USD', error: this._balCache.error };
+  },
+
+  // Status snapshot for admin panel
+  async getStatus() {
+    const configured = !!(USERNAME && PASSWORD);
+    const out = {
+      id: 'acchub',
+      name: 'AccHub',
+      configured,
+      baseUrl: BASE_URL,
+      username: USERNAME ? USERNAME.replace(/.(?=.{2})/g, '*') : null,
+      loggedIn: !!cachedToken,
+      tokenExpiresAt: tokenExpiresAt || null,
+      balance: null,
+      currency: 'USD',
+      lastError: null,
+      otpHistoryCount: this._otpCache.items.length,
+    };
+    if (!configured) { out.lastError = 'ACCHUB_USERNAME / ACCHUB_PASSWORD not set'; return out; }
+    try {
+      const b = await this.getBalance();
+      out.balance = b.balance;
+      out.currency = b.currency;
+      if (b.error) out.lastError = b.error;
+    } catch (e) {
+      out.lastError = e.message || String(e);
+    }
+    return out;
   },
 };

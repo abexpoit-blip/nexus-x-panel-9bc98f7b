@@ -146,4 +146,24 @@ router.post('/ims-stop', async (req, res) => {
   }
 });
 
+// GET /api/admin/provider-status — health for all configured providers (AccHub balance, IMS bot, etc.)
+router.get('/provider-status', async (req, res) => {
+  try {
+    const providers = require('../providers');
+    const out = [];
+    for (const meta of providers.list()) {
+      const p = providers.get(meta.id);
+      if (typeof p.getStatus === 'function') {
+        try { out.push(await p.getStatus()); }
+        catch (e) { out.push({ id: meta.id, name: meta.name, configured: false, lastError: e.message }); }
+      } else {
+        out.push({ id: meta.id, name: meta.name, configured: true, lastError: null });
+      }
+    }
+    res.json({ providers: out });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
