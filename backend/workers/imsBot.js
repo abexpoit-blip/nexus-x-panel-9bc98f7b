@@ -178,7 +178,7 @@ function solveCaptchaText(text) {
   return String(Number.isInteger(r) ? r : Math.round(r * 100) / 100);
 }
 
-async function login() {
+async function loginOnce() {
   dlog('[ims-bot] navigating to login page');
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle2', timeout: 30000 });
 
@@ -314,9 +314,31 @@ async function login() {
   if (ok) status.lastLoginAt = Math.floor(Date.now() / 1000);
   dlog(`[ims-bot] login ${ok ? '✓' : '✗'} (url=${url})`);
   if (!ok) {
-    // Common cause: wrong captcha. Throw so caller retries.
+    // Common cause: wrong captcha. Throw so wrapper retries.
     throw new Error('IMS login failed (likely captcha) — will retry');
   }
+}
+
+// Public login() — retries up to 3 attempts. IMS serves a fresh captcha each
+// page load, so a wrong-captcha failure on attempt N often succeeds on N+1.
+async function login() {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await loginOnce();
+      if (attempt > 1) {
+        console.log(`[ims-bot] login OK on attempt ${attempt}`);
+        logEvent('success', `Login OK on attempt ${attempt}`);
+      }
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[ims-bot] login attempt ${attempt}/3 failed: ${e.message}`);
+      logEvent('warn', `Login attempt ${attempt}/3 failed: ${e.message}`);
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw lastErr || new Error('IMS login failed after 3 attempts');
 }
 
 // ---- Scrape SMS Numbers page (the manager's available numbers) ----
