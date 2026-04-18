@@ -669,8 +669,18 @@ async function pollOtpsNow() {
   if (busy || !loggedIn || !page) return;
   busy = true;
   try {
-    await deliverOtps();
+    const delivered = await deliverOtps();
+    // Update lastScrapeAt from the fast loop too — otherwise the dashboard
+    // shows "never" until the heavy 60s tick() runs and may make admins
+    // think the bot is stalled even when OTPs are flowing every 10s.
+    status.lastScrapeAt = Math.floor(Date.now() / 1000);
+    status.lastScrapeOk = true;
+    if (typeof delivered === 'number' && delivered > 0) {
+      console.log(`[ims-bot] fast-poll delivered ${delivered} OTP(s)`);
+    }
   } catch (e) {
+    status.lastScrapeOk = false;
+    status.lastError = e.message;
     dwarn('[ims-bot] otp-poll:', e.message);
   } finally {
     busy = false;
