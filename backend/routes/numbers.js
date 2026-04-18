@@ -124,14 +124,24 @@ router.post('/get', authRequired, async (req, res) => {
   }
 });
 
-// GET /api/numbers/my — agent's own numbers (provider name hidden from agents)
+// GET /api/numbers/my — agent's "live" working list:
+//   • status='active'   → all of them (the agent is currently waiting on OTPs)
+//   • status='received' → only those received in the LAST 24 HOURS
+// Older successful OTPs disappear from this list to keep it clean, but their
+// stats (count + earnings) remain permanent in the `cdr` and `payments` tables
+// and are surfaced on the dashboard via /api/numbers/summary.
 router.get('/my', authRequired, (req, res) => {
+  const cutoff24h = Math.floor(Date.now() / 1000) - 24 * 3600;
   const numbers = db.prepare(`
     SELECT id, phone_number, operator, country_code, otp, status, allocated_at, otp_received_at
     FROM allocations
-    WHERE user_id = ? AND status IN ('active','received')
+    WHERE user_id = ?
+      AND (
+        status = 'active'
+        OR (status = 'received' AND otp_received_at >= ?)
+      )
     ORDER BY allocated_at DESC LIMIT 200
-  `).all(req.user.id);
+  `).all(req.user.id, cutoff24h);
   res.json({ numbers });
 });
 
