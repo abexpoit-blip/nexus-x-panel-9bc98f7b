@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS cdr (
   operator TEXT,
   phone_number TEXT NOT NULL,
   otp_code TEXT,
+  cli TEXT,                                    -- service tag (Facebook, WhatsApp, etc.)
   price_bdt REAL NOT NULL DEFAULT 0,           -- what we charge / pay agent
   status TEXT NOT NULL DEFAULT 'billed',       -- 'billed' | 'refunded' | 'failed'
   note TEXT,
