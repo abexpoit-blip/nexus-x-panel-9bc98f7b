@@ -229,9 +229,11 @@ async function loginOnce() {
 
   // Find captcha question (e.g. "What is 6 + 5 = ? :" or "5 + 3 + 2 = ?")
   const { captchaText, captchaSel } = await page.evaluate(() => {
+    // Defensive: page may be mid-navigation — bail safely if body is null.
+    if (!document || !document.body) return { captchaText: null, captchaSel: null };
     // 1) Find the math expression anywhere on the page.
     //    Supports 2+ operands: "5+3=?", "5+3+2=?", "(4+2)*3=?".
-    const allText = document.body.innerText || '';
+    const allText = (document.body.innerText || document.body.textContent || '');
     const exprRe = /\(?\s*-?\d+\s*(?:[+\-x×*/÷]\s*\(?\s*-?\d+\s*\)?\s*){1,5}=\s*\?/i;
     const mathMatch = allText.match(exprRe);
     if (!mathMatch) return { captchaText: null, captchaSel: null };
