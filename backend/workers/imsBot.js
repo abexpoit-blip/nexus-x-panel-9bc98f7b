@@ -682,21 +682,34 @@ function start() {
 // Lightweight OTP-only poll — runs frequently between heavy ticks.
 // Skips entirely if a heavy tick is in progress (which already delivers OTPs).
 let _pollSkipLogCount = 0;
+let _otpBusyStartedAt = 0;
 async function pollOtpsNow() {
-  if (busy || !loggedIn || !page) {
-    // Log skip reason every ~30s (every 3rd skip at 10s interval) so admins
-    // can see WHY fast-poll isn't running. Otherwise it's silent and looks dead.
-    if ((_pollSkipLogCount++ % 3) === 0) {
-      console.log(`[ims-bot] fast-poll skipped — busy=${busy} loggedIn=${loggedIn} page=${!!page}`);
+  // Stuck-detection for fast-poll itself (rare, but defensive)
+  if (otpBusy) {
+    if ((Date.now() - _otpBusyStartedAt) / 1000 > 120) {
+      console.warn('[ims-bot] otpBusy stuck >120s — force-reset');
+      otpBusy = false;
+    } else {
+      return;
+    }
+  }
+  // Don't fight the heavy tick over the shared page — but don't silently die either.
+  if (busy) {
+    if ((_pollSkipLogCount++ % 6) === 0) {
+      console.log(`[ims-bot] fast-poll waiting — heavy tick in progress (${Math.floor((Date.now() - tickStartedAt) / 1000)}s)`);
     }
     return;
   }
-  busy = true;
+  if (!loggedIn || !page) {
+    if ((_pollSkipLogCount++ % 6) === 0) {
+      console.log(`[ims-bot] fast-poll skipped — loggedIn=${loggedIn} page=${!!page}`);
+    }
+    return;
+  }
+  otpBusy = true;
+  _otpBusyStartedAt = Date.now();
   try {
     const delivered = await deliverOtps();
-    // Update lastScrapeAt from the fast loop too — otherwise the dashboard
-    // shows "never" until the heavy 60s tick() runs and may make admins
-    // think the bot is stalled even when OTPs are flowing every 10s.
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
     status.lastScrapeOk = true;
     if (typeof delivered === 'number' && delivered > 0) {
@@ -705,9 +718,9 @@ async function pollOtpsNow() {
   } catch (e) {
     status.lastScrapeOk = false;
     status.lastError = e.message;
-    dwarn('[ims-bot] otp-poll:', e.message);
+    console.warn('[ims-bot] otp-poll:', e.message);
   } finally {
-    busy = false;
+    otpBusy = false;
   }
 }
 
