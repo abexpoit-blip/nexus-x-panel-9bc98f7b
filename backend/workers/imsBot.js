@@ -571,6 +571,20 @@ async function tick() {
   }
 }
 
+// Cache of last scraped OTPs — used by getRecentOtpFor() so the IMS provider
+// can detect "this number was already used recently" before assigning to an agent.
+// Map: phone_number → { otp_code, date_ts, sms_text, cachedAt (unix sec) }
+const recentOtpCache = new Map();
+const RECENT_OTP_TTL = 30 * 60; // 30 minutes
+
+function getRecentOtpFor(phone) {
+  const e = recentOtpCache.get(phone);
+  if (!e) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (now - e.cachedAt > RECENT_OTP_TTL) { recentOtpCache.delete(phone); return null; }
+  return e;
+}
+
 // Helper: pull OTPs once and credit any matching active allocations.
 // Used by tick() AND by the lightweight `pollOtpsNow()` fast-poll loop.
 async function deliverOtps() {
