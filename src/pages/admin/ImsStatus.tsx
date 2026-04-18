@@ -207,6 +207,15 @@ const AdminImsStatus = () => {
               {syncing ? "Syncing…" : "Sync Live"}
             </button>
             <button
+              onClick={handleScrapeNumbersBg}
+              disabled={bgStarting || jobRunning || !s?.running}
+              title={!s?.running ? "Start the bot first" : "Scrape numbers + ranges in background (non-blocking)"}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-purple/10 border border-neon-purple/30 text-neon-purple hover:bg-neon-purple/20 transition disabled:opacity-50"
+            >
+              <Database className={cn("w-3.5 h-3.5", (bgStarting || jobRunning) && "animate-pulse")} />
+              {jobRunning ? "Scraping in BG…" : bgStarting ? "Starting…" : "Scrape Numbers (BG)"}
+            </button>
+            <button
               onClick={() => handleAction("restart")}
               disabled={restarting}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-magenta/10 border border-neon-magenta/30 text-neon-magenta hover:bg-neon-magenta/20 transition disabled:opacity-50"
