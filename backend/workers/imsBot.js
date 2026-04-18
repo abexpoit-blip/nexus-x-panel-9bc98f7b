@@ -423,12 +423,13 @@ async function scrapeNumbers() {
 let _cdrPageReady = false;
 
 async function scrapeOtps() {
+  if (!page) throw new Error('page not ready');
   const onCdrPage = /SMSCDRStats/i.test(page.url());
 
   if (!onCdrPage || !_cdrPageReady) {
-    // First visit (or after logout) — full navigation
+    // First visit (or after logout) — full navigation.
     try {
-      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 12000 });
+      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 10000 });
     } catch (e) {
       _cdrPageReady = false;
       throw new Error('CDR page navigation failed: ' + e.message);
@@ -436,15 +437,41 @@ async function scrapeOtps() {
     if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
     _cdrPageReady = true;
   } else {
-    // Already on CDR page — just reload to fetch fresh data (no button click needed).
-    // This is much faster + safer than clicking "Show Report".
+    // Fast refresh: prefer DataTables AJAX reload (1-2s) over full page reload (5-15s).
+    // Falls back to reload only if DataTables isn't present.
+    let usedDt = false;
     try {
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-    } catch (e) {
-      _cdrPageReady = false;
-      throw new Error('CDR page reload failed: ' + e.message);
+      usedDt = await Promise.race([
+        page.evaluate(() => {
+          try {
+            // eslint-disable-next-line no-undef
+            const $ = window.jQuery || window.$;
+            if (!$ || !$.fn || !$.fn.dataTable) return false;
+            const tables = $('table.dataTable, table');
+            let any = false;
+            tables.each(function () {
+              if ($.fn.dataTable.isDataTable(this)) {
+                $(this).DataTable().ajax.reload(null, false);
+                any = true;
+              }
+            });
+            return any;
+          } catch (_) { return false; }
+        }),
+        new Promise((resolve) => setTimeout(() => resolve(false), 2500)),
+      ]);
+    } catch (_) { usedDt = false; }
+
+    if (!usedDt) {
+      // Fallback — full page reload, but with a tighter budget.
+      try {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 8000 });
+      } catch (e) {
+        _cdrPageReady = false;
+        throw new Error('CDR page reload failed: ' + e.message);
+      }
+      if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
     }
-    if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
   }
 
   // Wait briefly for IMS DataTables AJAX to populate the table after page load.
@@ -549,7 +576,7 @@ async function tick() {
     // a single hung evaluate() blocks every subsequent tick forever.
     await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('deliverOtps timeout 20s')), 20000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('deliverOtps timeout 35s')), 35000)),
     ]);
     const nums = []; // numbers scrape disabled — see above. Set empty so auto-pause logic works.
     // Auto-pause disabled — numbers scrape removed, so empty-streak no longer applies.
@@ -592,7 +619,7 @@ async function tick() {
       console.warn('[ims-bot] recycling browser after repeated failures');
       logEvent('warn', 'Recycling browser after 2 consecutive failures');
       try { await browser?.close(); } catch (_) {}
-      browser = null; page = null; loggedIn = false;
+      browser = null; page = null; loggedIn = false; _cdrPageReady = false;
       status.loggedIn = false;
       consecFail = 0;
     }
@@ -799,7 +826,7 @@ async function pollOtpsNow() {
   try {
     const delivered = await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 18s')), 18000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 30s')), 30000)),
     ]);
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
     status.lastScrapeOk = true;
@@ -821,7 +848,7 @@ async function stop() {
   if (scrapeTimer) { clearInterval(scrapeTimer); scrapeTimer = null; }
   if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
   try { await browser?.close(); } catch (_) {}
-  browser = null; page = null; loggedIn = false;
+  browser = null; page = null; loggedIn = false; _cdrPageReady = false;
   status.running = false;
   status.loggedIn = false;
 }
