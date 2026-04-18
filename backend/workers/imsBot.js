@@ -332,6 +332,30 @@ async function scrapeNumbers() {
 async function scrapeOtps() {
   await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'networkidle2', timeout: 25000 }).catch(() => null);
   if (/\/login/i.test(page.url())) { loggedIn = false; return []; }
+
+  // CRITICAL: IMS SMSCDRStats page renders an EMPTY table by default —
+  // the user must click "Show Report" to populate it. Without this click,
+  // the bot scrapes 0 rows forever and no OTPs ever get delivered.
+  // We click it on every visit (fresh data each tick).
+  try {
+    await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a'));
+      const target = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
+      if (target) target.click();
+    });
+    // Wait for the AJAX table refresh — DataTables typically repopulates tbody.
+    await page.waitForFunction(
+      () => {
+        const rows = document.querySelectorAll('table tbody tr');
+        if (!rows.length) return false;
+        // Skip the "No data available" placeholder row
+        const first = rows[0].innerText || '';
+        return rows.length > 1 || !/no data|empty/i.test(first);
+      },
+      { timeout: 8000 }
+    ).catch(() => null);
+  } catch (_) { /* non-fatal — fall through and try to read whatever is there */ }
+
   return await page.evaluate(() => {
     const out = [];
     document.querySelectorAll('table tbody tr').forEach((row) => {
