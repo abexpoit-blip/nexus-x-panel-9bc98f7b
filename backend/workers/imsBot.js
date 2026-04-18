@@ -1232,10 +1232,12 @@ async function pollOtpsNow() {
   _otpBusyStartedAt = Date.now();
   const _pollT0 = Date.now();
   try {
-    // Bumped 45s → 60s to accommodate slower CDR page loads + 10s populated wait.
+    // 120s wrapper — IMS slow-day reality: page-size bump + AJAX show-report
+    // + 500-row populated wait can legitimately reach 60-90s. 120s gives
+    // headroom without masking truly-stuck cases (browser recycle at 5 fails).
     const delivered = await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 60s')), 60000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 120s')), 120000)),
     ]);
     const elapsed = Date.now() - _pollT0;
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
