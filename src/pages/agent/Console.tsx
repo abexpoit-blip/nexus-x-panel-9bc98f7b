@@ -144,6 +144,11 @@ const AgentConsole = () => {
                     <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold", labelStyle)}>
                       {label}
                     </span>
+                    {c.cli && (
+                      <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold", cliBadgeClass(c.cli))}>
+                        {c.cli}
+                      </span>
+                    )}
                     {hotCount >= 2 && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neon-green/10 text-neon-green">
                         🔥 {hotCount} in 1h
