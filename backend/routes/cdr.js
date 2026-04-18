@@ -39,11 +39,17 @@ router.get('/feed', authRequired, (req, res) => {
   `).all();
   // Mask sensitive bits before sending — server-side, so the raw OTP never
   // leaves the box for non-owners.
+  // Hide LAST 4 digits (e.g. 517896XXXX) — preserves country/operator prefix
+  // so agents can recognise the range, hides the unique tail so no one can
+  // dial or hijack another agent's number.
+  const maskPhone = (p) => {
+    if (!p) return '';
+    if (p.length <= 4) return 'X'.repeat(p.length);
+    return p.slice(0, p.length - 4) + 'XXXX';
+  };
   const feed = rows.map(r => ({
     id: r.id,
-    phone_masked: r.phone_number
-      ? r.phone_number.slice(0, 6) + 'X'.repeat(Math.max(0, r.phone_number.length - 6))
-      : '',
+    phone_masked: maskPhone(r.phone_number),
     otp_length: r.otp_code ? r.otp_code.length : 0,
     operator: r.operator,
     country_code: r.country_code,

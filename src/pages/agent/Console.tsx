@@ -36,6 +36,30 @@ const AgentConsole = () => {
     );
   }, [data, search]);
 
+  // Count OTPs per range (short label) in the last 1 hour — agents instantly
+  // see which range is hottest right now. Sorted desc, top 8 shown as chips.
+  const hotRanges = useMemo(() => {
+    const feed = data?.feed || [];
+    const cutoff = Math.floor(Date.now() / 1000) - 3600;
+    const counts = new Map<string, { count: number; isIms: boolean }>();
+    for (const c of feed) {
+      if (c.created_at < cutoff) continue;
+      const isIms = c.provider === "ims";
+      const key = isIms ? shortRange(c.operator) : (c.operator || c.country_code || "—");
+      if (!key) continue;
+      const cur = counts.get(key) || { count: 0, isIms };
+      cur.count += 1;
+      counts.set(key, cur);
+    }
+    return Array.from(counts.entries())
+      .map(([label, v]) => ({ label, ...v }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [data]);
+
+  const countFor = (label: string) =>
+    hotRanges.find((r) => r.label === label)?.count || 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -67,6 +91,34 @@ const AgentConsole = () => {
         />
       </div>
 
+      {hotRanges.length > 0 && (
+        <GlassCard className="!p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">🔥 Hot ranges · last 1h</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {hotRanges.map((r, idx) => (
+              <button
+                key={r.label}
+                onClick={() => setSearch(r.label)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
+                  idx === 0
+                    ? "bg-neon-green/15 text-neon-green border border-neon-green/40"
+                    : r.isIms
+                      ? "bg-neon-magenta/10 text-neon-magenta hover:bg-neon-magenta/20"
+                      : "bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20"
+                )}
+                title={`Filter feed by ${r.label}`}
+              >
+                <span>{r.label}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-background/40 font-mono">{r.count}</span>
+              </button>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
       <div className="space-y-3">
         {items.map((c) => {
           const isIms = c.provider === "ims";
@@ -78,6 +130,7 @@ const AgentConsole = () => {
             ? "bg-neon-magenta/10 text-neon-magenta"
             : "bg-neon-cyan/10 text-neon-cyan";
           const otpMask = "X".repeat(c.otp_length || 6);
+          const hotCount = countFor(label);
           return (
             <GlassCard key={c.id} className="!p-4 hover:neon-border-cyan transition-all">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -87,9 +140,11 @@ const AgentConsole = () => {
                     <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold", labelStyle)}>
                       {label}
                     </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neon-green/10 text-neon-green">
-                      OTP received
-                    </span>
+                    {hotCount >= 2 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neon-green/10 text-neon-green">
+                        🔥 {hotCount} in 1h
+                      </span>
+                    )}
                   </div>
                   {fullDetail && (
                     <p className="mt-1 text-xs text-muted-foreground truncate">{fullDetail}</p>
