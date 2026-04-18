@@ -290,7 +290,23 @@ export const api = {
   imsRanges: () => request<{ ranges: { name: string; count: number }[] }>("/numbers/ims/ranges"),
   imsAddPool: (body: { numbers: string[]; range: string; country_code?: string }) =>
     request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/ims/pool", { method: "POST", body: JSON.stringify(body) }),
-  myNumbers: () => request<{ numbers: Allocation[] }>("/numbers/my"),
+  myNumbers: () => request<{ numbers: Allocation[]; recent_window_hours?: number }>("/numbers/my"),
+  numberHistory: (params: { page?: number; page_size?: number; q?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.page_size) qs.set("page_size", String(params.page_size));
+    if (params.q) qs.set("q", params.q);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{
+      rows: Array<{
+        id: number; allocation_id: number | null; country_code: string | null;
+        operator: string | null; phone_number: string; otp_code: string;
+        price_bdt: number; created_at: number;
+      }>;
+      page: number; page_size: number; total: number; total_pages: number;
+      summary: { count: number; earnings_bdt: number };
+    }>(`/numbers/history${suffix}`);
+  },
   releaseNumber: (id: number) => request(`/numbers/release/${id}`, { method: "POST" }),
   numberSummary: () => request<{
     today: { c: number; s: number };
@@ -436,6 +452,13 @@ export const api = {
     otpExpirySave: (expiry_min: number) =>
       request<{ ok: boolean; expiry_sec: number; expiry_min: number }>("/admin/otp-expiry", {
         method: "PUT", body: JSON.stringify({ expiry_min }),
+      }),
+    recentOtpWindow: () => request<{
+      hours: number; source: string; min: number; max: number; options_hours: number[];
+    }>("/admin/recent-otp-window"),
+    recentOtpWindowSave: (hours: number) =>
+      request<{ ok: boolean; hours: number }>("/admin/recent-otp-window", {
+        method: "PUT", body: JSON.stringify({ hours }),
       }),
     providerStatus: () => request<{ providers: ProviderStatus[] }>("/admin/provider-status"),
     acchubCredentials: () => request<{

@@ -635,7 +635,41 @@ router.post('/acchub-test', async (req, res) => {
 //   • numbers.js /get (recent-window for upstream polling)
 //   • agent UI countdown timer (read via /api/numbers/config)
 // =============================================================
-const { getOtpExpirySec, OTP_EXPIRY_MIN, OTP_EXPIRY_MAX, OTP_EXPIRY_KEY } = require('../lib/settings');
+const {
+  getOtpExpirySec, OTP_EXPIRY_MIN, OTP_EXPIRY_MAX, OTP_EXPIRY_KEY,
+  getRecentOtpHours, RECENT_OTP_HOURS_KEY, RECENT_OTP_HOURS_MIN, RECENT_OTP_HOURS_MAX,
+} = require('../lib/settings');
+
+// ---- Recent-OTP window (controls how long received OTPs stay on the
+//      agent's "live" list before sliding into history) ----
+router.get('/recent-otp-window', (req, res) => {
+  const stored = +(db.prepare('SELECT value FROM settings WHERE key = ?').get(RECENT_OTP_HOURS_KEY)?.value || 0);
+  const effective = getRecentOtpHours();
+  res.json({
+    hours: effective,
+    source: stored > 0 ? 'database' : 'default',
+    min: RECENT_OTP_HOURS_MIN,
+    max: RECENT_OTP_HOURS_MAX,
+    options_hours: [1, 6, 12, 24, 48, 72, 168],
+  });
+});
+
+router.put('/recent-otp-window', (req, res) => {
+  try {
+    const hours = +(req.body?.hours);
+    if (!Number.isFinite(hours) || hours < RECENT_OTP_HOURS_MIN || hours > RECENT_OTP_HOURS_MAX) {
+      return res.status(400).json({ error: `hours must be between ${RECENT_OTP_HOURS_MIN} and ${RECENT_OTP_HOURS_MAX}` });
+    }
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `).run(RECENT_OTP_HOURS_KEY, String(Math.floor(hours)));
+    logFromReq(req, 'recent_otp_window_updated', { meta: { hours } });
+    res.json({ ok: true, hours: Math.floor(hours) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 router.get('/otp-expiry', (req, res) => {
   const stored = +(db.prepare('SELECT value FROM settings WHERE key = ?').get(OTP_EXPIRY_KEY)?.value || 0);
