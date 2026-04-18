@@ -87,9 +87,14 @@ const AgentConsole = () => {
         {items.map((c) => {
           const isIms = c.provider === "ims";
           const label = isIms ? shortRange(c.operator) : (c.operator || c.country_code || "—");
+          const fullDetail = isIms
+            ? (c.operator || label)
+            : [c.operator, c.country_code].filter(Boolean).join(" · ");
           const labelStyle = isIms
             ? "bg-neon-magenta/10 text-neon-magenta"
             : "bg-neon-cyan/10 text-neon-cyan";
+          const revealed = revealedIds.has(c.id);
+          const otpDisplay = revealed ? c.otp_code : maskOtp(c.otp_code);
           return (
             <GlassCard key={c.id} className="!p-4 hover:neon-border-cyan transition-all">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -103,8 +108,21 @@ const AgentConsole = () => {
                       +৳{(+c.price_bdt).toFixed(2)}
                     </span>
                   </div>
-                  <p className="mt-2 text-base text-foreground leading-relaxed font-mono tracking-widest">
-                    OTP: <span className="text-neon-green font-bold">{c.otp_code}</span>
+                  {fullDetail && (
+                    <p className="mt-1 text-xs text-muted-foreground truncate">{fullDetail}</p>
+                  )}
+                  <p className="mt-2 text-base text-foreground leading-relaxed font-mono tracking-widest flex items-center gap-2">
+                    OTP:{" "}
+                    <span className={cn("font-bold", revealed ? "text-neon-green" : "text-muted-foreground/70")}>
+                      {otpDisplay}
+                    </span>
+                    <button
+                      onClick={() => toggleReveal(c.id)}
+                      className="p-1 rounded hover:bg-white/[0.06] text-muted-foreground hover:text-primary transition-colors"
+                      title={revealed ? "Hide OTP" : "Reveal OTP"}
+                    >
+                      {revealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
