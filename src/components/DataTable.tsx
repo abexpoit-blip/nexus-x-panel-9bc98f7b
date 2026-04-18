@@ -49,10 +49,6 @@ export function DataTable<T extends Record<string, any>>({
     return data.slice(start, start + (pageSize as number));
   }, [data, page, pageSize, usePagination]);
 
-  if (loading && data.length === 0) {
-    return <TableSkeleton rows={6} cols={columns.length} className={className} />;
-  }
-
   // Build a compact page-number list with ellipses (e.g. 1 … 4 5 [6] 7 8 … 20)
   const pageNumbers = useMemo<(number | "…")[]>(() => {
     if (!usePagination || totalPages <= 1) return [];
