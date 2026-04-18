@@ -549,6 +549,8 @@ async function scrapeOtps() {
     });
     return out;
   });
+  _step(`done — extracted ${out.length} rows`);
+  return out;
 }
 
 // One full pass.
