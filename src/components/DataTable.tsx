@@ -71,6 +71,10 @@ export function DataTable<T extends Record<string, any>>({
     return out;
   }, [page, totalPages, usePagination]);
 
+  if (loading && data.length === 0) {
+    return <TableSkeleton rows={6} cols={columns.length} className={className} />;
+  }
+
   return (
     <div className={cn("space-y-3", className)}>
       <div className="glass-card overflow-hidden">
