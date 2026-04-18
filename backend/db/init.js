@@ -30,6 +30,8 @@ function addColIfMissing(table, col, ddl) {
 addColIfMissing('withdrawals', 'admin_note', 'TEXT');
 addColIfMissing('withdrawals', 'reviewed_by', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
 addColIfMissing('withdrawals', 'reviewed_at', 'INTEGER');
+addColIfMissing('allocations', 'cli', 'TEXT');
+addColIfMissing('cdr', 'cli', 'TEXT');
 
 // Seed default admin (only if no admin exists)
 const adminExists = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get();
