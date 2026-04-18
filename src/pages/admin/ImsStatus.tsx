@@ -63,6 +63,7 @@ const AdminImsStatus = () => {
   const [restarting, setRestarting] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [bgStarting, setBgStarting] = useState(false);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["ims-status"],
     queryFn: () => api.admin.imsStatus(),
@@ -73,7 +74,14 @@ const AdminImsStatus = () => {
     queryFn: () => api.admin.imsPoolBreakdown(),
     refetchInterval: 10000,
   });
+  // Poll background numbers job — fast (2s) when running, slow (15s) when idle
+  const { data: numbersJob } = useQuery({
+    queryKey: ["ims-numbers-job"],
+    queryFn: () => api.admin.imsNumbersJob(),
+    refetchInterval: (q) => (q.state.data?.status === "running" ? 2000 : 15000),
+  });
   const s = data?.status as ImsStatus | undefined;
+  const jobRunning = numbersJob?.status === "running";
 
   const handleAction = async (action: "restart" | "start" | "stop") => {
     const labels = { restart: "Restart", start: "Start", stop: "Stop" };
