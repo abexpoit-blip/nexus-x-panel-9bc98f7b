@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Search, RefreshCw, Inbox, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { usePagination } from "@/components/Pagination";
 
 // Shorten IMS range names like "Peru Bitel TF04" → "TF04"
 const shortRange = (operator?: string | null) => {
@@ -59,6 +60,8 @@ const AgentConsole = () => {
 
   const countFor = (label: string) =>
     hotRanges.find((r) => r.label === label)?.count || 0;
+
+  const { items: pagedItems, controls: pagedControls } = usePagination(items, 25);
 
   return (
     <div className="space-y-6">
@@ -120,7 +123,7 @@ const AgentConsole = () => {
       )}
 
       <div className="space-y-3">
-        {items.map((c) => {
+        {pagedItems.map((c) => {
           const isIms = c.provider === "ims";
           const label = isIms ? shortRange(c.operator) : (c.operator || c.country_code || "—");
           const fullDetail = isIms
@@ -168,6 +171,7 @@ const AgentConsole = () => {
             <p className="text-sm">No OTP activity yet — once any agent receives an OTP it will appear here.</p>
           </div>
         )}
+        {pagedControls}
       </div>
     </div>
   );

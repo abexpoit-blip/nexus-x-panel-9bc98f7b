@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Megaphone, Send } from "lucide-react";
 import { toast } from "sonner";
 import { GradientMesh, PageHeader } from "@/components/premium";
+import { usePagination } from "@/components/Pagination";
 
 const AdminNotifications = () => {
   const qc = useQueryClient();
@@ -81,26 +82,34 @@ const AdminNotifications = () => {
         </div>
       </GlassCard>
 
-      <GlassCard>
-        <h3 className="font-display font-semibold mb-4">Recent Notifications</h3>
-        <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-          {(notifs?.notifications || []).map((n) => (
-            <div key={n.id} className="p-3 rounded-lg border border-white/[0.05] hover:bg-white/[0.02]">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-sm">{n.title}</h4>
-                <span className="text-xs text-muted-foreground">{new Date(n.created_at * 1000).toLocaleString()}</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
-              <div className="flex gap-2 mt-2 text-[10px] uppercase tracking-wider">
-                <span className="text-primary">{n.type}</span>
-                <span className="text-muted-foreground">{n.user_id ? `→ user #${n.user_id}` : "→ broadcast"}</span>
-              </div>
-            </div>
-          ))}
-          {!(notifs?.notifications || []).length && <p className="text-center text-muted-foreground text-sm py-8">No notifications yet</p>}
-        </div>
-      </GlassCard>
+      <RecentNotifications notifs={notifs?.notifications || []} />
     </div>
+  );
+};
+
+const RecentNotifications = ({ notifs }: { notifs: any[] }) => {
+  const { items, controls } = usePagination(notifs, 25);
+  return (
+    <GlassCard>
+      <h3 className="font-display font-semibold mb-4">Recent Notifications</h3>
+      <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+        {items.map((n) => (
+          <div key={n.id} className="p-3 rounded-lg border border-white/[0.05] hover:bg-white/[0.02]">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-sm">{n.title}</h4>
+              <span className="text-xs text-muted-foreground">{new Date(n.created_at * 1000).toLocaleString()}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+            <div className="flex gap-2 mt-2 text-[10px] uppercase tracking-wider">
+              <span className="text-primary">{n.type}</span>
+              <span className="text-muted-foreground">{n.user_id ? `→ user #${n.user_id}` : "→ broadcast"}</span>
+            </div>
+          </div>
+        ))}
+        {!notifs.length && <p className="text-center text-muted-foreground text-sm py-8">No notifications yet</p>}
+      </div>
+      {controls}
+    </GlassCard>
   );
 };
 

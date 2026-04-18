@@ -4,6 +4,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Inbox as InboxIcon, CheckCheck, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePagination } from "@/components/Pagination";
 
 const typeColor: Record<string, string> = {
   info: "border-primary/40 bg-primary/5",
@@ -34,6 +35,7 @@ const AgentInbox = () => {
     (n) => n.title !== "OTP received"
   );
   const unreadCount = items.filter((n) => !n.is_read).length;
+  const { items: pagedItems, controls: pagedControls } = usePagination(items, 25);
 
   return (
     <div className="space-y-6">
@@ -51,7 +53,7 @@ const AgentInbox = () => {
       </div>
 
       <div className="space-y-3">
-        {items.map((n) => (
+        {pagedItems.map((n) => (
           <GlassCard
             key={n.id}
             className={cn(
@@ -74,6 +76,7 @@ const AgentInbox = () => {
           </GlassCard>
         ))}
         {!items.length && <p className="text-center text-muted-foreground text-sm py-12">No notifications</p>}
+        {pagedControls}
       </div>
     </div>
   );

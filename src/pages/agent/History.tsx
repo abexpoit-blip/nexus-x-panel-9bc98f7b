@@ -252,6 +252,7 @@ const AgentHistory = () => {
           },
         ]}
         data={data?.rows ?? []}
+        pageSize={null}
       />
 
       {/* Pagination */}
