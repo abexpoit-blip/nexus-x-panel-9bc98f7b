@@ -598,19 +598,38 @@ async function scrapeOtps() {
     try {
       // Wait for the DataTable wrapper itself — confirms AJAX layer is ready
       await page.waitForSelector('table tbody, .dataTables_wrapper', { timeout: 10000 });
-      const sized = await page.evaluate(() => {
+      // Aggressively try to bump page size to maximum so a single scrape covers
+      // 100s of OTPs (critical for burst load — 100+ agents requesting at once).
+      // Returns: { ok, picked, options, currentRows } for diagnostics.
+      const sizeResult = await page.evaluate(() => {
         const sel = document.querySelector('select[name$="_length"], select.dataTable-selector, .dataTables_length select');
-        if (!sel) return false;
-        const opts = Array.from(sel.options || []);
-        const all = opts.find(o => /^all$/i.test(o.text) || o.value === '-1');
-        const big = opts.find(o => +o.value === 500) || opts.find(o => +o.value === 100);
-        const pick = all || big;
-        if (!pick) return false;
+        if (!sel) return { ok: false, reason: 'no length selector found' };
+        const opts = Array.from(sel.options || []).map(o => ({ text: o.text, value: o.value }));
+        // Preference order: "All" → 1000 → 500 → 250 → 100 → highest numeric
+        const findOpt = (pred) => Array.from(sel.options || []).find(pred);
+        let pick = findOpt(o => /^all$/i.test(o.text) || o.value === '-1')
+                || findOpt(o => +o.value === 1000)
+                || findOpt(o => +o.value === 500)
+                || findOpt(o => +o.value === 250)
+                || findOpt(o => +o.value === 100);
+        if (!pick) {
+          // No preferred option — pick the highest numeric value available
+          const nums = Array.from(sel.options || [])
+            .map(o => ({ opt: o, n: +o.value }))
+            .filter(x => Number.isFinite(x.n) && x.n > 0)
+            .sort((a, b) => b.n - a.n);
+          if (nums.length) pick = nums[0].opt;
+        }
+        if (!pick) return { ok: false, reason: 'no usable option', options: opts };
         sel.value = pick.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
-        return true;
+        return { ok: true, picked: { text: pick.text, value: pick.value }, options: opts, currentRows: document.querySelectorAll('table tbody tr').length };
       });
-      if (sized) _step('page-size bumped to All/500');
+      if (sizeResult.ok) {
+        _step(`page-size set to "${sizeResult.picked.text}" (value=${sizeResult.picked.value}, ${sizeResult.options.length} options)`);
+      } else {
+        _step(`page-size NOT set: ${sizeResult.reason} ${sizeResult.options ? '— available: ' + JSON.stringify(sizeResult.options) : ''}`);
+      }
       await page.evaluate(() => {
         const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'));
         const showBtn = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
