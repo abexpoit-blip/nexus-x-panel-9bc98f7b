@@ -700,7 +700,7 @@ async function pollOtpsNow() {
   try {
     const delivered = await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 25s')), 25000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 18s')), 18000)),
     ]);
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
     status.lastScrapeOk = true;
