@@ -578,7 +578,7 @@ async function scrapeOtps() {
     _step('first-visit navigation done');
   } else {
     // Fast refresh: prefer DataTables AJAX reload (typically <1s) over full reload.
-    // Tighter race budget — if DT isn't ready in 1.2s we fall back to reload.
+    // DT needs ~2-3s to actually fire the AJAX call after we trigger it.
     let usedDt = false;
     try {
       usedDt = await Promise.race([
@@ -598,26 +598,30 @@ async function scrapeOtps() {
             return any;
           } catch (_) { return false; }
         }),
-        new Promise((resolve) => setTimeout(() => resolve(false), 1200)),
+        new Promise((resolve) => setTimeout(() => resolve(false), 3000)),
       ]);
     } catch (_) { usedDt = false; }
     _step(`refresh strategy=${usedDt ? 'datatables-ajax' : 'page-reload'}`);
 
     if (!usedDt) {
-      // Fallback — full page reload, but with a tighter budget.
+      // Fallback — full page reload. Don't wait for networkidle (heavy assets);
+      // domcontentloaded is enough — table data comes via subsequent AJAX which
+      // we wait for explicitly below in waitForFunction.
       try {
-        await page.reload({ waitUntil: 'domcontentloaded', timeout: 6000 });
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
       } catch (e) {
-        _cdrPageReady = false;
-        throw new Error('CDR page reload failed: ' + e.message);
+        // Reload timeout is NOT fatal — page may have partially loaded and the
+        // table data may already be there. Try the populated check anyway.
+        _step(`reload soft-failed (${e.message}) — trying populated check anyway`);
       }
       if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
     }
   }
 
   _step('navigation/reload done');
-  // Wait for IMS DataTables AJAX to populate. Reduced 6s→4s — if table still
-  // loading after 4s the next fast-poll tick will catch it.
+  // Wait for IMS DataTables AJAX to populate.
+  // Bumped 4s → 10s — IMS CDR table is heavy (12K+ rows possible) and needs
+  // real time to render after AJAX. 4s was triggering false-empty reads.
   const populated = await page.waitForFunction(
     () => {
       const rows = document.querySelectorAll('table tbody tr');
@@ -626,9 +630,30 @@ async function scrapeOtps() {
       if (rows.length === 1 && /no data|empty|no record|loading/i.test(first)) return false;
       return Array.from(rows).some(r => /\d{8,15}/.test(r.innerText || ''));
     },
-    { timeout: 4000 }
+    { timeout: 10000 }
   ).catch(() => null);
   _step(`table populated=${!!populated}`);
+
+  // Debug snapshot — when populated check fails, dump page diagnostics so we
+  // can see WHY (wrong selector? page in different state? login redirect?).
+  if (!populated) {
+    try {
+      const diag = await page.evaluate(() => ({
+        url: location.href,
+        title: document.title,
+        tables: document.querySelectorAll('table').length,
+        rowsAnyTable: document.querySelectorAll('tr').length,
+        rowsTbody: document.querySelectorAll('table tbody tr').length,
+        firstRowText: (document.querySelector('table tbody tr')?.innerText || '').slice(0, 200),
+        bodyTextSample: (document.body.innerText || '').slice(0, 300),
+        hasLoadingClass: !!document.querySelector('.dataTables_processing[style*="block"], .loading'),
+      }));
+      console.log('[ims-bot][scrape][diag] not populated →', JSON.stringify(diag));
+      logEvent('warn', `Scrape diag: tables=${diag.tables} tbody-rows=${diag.rowsTbody} url=${diag.url.slice(-40)}`);
+    } catch (e) {
+      console.warn('[ims-bot][scrape][diag] failed:', e.message);
+    }
+  }
 
   const out = await page.evaluate(() => {
     const out = [];
