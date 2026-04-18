@@ -142,7 +142,7 @@ export function DataTable<T extends Record<string, any>>({
             <PageBtn onClick={() => setPage(1)} disabled={page === 1} title="First">
               <ChevronsLeft className="w-3.5 h-3.5" />
             </PageBtn>
-            <PageBtn onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} title="Previous">
+            <PageBtn onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} title="Previous">
               <ChevronLeft className="w-3.5 h-3.5" />
               <span className="hidden sm:inline ml-1">Prev</span>
             </PageBtn>
@@ -166,7 +166,7 @@ export function DataTable<T extends Record<string, any>>({
                 )
               )}
             </div>
-            <PageBtn onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} title="Next">
+            <PageBtn onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages} title="Next">
               <span className="hidden sm:inline mr-1">Next</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </PageBtn>
