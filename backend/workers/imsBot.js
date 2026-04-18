@@ -152,14 +152,34 @@ async function login() {
   dlog('[ims-bot] navigating to login page');
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle2', timeout: 30000 });
 
-  // Fill username + password (try common selectors)
-  const userSel = 'input[name="username"], input[name="user"], input[name="email"], input[type="text"]:not([readonly])';
-  const passSel = 'input[name="password"], input[type="password"]';
-  await page.waitForSelector(userSel, { timeout: 15000 });
-  await page.click(userSel, { clickCount: 3 }).catch(() => {});
-  await page.type(userSel, USERNAME, { delay: 25 });
-  await page.click(passSel, { clickCount: 3 }).catch(() => {});
-  await page.type(passSel, PASSWORD, { delay: 25 });
+  // Fill username + password — IMS may use any of: name, id, placeholder, autocomplete
+  // Try a wide selector list, then fall back to "first visible text input + first password input".
+  const userSel = 'input[name="username"], input[name="user"], input[name="email"], input[name="login"], input[id="username"], input[id="user"], input[id="email"], input[autocomplete="username"], input[placeholder*="user" i], input[placeholder*="email" i], input[type="text"]:not([readonly])';
+  const passSel = 'input[name="password"], input[id="password"], input[type="password"]';
+
+  // Wait for the form to mount (any input at all)
+  await page.waitForSelector('input', { timeout: 20000 });
+
+  // Resolve the actual selectors from inside the page so we never rely on strict CSS matching
+  const resolved = await page.evaluate(() => {
+    const inputs = Array.from(document.querySelectorAll('input'));
+    const visible = inputs.filter(i => i.offsetParent !== null && i.type !== 'hidden');
+    const pass = visible.find(i => i.type === 'password');
+    const user = visible.find(i => {
+      if (i === pass) return false;
+      if (i.type === 'password') return false;
+      const meta = `${i.name || ''} ${i.id || ''} ${i.placeholder || ''} ${i.autocomplete || ''}`.toLowerCase();
+      return /user|email|login|account/.test(meta) || i.type === 'text' || !i.type;
+    });
+    const sel = (el) => el?.id ? `#${CSS.escape(el.id)}` : el?.name ? `input[name="${el.name}"]` : null;
+    return { userSel: sel(user), passSel: sel(pass) };
+  });
+  const finalUser = resolved.userSel || userSel;
+  const finalPass = resolved.passSel || passSel;
+  await page.click(finalUser, { clickCount: 3 }).catch(() => {});
+  await page.type(finalUser, USERNAME, { delay: 25 });
+  await page.click(finalPass, { clickCount: 3 }).catch(() => {});
+  await page.type(finalPass, PASSWORD, { delay: 25 });
 
   // Find captcha question (e.g. "What is 6 + 5 = ? :" with input next to it)
   const { captchaText, captchaSel } = await page.evaluate(() => {
