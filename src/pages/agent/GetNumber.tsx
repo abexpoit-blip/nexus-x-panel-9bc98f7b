@@ -13,6 +13,8 @@ interface AllocatedNumber {
   operator?: string | null;
   otp: string | null;
   status: "active" | "received" | "expired";
+  allocated_at?: number;       // unix seconds
+  otp_received_at?: number | null;
 }
 
 interface Country {
