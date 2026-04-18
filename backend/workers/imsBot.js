@@ -630,10 +630,10 @@ async function scrapeOtps() {
                 || findOpt(o => +o.value === 100)
                 || findOpt(o => +o.value === 50);
         if (!pick) {
-          // No preferred option — pick the highest numeric value available
+          // No preferred option — pick highest numeric value but cap at 500
           const nums = Array.from(sel.options || [])
             .map(o => ({ opt: o, n: +o.value }))
-            .filter(x => Number.isFinite(x.n) && x.n > 0)
+            .filter(x => Number.isFinite(x.n) && x.n > 0 && x.n <= 500)
             .sort((a, b) => b.n - a.n);
           if (nums.length) pick = nums[0].opt;
         }
