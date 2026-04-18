@@ -281,7 +281,7 @@ const AgentGetNumber = () => {
               </button>
 
               {rangeOpen && (
-                <div className="absolute z-[100] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
                   <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
                     <div className="relative">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -359,7 +359,7 @@ const AgentGetNumber = () => {
               </button>
 
               {countryOpen && (
-                <div className="absolute z-[100] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
                   <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
                     <div className="relative">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -480,10 +480,31 @@ const AgentGetNumber = () => {
         </div>
       </GlassCard>
 
-      {numbers.length > 0 && (
+      {numbers.length > 0 && (() => {
+        const totalPages = Math.max(1, Math.ceil(numbers.length / PAGE_SIZE));
+        const safePage = Math.min(page, totalPages);
+        const start = (safePage - 1) * PAGE_SIZE;
+        const pageItems = numbers.slice(start, start + PAGE_SIZE);
+        // Build compact page list: 1 … prev current next … last
+        const pages: (number | "…")[] = [];
+        if (totalPages <= 7) {
+          for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+          pages.push(1);
+          if (safePage > 3) pages.push("…");
+          for (let i = Math.max(2, safePage - 1); i <= Math.min(totalPages - 1, safePage + 1); i++) pages.push(i);
+          if (safePage < totalPages - 2) pages.push("…");
+          pages.push(totalPages);
+        }
+        return (
         <GlassCard>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-semibold text-foreground">Allocated Numbers & OTPs</h3>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="font-display font-semibold text-foreground">Allocated Numbers & OTPs</h3>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.05] text-muted-foreground font-mono">
+                {numbers.length} total · {start + 1}–{Math.min(start + PAGE_SIZE, numbers.length)}
+              </span>
+            </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={copyAll} className="glass border-white/[0.1] hover:bg-white/[0.06] text-xs">
                 <Copy className="w-3.5 h-3.5 mr-1" /> Copy All
@@ -502,8 +523,8 @@ const AgentGetNumber = () => {
             <span className="text-right">Actions</span>
           </div>
 
-          <div className="space-y-1 max-h-[500px] overflow-y-auto scrollbar-none">
-            {numbers.map((n) => (
+          <div className="space-y-1">
+            {pageItems.map((n) => (
               <div
                 key={n.id}
                 className="grid grid-cols-[auto_1fr_120px_100px_80px] gap-3 items-center px-4 py-3 rounded-lg bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors"
@@ -550,8 +571,53 @@ const AgentGetNumber = () => {
               </div>
             ))}
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.06] flex-wrap gap-2">
+              <span className="text-[11px] text-muted-foreground">
+                Page <span className="text-foreground font-semibold">{safePage}</span> of {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="h-8 w-8 flex items-center justify-center rounded-md bg-white/[0.04] border border-white/[0.08] text-muted-foreground hover:text-foreground hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {pages.map((p, i) =>
+                  p === "…" ? (
+                    <span key={`e${i}`} className="px-2 text-xs text-muted-foreground">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={cn(
+                        "h-8 min-w-8 px-2 rounded-md text-xs font-semibold transition-colors border",
+                        p === safePage
+                          ? "bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground border-transparent"
+                          : "bg-white/[0.04] border-white/[0.08] text-foreground hover:bg-white/[0.08]"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="h-8 w-8 flex items-center justify-center rounded-md bg-white/[0.04] border border-white/[0.08] text-muted-foreground hover:text-foreground hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </GlassCard>
-      )}
+        );
+      })()}
     </div>
   );
 };
