@@ -61,7 +61,7 @@ const AgentConsole = () => {
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">Console</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Your real OTP feed — Server A shows operator, Server B shows range code.
+            Your real OTP feed — codes are hidden by default. Click <Eye className="inline w-3 h-3" /> to reveal.
           </p>
         </div>
         <button
