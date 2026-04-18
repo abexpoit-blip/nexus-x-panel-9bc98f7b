@@ -386,20 +386,32 @@ async function scrapeNumbers() {
 //   DATE | RANGE | NUMBER | CLI | SMS | CURRENCY | MY PAYOUT
 // IMS shows newest entries first (sorted by DATE desc) — we preserve that order
 // so the latest OTP wins when the same number appears multiple times.
+// Track which page the persistent browser is currently sitting on.
+// We only navigate ONCE — afterwards we just click "Show Report" to refresh data.
+// This eliminates 90% of the timeout problems (no full page reloads).
+let _cdrPageReady = false;
+
 async function scrapeOtps() {
-  // Use 'domcontentloaded' — IMS pages do constant AJAX polling so networkidle never fires.
-  // If goto fails outright, throw so caller recycles the page (don't silently scrape stale DOM).
-  try {
-    await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 12000 });
-  } catch (e) {
-    throw new Error('CDR page navigation failed: ' + e.message);
+  const onCdrPage = /SMSCDRStats/i.test(page.url());
+
+  // Only navigate if we're not already on the CDR page (first scrape, or after re-login).
+  if (!onCdrPage || !_cdrPageReady) {
+    try {
+      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 12000 });
+    } catch (e) {
+      _cdrPageReady = false;
+      throw new Error('CDR page navigation failed: ' + e.message);
+    }
+    if (/\/login/i.test(page.url())) {
+      // Session expired — flag for re-login but DON'T kill the browser.
+      loggedIn = false; _cdrPageReady = false;
+      return [];
+    }
+    try { await page.waitForSelector('button, input[type=submit], form', { timeout: 4000 }); } catch (_) {}
+    _cdrPageReady = true;
   }
-  if (/\/login/i.test(page.url())) { loggedIn = false; return []; }
 
-  // CRITICAL: IMS SMSCDRStats renders an EMPTY table by default — must click "Show Report".
-  // Wait for any button/form to mount first.
-  try { await page.waitForSelector('button, input[type=submit], form', { timeout: 4000 }); } catch (_) {}
-
+  // Click "Show Report" to refresh data (much faster than full navigation).
   let clicked = null;
   try {
     clicked = await page.evaluate(() => {
@@ -410,12 +422,15 @@ async function scrapeOtps() {
       if (form) { form.submit(); return 'form-submit'; }
       return null;
     });
-  } catch (_) {}
+  } catch (_) { _cdrPageReady = false; throw new Error('CDR page lost — will re-navigate next tick'); }
 
-  // Short fixed wait for AJAX to fire (IMS DataTables ~600ms response).
-  await new Promise(r => setTimeout(r, 1000));
+  // Detect mid-scrape logout (page may have redirected after click)
+  if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
 
-  // Then poll briefly for actual data rows. Hard cap 5s (was 8s) to keep total under 20s.
+  // Short wait for AJAX (IMS DataTables ~600-1500ms).
+  await new Promise(r => setTimeout(r, 1200));
+
+  // Poll briefly for data rows.
   await page.waitForFunction(
     () => {
       const rows = document.querySelectorAll('table tbody tr');
@@ -679,9 +694,29 @@ function start() {
   if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
   status.running = true;
   emptyStreak = 0;
-  console.log(`✓ IMS bot starting (every ${INTERVAL}s, headless=${HEADLESS}, base=${BASE_URL})`);
-  setTimeout(tick, 5000);
-  scrapeTimer = setInterval(tick, INTERVAL * 1000);
+  console.log(`✓ IMS bot starting (heavy tick every ${INTERVAL}s for keepalive, headless=${HEADLESS}, base=${BASE_URL})`);
+  // First tick: just login + go to CDR page (no scraping). Fast-poll handles all OTP work.
+  setTimeout(async () => {
+    try {
+      await ensureBrowser();
+      if (!loggedIn) await login();
+      console.log('[ims-bot] initial login complete — fast-poll will handle OTP scraping');
+    } catch (e) {
+      console.error('[ims-bot] initial login failed:', e.message);
+      logEvent('error', 'Initial login failed: ' + e.message);
+    }
+  }, 3000);
+  // Heavy tick is now a SESSION KEEPALIVE only — no scraping (fast-poll does that).
+  // It just verifies loggedIn status and re-logs in if needed. Lightweight.
+  scrapeTimer = setInterval(async () => {
+    if (busy || otpBusy) return;
+    if (!loggedIn) {
+      busy = true; tickStartedAt = Date.now();
+      try { await login(); _cdrPageReady = false; }
+      catch (e) { console.warn('[ims-bot] keepalive re-login failed:', e.message); }
+      finally { busy = false; }
+    }
+  }, INTERVAL * 1000);
 
   // FAST OTP loop — every OTP_INTERVAL seconds (default 10s) we ONLY scrape the
   // OTP/CDR page (no number list, no pagination). This is what makes assigned
@@ -719,9 +754,22 @@ async function pollOtpsNow() {
     }
     return;
   }
-  if (!loggedIn || !page) {
+  // Auto re-login if session dropped — don't sit idle waiting for heavy tick.
+  if (!loggedIn && page) {
+    otpBusy = true;
+    _otpBusyStartedAt = Date.now();
+    try {
+      console.log('[ims-bot] fast-poll: session expired — re-logging in');
+      await login();
+      _cdrPageReady = false;
+    } catch (e) {
+      console.warn('[ims-bot] fast-poll re-login failed:', e.message);
+    } finally { otpBusy = false; }
+    return;
+  }
+  if (!page) {
     if ((_pollSkipLogCount++ % 6) === 0) {
-      console.log(`[ims-bot] fast-poll skipped — loggedIn=${loggedIn} page=${!!page}`);
+      console.log(`[ims-bot] fast-poll skipped — page not ready`);
     }
     return;
   }
