@@ -91,6 +91,34 @@ const AgentConsole = () => {
         />
       </div>
 
+      {hotRanges.length > 0 && (
+        <GlassCard className="!p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">🔥 Hot ranges · last 1h</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {hotRanges.map((r, idx) => (
+              <button
+                key={r.label}
+                onClick={() => setSearch(r.label)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
+                  idx === 0
+                    ? "bg-neon-green/15 text-neon-green border border-neon-green/40"
+                    : r.isIms
+                      ? "bg-neon-magenta/10 text-neon-magenta hover:bg-neon-magenta/20"
+                      : "bg-neon-cyan/10 text-neon-cyan hover:bg-neon-cyan/20"
+                )}
+                title={`Filter feed by ${r.label}`}
+              >
+                <span>{r.label}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-background/40 font-mono">{r.count}</span>
+              </button>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
       <div className="space-y-3">
         {items.map((c) => {
           const isIms = c.provider === "ims";
@@ -102,6 +130,7 @@ const AgentConsole = () => {
             ? "bg-neon-magenta/10 text-neon-magenta"
             : "bg-neon-cyan/10 text-neon-cyan";
           const otpMask = "X".repeat(c.otp_length || 6);
+          const hotCount = countFor(label);
           return (
             <GlassCard key={c.id} className="!p-4 hover:neon-border-cyan transition-all">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -111,7 +140,11 @@ const AgentConsole = () => {
                     <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold", labelStyle)}>
                       {label}
                     </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neon-green/10 text-neon-green">
+                    {hotCount >= 2 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neon-green/10 text-neon-green">
+                        🔥 {hotCount} in 1h
+                      </span>
+                    )}
                       OTP received
                     </span>
                   </div>
