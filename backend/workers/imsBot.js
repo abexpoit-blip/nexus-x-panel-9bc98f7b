@@ -519,7 +519,7 @@ async function tick() {
     // a single hung evaluate() blocks every subsequent tick forever.
     await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('deliverOtps timeout 30s')), 30000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('deliverOtps timeout 20s')), 20000)),
     ]);
     const nums = []; // numbers scrape disabled — see above. Set empty so auto-pause logic works.
     // Auto-pause disabled — numbers scrape removed, so empty-streak no longer applies.
