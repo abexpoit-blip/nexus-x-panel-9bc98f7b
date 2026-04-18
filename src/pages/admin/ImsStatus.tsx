@@ -27,6 +27,8 @@ type ImsStatus = {
   otpReceived: number;
   emptyStreak?: number;
   emptyLimit?: number;
+  cookieFailStreak?: number;
+  hasCookies?: boolean;
   events?: { ts: number; level: string; message: string; meta: unknown }[];
 };
 
@@ -297,7 +299,7 @@ const AdminImsStatus = () => {
           <CredentialsEditor onSaved={() => refetch()} />
 
           {/* Session cookies — bypass captcha entirely (recommended) */}
-          <CookiesEditor onSaved={() => refetch()} />
+          <CookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
 
           {/* OTP poll interval setting */}
           <OtpIntervalSetting onSaved={() => refetch()} />
@@ -839,7 +841,7 @@ const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
   );
 };
 
-const CookiesEditor = ({ onSaved }: { onSaved: () => void }) => {
+const CookiesEditor = ({ onSaved, cookieFailStreak = 0 }: { onSaved: () => void; cookieFailStreak?: number }) => {
   const [open, setOpen] = useState(false);
   const [raw, setRaw] = useState("");
   const [saving, setSaving] = useState(false);
@@ -894,15 +896,25 @@ const CookiesEditor = ({ onSaved }: { onSaved: () => void }) => {
           <div className="text-left">
             <div className="text-sm font-semibold flex items-center gap-2">
               IMS Session Cookies
-              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-neon-purple/15 text-neon-purple font-bold">
-                Bypass Captcha
-              </span>
+              {cookieFailStreak >= 3 ? (
+                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-bold animate-pulse">
+                  ⚠ Expired — Refresh
+                </span>
+              ) : (
+                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-neon-purple/15 text-neon-purple font-bold">
+                  Bypass Captcha
+                </span>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">
               {data ? (
                 data.has_cookies ? (
                   <>
-                    <span className="text-neon-green">✓ {data.count} cookies saved</span>
+                    {cookieFailStreak >= 3 ? (
+                      <span className="text-destructive font-medium">✗ Cookies stopped working ({cookieFailStreak} fails) — paste fresh ones</span>
+                    ) : (
+                      <span className="text-neon-green">✓ {data.count} cookies saved</span>
+                    )}
                     {data.saved_at && <> · {fmtAgo(data.saved_at)}</>}
                   </>
                 ) : (
