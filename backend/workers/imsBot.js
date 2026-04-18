@@ -130,10 +130,12 @@ async function ensureBrowser() {
   browser = await puppeteer.launch({
     headless: HEADLESS ? 'new' : false,
     executablePath: CHROME_PATH,
-    // Bumped from default 30s → 90s. Heavy CDR responses + occasional IMS
-    // server lag can exceed 30s during page.evaluate() calls, causing
-    // "Runtime.callFunctionOn timed out" + Target closed crashes.
-    protocolTimeout: 90000,
+    // Bumped from default 30s → 180s. Heavy CDR responses + occasional IMS
+    // server lag can exceed 90s during page.evaluate() calls, causing
+    // "Runtime.callFunctionOn timed out" + Target closed crashes. Show-Report
+    // click itself is wrapped in a 20s race below, so this only protects against
+    // truly catastrophic upstream stalls.
+    protocolTimeout: 180000,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -631,11 +633,16 @@ async function scrapeOtps() {
       // No click, no wait — just fall through to extract current table rows
     } else {
       try {
-        await page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'));
-          const showBtn = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
-          if (showBtn) showBtn.click();
-        });
+        // Race the click against a 20s hard timeout so a stuck CDP call doesn't
+        // burn through the full protocolTimeout (180s) before we fall back.
+        await Promise.race([
+          page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'));
+            const showBtn = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
+            if (showBtn) showBtn.click();
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('show-report click timeout 20s')), 20000)),
+        ]);
         _lastShowReportAt = Date.now();
         _step('show-report re-click done');
       } catch (e) {
