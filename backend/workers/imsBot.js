@@ -611,6 +611,7 @@ async function scrapeOtps() {
       console.warn('[ims-bot][scrape] page-prep failed:', e.message);
     }
     _cdrPageReady = true;
+    _lastShowReportAt = Date.now();
     _step('first-visit prep done');
   } else {
     // Subsequent polls: enforce IMS's 15s minimum interval between Show Report
