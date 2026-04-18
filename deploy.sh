@@ -12,8 +12,8 @@ BACKEND_DIR="$PROJECT_DIR/backend"
 PM2_NAME="nexus-backend"
 
 # === EDIT THIS if your nginx serves from a different folder ===
-# Common values:  /var/www/nexus-x   |   /var/www/html   |   $PROJECT_DIR/dist
-NGINX_WEBROOT="${NGINX_WEBROOT:-/var/www/nexus-x}"
+# Auto-detected from your nginx config: /var/www/nexus-x.site
+NGINX_WEBROOT="${NGINX_WEBROOT:-/var/www/nexus-x.site}"
 
 echo -e "${B}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e "${B}  NexusX Deploy — $(date '+%Y-%m-%d %H:%M:%S')${N}"
