@@ -227,11 +227,13 @@ async function login() {
   await page.click(finalPass, { clickCount: 3 }).catch(() => {});
   await page.type(finalPass, PASSWORD, { delay: 25 });
 
-  // Find captcha question (e.g. "What is 6 + 5 = ? :" with input next to it)
+  // Find captcha question (e.g. "What is 6 + 5 = ? :" or "5 + 3 + 2 = ?")
   const { captchaText, captchaSel } = await page.evaluate(() => {
-    // 1) Find the math expression anywhere on the page
+    // 1) Find the math expression anywhere on the page.
+    //    Supports 2+ operands: "5+3=?", "5+3+2=?", "(4+2)*3=?".
     const allText = document.body.innerText || '';
-    const mathMatch = allText.match(/(?:what\s+is\s+)?(-?\d+)\s*([+\-x×*/÷])\s*(-?\d+)\s*=\s*\?/i);
+    const exprRe = /\(?\s*-?\d+\s*(?:[+\-x×*/÷]\s*\(?\s*-?\d+\s*\)?\s*){1,5}=\s*\?/i;
+    const mathMatch = allText.match(exprRe);
     if (!mathMatch) return { captchaText: null, captchaSel: null };
     const expr = mathMatch[0];
 
@@ -239,9 +241,7 @@ async function login() {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node, host = null;
     while ((node = walker.nextNode())) {
-      if (/(-?\d+)\s*[+\-x×*/÷]\s*(-?\d+)\s*=\s*\?/i.test(node.nodeValue || '')) {
-        host = node.parentElement; break;
-      }
+      if (exprRe.test(node.nodeValue || '')) { host = node.parentElement; break; }
     }
 
     // 3) Find the nearest answer input — search ancestors → look inside their inputs
