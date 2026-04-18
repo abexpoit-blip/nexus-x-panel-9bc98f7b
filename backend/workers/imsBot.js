@@ -568,69 +568,80 @@ async function scrapeOtps() {
   if (!onCdrPage || !_cdrPageReady) {
     // First visit (or after logout) — full navigation.
     try {
-      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 10000 });
+      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 15000 });
     } catch (e) {
       _cdrPageReady = false;
       throw new Error('CDR page navigation failed: ' + e.message);
     }
     if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
-    _cdrPageReady = true;
-    _step('first-visit navigation done');
-  } else {
-    // Fast refresh: prefer DataTables AJAX reload (typically <1s) over full reload.
-    // DT needs ~2-3s to actually fire the AJAX call after we trigger it.
-    let usedDt = false;
-    try {
-      usedDt = await Promise.race([
-        page.evaluate(() => {
-          try {
-            // eslint-disable-next-line no-undef
-            const $ = window.jQuery || window.$;
-            if (!$ || !$.fn || !$.fn.dataTable) return false;
-            const tables = $('table.dataTable, table');
-            let any = false;
-            tables.each(function () {
-              if ($.fn.dataTable.isDataTable(this)) {
-                $(this).DataTable().ajax.reload(null, false);
-                any = true;
-              }
-            });
-            return any;
-          } catch (_) { return false; }
-        }),
-        new Promise((resolve) => setTimeout(() => resolve(false), 3000)),
-      ]);
-    } catch (_) { usedDt = false; }
-    _step(`refresh strategy=${usedDt ? 'datatables-ajax' : 'page-reload'}`);
 
-    if (!usedDt) {
-      // Fallback — full page reload. Don't wait for networkidle (heavy assets);
-      // domcontentloaded is enough — table data comes via subsequent AJAX which
-      // we wait for explicitly below in waitForFunction.
+    // IMS CDR Stats page does NOT auto-load data. We MUST:
+    //   1) Set "Show Records" dropdown to "All" (or 500) — bypass 25/page limit
+    //   2) Click the "Show Report" button to trigger the AJAX query
+    // Default date range is auto-set to today (00:00 → 23:59) which is what we want.
+    try {
+      await page.waitForSelector('button, input[type="submit"]', { timeout: 8000 });
+      await page.evaluate(() => {
+        // 1) Bump page-size to "All" via the DataTables length dropdown
+        try {
+          const sel = document.querySelector('select[name$="_length"], select.dataTable-selector, .dataTables_length select');
+          if (sel) {
+            // Prefer "All" (-1), fallback 500, fallback 100
+            const opts = Array.from(sel.options || []);
+            const all = opts.find(o => /^all$/i.test(o.text) || o.value === '-1');
+            const big = opts.find(o => +o.value === 500) || opts.find(o => +o.value === 100);
+            const pick = all || big;
+            if (pick) {
+              sel.value = pick.value;
+              sel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+        } catch (_) {}
+        // 2) Click "Show Report" button
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'));
+        const showBtn = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
+        if (showBtn) showBtn.click();
+      });
+    } catch (e) {
+      console.warn('[ims-bot][scrape] show-report click failed:', e.message);
+    }
+    _cdrPageReady = true;
+    _step('first-visit + show-report click done');
+  } else {
+    // Subsequent polls: just RE-CLICK "Show Report" — it triggers a fresh AJAX
+    // query against IMS without a heavy full-page reload. Much faster than
+    // page.reload() and respects IMS's "15s minimum interval" rule (poll loop
+    // is now ≥18s so we never hit the rate limiter).
+    try {
+      await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'));
+        const showBtn = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
+        if (showBtn) showBtn.click();
+      });
+      _step('show-report re-click done');
+    } catch (e) {
+      _step(`show-report click failed (${e.message}) — falling back to page reload`);
       try {
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
-      } catch (e) {
-        // Reload timeout is NOT fatal — page may have partially loaded and the
-        // table data may already be there. Try the populated check anyway.
-        _step(`reload soft-failed (${e.message}) — trying populated check anyway`);
-      }
-      if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
+        if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
+      } catch (_) { /* keep going — populated check will catch it */ }
     }
   }
 
-  _step('navigation/reload done');
-  // Wait for IMS DataTables AJAX to populate.
-  // Bumped 4s → 10s — IMS CDR table is heavy (12K+ rows possible) and needs
-  // real time to render after AJAX. 4s was triggering false-empty reads.
+  _step('navigation/refresh done');
+  // Wait for IMS DataTables AJAX to populate after Show Report click.
+  // Heavy CDR responses can take 8-12s, so give 15s.
   const populated = await page.waitForFunction(
     () => {
       const rows = document.querySelectorAll('table tbody tr');
       if (!rows.length) return false;
       const first = (rows[0].innerText || '').toLowerCase();
+      // Skip the IMS rate-limit warning row
+      if (/refresh must be done|attempt is logged/i.test(first)) return false;
       if (rows.length === 1 && /no data|empty|no record|loading/i.test(first)) return false;
       return Array.from(rows).some(r => /\d{8,15}/.test(r.innerText || ''));
     },
-    { timeout: 10000 }
+    { timeout: 15000 }
   ).catch(() => null);
   _step(`table populated=${!!populated}`);
 
