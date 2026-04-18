@@ -387,7 +387,9 @@ async function scrapeNumbers() {
 // IMS shows newest entries first (sorted by DATE desc) — we preserve that order
 // so the latest OTP wins when the same number appears multiple times.
 async function scrapeOtps() {
-  await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'networkidle2', timeout: 25000 }).catch(() => null);
+  // Use 'domcontentloaded' instead of 'networkidle2' — IMS pages have constant AJAX
+  // polling so networkidle never fires, causing 25s timeouts on every scrape.
+  await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => null);
   if (/\/login/i.test(page.url())) { loggedIn = false; return []; }
 
   // CRITICAL: IMS SMSCDRStats page renders an EMPTY table by default —
