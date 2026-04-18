@@ -37,7 +37,9 @@ echo -e "${G}✓ Secret saved to $PROJECT_DIR/.webhook-secret${N}"
 # 2. Write the webhook listener script
 # ------------------------------------------------------------
 echo -e "\n${Y}▶ Writing webhook listener…${N}"
-cat > "$PROJECT_DIR/webhook-server.js" <<'WEBHOOK_EOF'
+# Use .cjs because root package.json has "type": "module"
+rm -f "$PROJECT_DIR/webhook-server.js"   # remove old broken .js if exists
+cat > "$PROJECT_DIR/webhook-server.cjs" <<'WEBHOOK_EOF'
 // Tiny GitHub webhook listener — verifies HMAC, then runs deploy.sh
 const http = require('http');
 const crypto = require('crypto');
@@ -107,12 +109,10 @@ echo -e "${G}✓ webhook-server.js created${N}"
 # 3. Start under pm2
 # ------------------------------------------------------------
 echo -e "\n${Y}▶ Starting webhook under pm2…${N}"
-if pm2 list | grep -q nexus-webhook; then
-  pm2 restart nexus-webhook --update-env
-else
-  cd "$PROJECT_DIR"
-  WEBHOOK_PORT=$WEBHOOK_PORT pm2 start webhook-server.js --name nexus-webhook
-fi
+# Always recreate so pm2 picks up the .cjs file (not the old broken .js)
+pm2 delete nexus-webhook >/dev/null 2>&1 || true
+cd "$PROJECT_DIR"
+WEBHOOK_PORT=$WEBHOOK_PORT pm2 start webhook-server.cjs --name nexus-webhook
 pm2 save > /dev/null
 echo -e "${G}✓ nexus-webhook running on 127.0.0.1:$WEBHOOK_PORT${N}"
 
