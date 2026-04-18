@@ -4,7 +4,7 @@ const { authRequired, adminOnly } = require('../middleware/auth');
 const { logFromReq } = require('../lib/audit');
 const providers = require('../providers');
 const { agentPayout } = require('../lib/commission');
-const { getOtpExpirySec } = require('../lib/settings');
+const { getOtpExpirySec, getRecentOtpHours } = require('../lib/settings');
 
 const router = express.Router();
 
@@ -125,13 +125,12 @@ router.post('/get', authRequired, async (req, res) => {
 });
 
 // GET /api/numbers/my — agent's "live" working list:
-//   • status='active'   → all of them (the agent is currently waiting on OTPs)
-//   • status='received' → only those received in the LAST 24 HOURS
-// Older successful OTPs disappear from this list to keep it clean, but their
-// stats (count + earnings) remain permanent in the `cdr` and `payments` tables
-// and are surfaced on the dashboard via /api/numbers/summary.
+//   • status='active'   → always shown
+//   • status='received' → only within the admin-configured "recent OTP" window
+// Older successful OTPs are still queryable via GET /api/numbers/history.
 router.get('/my', authRequired, (req, res) => {
-  const cutoff24h = Math.floor(Date.now() / 1000) - 24 * 3600;
+  const recentHours = getRecentOtpHours();
+  const cutoff = Math.floor(Date.now() / 1000) - recentHours * 3600;
   const numbers = db.prepare(`
     SELECT id, phone_number, operator, country_code, otp, status, allocated_at, otp_received_at
     FROM allocations
@@ -141,8 +140,51 @@ router.get('/my', authRequired, (req, res) => {
         OR (status = 'received' AND otp_received_at >= ?)
       )
     ORDER BY allocated_at DESC LIMIT 200
-  `).all(req.user.id, cutoff24h);
-  res.json({ numbers });
+  `).all(req.user.id, cutoff);
+  res.json({ numbers, recent_window_hours: recentHours });
+});
+
+// GET /api/numbers/history — paginated, searchable history of ALL successful
+// OTPs ever delivered to this agent. Pulled from the CDR table so it survives
+// even if the underlying allocation row is later purged by admin cleanup.
+//   ?page=1&page_size=50&q=<phone or otp substring>
+router.get('/history', authRequired, (req, res) => {
+  const page = Math.max(1, +(req.query.page) || 1);
+  const pageSize = Math.max(1, Math.min(200, +(req.query.page_size) || 50));
+  const q = (req.query.q || '').toString().trim();
+
+  const where = ["user_id = ?", "status = 'billed'"];
+  const params = [req.user.id];
+  if (q) {
+    where.push("(phone_number LIKE ? OR otp_code LIKE ? OR operator LIKE ?)");
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  const whereSql = where.join(' AND ');
+
+  const total = db.prepare(`SELECT COUNT(*) c FROM cdr WHERE ${whereSql}`).get(...params).c;
+  const rows = db.prepare(`
+    SELECT id, allocation_id, country_code, operator, phone_number, otp_code,
+           price_bdt, created_at
+    FROM cdr
+    WHERE ${whereSql}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, pageSize, (page - 1) * pageSize);
+
+  // Aggregate totals for the header strip (across the FULL filtered set)
+  const agg = db.prepare(`
+    SELECT COUNT(*) c, COALESCE(SUM(price_bdt),0) s
+    FROM cdr WHERE ${whereSql}
+  `).get(...params);
+
+  res.json({
+    rows,
+    page,
+    page_size: pageSize,
+    total,
+    total_pages: Math.max(1, Math.ceil(total / pageSize)),
+    summary: { count: agg.c, earnings_bdt: +(+agg.s).toFixed(2) },
+  });
 });
 
 // POST /api/numbers/release/:id
