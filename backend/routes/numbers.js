@@ -183,28 +183,21 @@ router.get('/history', authRequired, (req, res) => {
   if (toTs !== null) { where.push("created_at <= ?"); params.push(toTs); }
   const whereSql = where.join(' AND ');
 
-  // CSV branch — stream up to 50k rows, no pagination
+  // Download branch — stream up to 50k rows in plain `Number|OTP` format
+  // (one entry per line). Matches the agent's GetNumber page download so the
+  // same import scripts work everywhere. We keep the `format=csv` query name
+  // for backward compatibility with the UI button wiring.
   if (isCsv) {
     const rows = db.prepare(`
-      SELECT created_at, country_code, operator, phone_number, otp_code, price_bdt
+      SELECT phone_number, otp_code
       FROM cdr WHERE ${whereSql}
       ORDER BY created_at DESC LIMIT 50000
     `).all(...params);
-    const escape = (v) => {
-      if (v === null || v === undefined) return '';
-      const s = String(v);
-      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="otp-history-${new Date().toISOString().slice(0,10)}.csv"`);
-    res.write('Date,Country,Operator,Number,OTP,Earnings (BDT)\n');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="otp-history-${new Date().toISOString().slice(0,10)}.txt"`);
     for (const r of rows) {
-      res.write([
-        new Date(r.created_at * 1000).toISOString(),
-        escape(r.country_code), escape(r.operator),
-        escape(r.phone_number), escape(r.otp_code),
-        (+r.price_bdt).toFixed(2),
-      ].join(',') + '\n');
+      if (!r.phone_number) continue;
+      res.write(r.otp_code ? `${r.phone_number}|${r.otp_code}\n` : `${r.phone_number}\n`);
     }
     return res.end();
   }
