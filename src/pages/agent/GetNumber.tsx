@@ -75,8 +75,14 @@ const AgentGetNumber = () => {
   const cost = selectedOperator?.price_bdt ?? selectedCountry?.price_bdt ?? null;
   const totalCost = cost != null ? cost * quantity : null;
 
-  // Quantity options capped to per-request limit
-  const quantityOptions = [1, 5, 10, 15].filter((q) => q <= maxPerRequest);
+  // Quantity options capped to per-request limit (always include maxPerRequest as the top option)
+  const quantityOptions = Array.from(
+    new Set(
+      [1, 5, 10, 25, 50, 100, maxPerRequest]
+        .filter((q) => q > 0 && q <= maxPerRequest)
+        .sort((a, b) => a - b),
+    ),
+  );
 
   useEffect(() => {
     api.myNumbers().then(({ numbers }) => setNumbers(numbers as AllocatedNumber[])).catch(() => {});
