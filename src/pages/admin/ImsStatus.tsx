@@ -234,6 +234,55 @@ const AdminImsStatus = () => {
 
       {isLoading && <p className="text-center text-muted-foreground text-sm">Loading…</p>}
 
+      {/* Background numbers-scrape job — shows live status when running or last result */}
+      {numbersJob && numbersJob.status !== "idle" && (
+        <div className={cn(
+          "glass-card rounded-xl p-4 border",
+          numbersJob.status === "running" && "border-neon-purple/40 bg-neon-purple/5",
+          numbersJob.status === "done" && "border-neon-green/40 bg-neon-green/5",
+          numbersJob.status === "failed" && "border-destructive/40 bg-destructive/5",
+        )}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Database className={cn(
+                "w-5 h-5",
+                numbersJob.status === "running" && "text-neon-purple animate-pulse",
+                numbersJob.status === "done" && "text-neon-green",
+                numbersJob.status === "failed" && "text-destructive",
+              )} />
+              <div>
+                <div className="text-sm font-semibold">
+                  Background Numbers Scrape — {numbersJob.status.toUpperCase()}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">{numbersJob.progress}</div>
+              </div>
+            </div>
+            {numbersJob.result && (
+              <div className="flex gap-4 text-xs">
+                <div><span className="text-muted-foreground">Added:</span> <span className="font-mono text-neon-green font-bold">+{numbersJob.result.added}</span></div>
+                <div><span className="text-muted-foreground">Removed:</span> <span className="font-mono text-destructive font-bold">-{numbersJob.result.removed}</span></div>
+                <div><span className="text-muted-foreground">Kept:</span> <span className="font-mono">{numbersJob.result.kept}</span></div>
+                <div><span className="text-muted-foreground">Live in IMS:</span> <span className="font-mono text-neon-cyan font-bold">{numbersJob.result.scraped}</span></div>
+                {numbersJob.result.ranges?.length > 0 && (
+                  <div><span className="text-muted-foreground">Ranges:</span> <span className="font-mono">{numbersJob.result.ranges.length}</span></div>
+                )}
+              </div>
+            )}
+            {numbersJob.error && (
+              <div className="text-xs text-destructive font-mono max-w-md truncate" title={numbersJob.error}>
+                {numbersJob.error}
+              </div>
+            )}
+            {numbersJob.startedAt && (
+              <div className="text-xs text-muted-foreground">
+                Started {fmtAgo(numbersJob.startedAt)}
+                {numbersJob.finishedAt && ` · Finished ${fmtAgo(numbersJob.finishedAt)}`}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {s && (
         <>
           {/* Status pills */}
