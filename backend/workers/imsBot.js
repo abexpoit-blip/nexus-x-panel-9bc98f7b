@@ -658,7 +658,7 @@ async function scrapeOtps() {
       });
       return dataRows.length > 0;
     },
-    { timeout: 15000 }
+    { timeout: 8000 }
   ).catch(() => null);
   _step(`table populated=${!!populated}`);
 
