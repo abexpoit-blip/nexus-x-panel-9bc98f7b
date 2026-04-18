@@ -684,7 +684,10 @@ async function pollOtpsNow() {
   otpBusy = true;
   _otpBusyStartedAt = Date.now();
   try {
-    const delivered = await deliverOtps();
+    const delivered = await Promise.race([
+      deliverOtps(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 25s')), 25000)),
+    ]);
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
     status.lastScrapeOk = true;
     if (typeof delivered === 'number' && delivered > 0) {
