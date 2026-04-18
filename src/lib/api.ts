@@ -446,7 +446,7 @@ export const api = {
       totalOtp: number; todayOtp: number; todayRevenue: number; totalRevenue: number;
       todayCommission?: number; totalCommission?: number; pendingWithdrawals?: number;
     }>("/admin/stats"),
-    leaderboard: () => request<{ leaderboard: { id: number; username: string; otp_count: number }[] }>("/admin/leaderboard"),
+    leaderboard: () => request<{ leaderboard: { id: number; username: string; otp_count: number; numbers_used?: number; earnings_bdt?: number }[] }>("/admin/leaderboard"),
     commissionTrend: (days = 14) => request<{ series: { label: string; value: number; count: number }[] }>(`/admin/commission-trend?days=${days}`),
     allocations: () => request<{ allocations: Allocation[] }>("/admin/allocations"),
     imsStatus: () => request<{ status: any }>("/admin/ims-status"),

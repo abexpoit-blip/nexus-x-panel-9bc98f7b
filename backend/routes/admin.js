@@ -184,8 +184,12 @@ router.get('/system-health', (req, res) => {
 // GET /api/admin/leaderboard
 router.get('/leaderboard', (req, res) => {
   const leaderboard = db.prepare(`
-    SELECT id, username, otp_count FROM users
-    WHERE role = 'agent' ORDER BY otp_count DESC LIMIT 20
+    SELECT u.id, u.username, u.otp_count,
+      (SELECT COUNT(*) FROM allocations a WHERE a.user_id = u.id) AS numbers_used,
+      (SELECT COALESCE(SUM(price_bdt),0) FROM cdr_log c WHERE c.user_id = u.id AND c.status='success') AS earnings_bdt
+    FROM users u
+    WHERE u.role = 'agent' AND u.username != '__ims_pool__'
+    ORDER BY u.otp_count DESC LIMIT 20
   `).all();
   res.json({ leaderboard });
 });
