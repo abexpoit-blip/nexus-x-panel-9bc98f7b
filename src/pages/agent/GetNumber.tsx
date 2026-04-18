@@ -13,6 +13,8 @@ interface AllocatedNumber {
   operator?: string | null;
   otp: string | null;
   status: "active" | "received" | "expired";
+  allocated_at?: number;       // unix seconds
+  otp_received_at?: number | null;
 }
 
 interface Country {
@@ -59,7 +61,22 @@ const AgentGetNumber = () => {
   const [copiedOtpId, setCopiedOtpId] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [page, setPage] = useState(1);
+  const [nowTick, setNowTick] = useState(() => Math.floor(Date.now() / 1000));
   const PAGE_SIZE = 25;
+
+  // Tick once per second so elapsed-time column re-renders live
+  useEffect(() => {
+    const i = setInterval(() => setNowTick(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(i);
+  }, []);
+
+  // Format a duration in seconds: "12s" / "1m 04s" / "1h 02m"
+  const fmtDuration = (sec: number) => {
+    const s = Math.max(0, Math.floor(sec));
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+    return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
+  };
 
   // Country search dropdown
   const [countryOpen, setCountryOpen] = useState(false);
@@ -165,7 +182,8 @@ const AgentGetNumber = () => {
           : { country_id: Number(countryId), operator_id: Number(operatorId) }),
         count: quantity,
       });
-      setNumbers((prev) => [...allocated.map((a: AllocatedNumber) => ({ ...a, status: "active" as const })), ...prev]);
+      const nowSec = Math.floor(Date.now() / 1000);
+      setNumbers((prev) => [...allocated.map((a: AllocatedNumber) => ({ ...a, status: "active" as const, allocated_at: a.allocated_at ?? nowSec })), ...prev]);
       setPage(1);
       if (allocated.length) toast({ title: `${allocated.length} number${allocated.length > 1 ? "s" : ""} allocated!`, description: allocated[0].phone_number });
       if (errors.length) toast({ title: "Some failed", description: errors.join(", "), variant: "destructive" });
@@ -522,19 +540,25 @@ const AgentGetNumber = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-[auto_1fr_120px_100px_80px] gap-3 px-4 py-2 text-xs font-semibold text-muted-foreground border-b border-white/[0.06] mb-1">
+          <div className="grid grid-cols-[auto_1fr_120px_100px_90px_80px] gap-3 px-4 py-2 text-xs font-semibold text-muted-foreground border-b border-white/[0.06] mb-1">
             <span className="w-2" />
             <span>Number</span>
             <span>Operator</span>
             <span>OTP</span>
+            <span>Time</span>
             <span className="text-right">Actions</span>
           </div>
 
           <div className="space-y-1">
-            {pageItems.map((n) => (
+            {pageItems.map((n) => {
+              const allocAt = n.allocated_at || nowTick;
+              const elapsed = n.otp && n.otp_received_at
+                ? n.otp_received_at - allocAt
+                : nowTick - allocAt;
+              return (
               <div
                 key={n.id}
-                className="grid grid-cols-[auto_1fr_120px_100px_80px] gap-3 items-center px-4 py-3 rounded-lg bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors"
+                className="grid grid-cols-[auto_1fr_120px_100px_90px_80px] gap-3 items-center px-4 py-3 rounded-lg bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors"
               >
                 <div className={cn(
                   "w-2 h-2 rounded-full",
@@ -567,6 +591,21 @@ const AgentGetNumber = () => {
                     <span className="text-xs text-muted-foreground italic">Waiting...</span>
                   )}
                 </div>
+                <span
+                  className={cn(
+                    "text-xs font-mono tabular-nums",
+                    n.otp
+                      ? "text-neon-green/80"
+                      : elapsed > 180
+                        ? "text-neon-red"
+                        : elapsed > 60
+                          ? "text-neon-amber"
+                          : "text-muted-foreground"
+                  )}
+                  title={n.otp ? "Time taken to receive OTP" : "Elapsed since allocation"}
+                >
+                  {fmtDuration(elapsed)}
+                </span>
                 <div className="flex justify-end">
                   <span className={cn(
                     "px-2 py-0.5 rounded-full text-[10px] font-semibold",
@@ -576,7 +615,8 @@ const AgentGetNumber = () => {
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {totalPages > 1 && (
