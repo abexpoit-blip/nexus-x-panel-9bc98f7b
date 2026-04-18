@@ -651,6 +651,35 @@ async function scrapeOtps() {
       _step(`skip show-report click — only ${sinceLast}ms since last (IMS 15s rule)`);
       // No click, no wait — just fall through to extract current table rows
     } else {
+      // Periodically (every 5 min) re-verify page size — IMS DataTables can
+      // reset to default 25 on session refresh, silently capping our scrape.
+      if (Date.now() - _lastPageSizeCheckAt > 5 * 60 * 1000) {
+        try {
+          const r = await page.evaluate(() => {
+            const sel = document.querySelector('select[name$="_length"], select.dataTable-selector, .dataTables_length select');
+            if (!sel) return { ok: false };
+            const cur = +sel.value;
+            // If currently small, bump back up
+            if (cur > 0 && cur < 100) {
+              const opts = Array.from(sel.options || []);
+              const pick = opts.find(o => /^all$/i.test(o.text) || o.value === '-1')
+                        || opts.find(o => +o.value === 1000)
+                        || opts.find(o => +o.value === 500)
+                        || opts.find(o => +o.value === 100);
+              if (pick) {
+                sel.value = pick.value;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                return { ok: true, was: cur, now: pick.value, text: pick.text };
+              }
+            }
+            return { ok: true, was: cur, unchanged: true };
+          });
+          _lastPageSizeCheckAt = Date.now();
+          if (r && r.ok && !r.unchanged) {
+            _step(`page-size re-bumped from ${r.was} → "${r.text}" (was reset by IMS)`);
+          }
+        } catch (_) { /* non-fatal */ }
+      }
       try {
         // Race the click against a 20s hard timeout so a stuck CDP call doesn't
         // burn through the full protocolTimeout (180s) before we fall back.
@@ -670,6 +699,7 @@ async function scrapeOtps() {
           await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
           if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
           _lastShowReportAt = Date.now();
+          _cdrPageReady = false; // force page-size re-init on next scrape
         } catch (_) { /* keep going — populated check will catch it */ }
       }
     }
