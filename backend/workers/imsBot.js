@@ -679,33 +679,57 @@ async function scrapeOtps() {
       const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
       if (cells.length < 5) return;
 
+      // IMS CDR column order (live-verified):
+      //   [0]=DATE  [1]=RANGE  [2]=NUMBER  [3]=CLI  [4]=SMS  [5]=CURRENCY  [6]=PAYOUT
+      // We use POSITIONAL access for date/range/cli (more reliable than fuzzy
+      // matching when the SMS body contains digits or matching patterns).
+
       // DATE: first cell matching YYYY-MM-DD HH:MM:SS pattern.
       // IMS displays times in the server's local timezone (BDT). Parse WITHOUT
       // appending 'Z' so JS uses local time — appending Z previously caused a
       // 6-hour shift that made the staleness guard reject every fresh OTP.
-      const dateCell = cells.find(t => /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(t));
+      const dateCell = cells[0] && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(cells[0])
+        ? cells[0]
+        : cells.find(t => /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(t));
       const dateTs = dateCell ? Math.floor(new Date(dateCell.replace(' ', 'T')).getTime() / 1000) : 0;
 
       // NUMBER: pure-digit cell of length 8-15 (after stripping spaces/dashes)
       const phone = cells.find(t => /^\+?\d{8,15}$/.test(t.replace(/[\s-]/g, '')));
       if (!phone) return;
 
-      // RANGE: a short alphabetic cell that's not the SMS body (e.g. "Peru Bitel TF04")
-      const range = cells.find(t => /[A-Za-z]/.test(t) && t.length < 40 && t !== phone && !/^\d{4}-\d{2}-\d{2}/.test(t));
+      // RANGE: positional cell[1] (e.g. "Peru Bitel TF04")
+      const range = cells[1] && cells[1] !== phone && cells[1] !== dateCell ? cells[1] : null;
 
-      // Language-agnostic OTP extraction (Arabic / Bengali / Cyrillic / CJK / etc all work):
-      //   • Scan ALL cells (skip date/phone/range key cells).
-      //   • Collect every STANDALONE 4-8 digit run.
-      //   • Embedded digits in tokens like "H29QFsn4Sr" are skipped automatically
-      //     (the boundary requires non-digit before/after).
-      //   • If the SAME OTP appears twice in the SMS (e.g. "#58374764 ... 58374764"),
-      //     dedupe and keep ONE.
-      //   • Pick the FIRST unique 4-8 digit number — this is the OTP.
+      // CLI / Service: positional cell[3] (e.g. "Facebook", "WhatsApp", "Apple",
+      // "Telegram", "Paypal"). Fallback: any short alphabetic cell that isn't
+      // the range or SMS body.
+      let cli = null;
+      if (cells[3] && cells[3] !== phone && cells[3].length < 30 && /[A-Za-z]/.test(cells[3])) {
+        cli = cells[3];
+      }
+      // Normalize common variants → canonical service name (case-insensitive)
+      if (cli) {
+        const c = cli.toLowerCase();
+        if (/facebook|fb\b/.test(c)) cli = 'Facebook';
+        else if (/whats\s*app|wa\b/.test(c)) cli = 'WhatsApp';
+        else if (/telegram|tg\b/.test(c)) cli = 'Telegram';
+        else if (/apple|imessage|ios/.test(c)) cli = 'Apple';
+        else if (/paypal/.test(c)) cli = 'Paypal';
+        else if (/google|gmail/.test(c)) cli = 'Google';
+        else if (/instagram|insta|ig\b/.test(c)) cli = 'Instagram';
+        else if (/tiktok/.test(c)) cli = 'TikTok';
+        else if (/twitter|^x$/.test(c)) cli = 'Twitter';
+        else if (/discord/.test(c)) cli = 'Discord';
+        else if (/microsoft|outlook|hotmail/.test(c)) cli = 'Microsoft';
+        // else keep original casing
+      }
+
+      // Language-agnostic OTP extraction (Arabic / Bengali / Cyrillic / CJK / etc all work).
       const otpDigits = new Set();
       let firstOtp = null;
       let sms = '';
       for (const c of cells) {
-        if (c === phone || c === dateCell || c === range) continue;
+        if (c === phone || c === dateCell || c === range || c === cli) continue;
         if (c.length > sms.length && c.length < 500) sms = c;
         const re = /(?:^|[^\d])(\d{4,8})(?=[^\d]|$)/g;
         let mm;
@@ -722,6 +746,7 @@ async function scrapeOtps() {
         otp_code: firstOtp,
         sms_text: sms.slice(0, 200),
         range: range || null,
+        cli: cli || null,
         date_ts: dateTs,
       });
     });
