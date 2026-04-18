@@ -58,6 +58,8 @@ const AgentGetNumber = () => {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [copiedOtpId, setCopiedOtpId] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   // Country search dropdown
   const [countryOpen, setCountryOpen] = useState(false);
