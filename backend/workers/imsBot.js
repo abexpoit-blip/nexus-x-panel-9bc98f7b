@@ -562,13 +562,20 @@ async function scrapeNumbers() {
 // IMS auto-loads the CDR table on page load (no "Show Report" click needed).
 let _cdrPageReady = false;
 let _lastShowReportAt = 0;     // wall-clock ms of last successful Show Report click — used to enforce IMS's 15s minimum interval
+let _scrapeInFlight = null;    // Promise mutex — prevents parallel scrapeOtps() calls (was causing 90s overlap + race conditions)
 
 async function scrapeOtps() {
-  if (!page) throw new Error('page not ready');
-  const _t0 = Date.now();
-  const _step = (label) => console.log(`[ims-bot][scrape] ${label} (+${Date.now() - _t0}ms)`);
-  const onCdrPage = /SMSCDRStats/i.test(page.url());
-  _step(`start onCdrPage=${onCdrPage} cdrReady=${_cdrPageReady}`);
+  // Mutex: if a scrape is already running, return the SAME promise instead
+  // of starting a second one. Prevents two evaluate() calls hitting IMS in
+  // parallel (which triggers the 15s rate-limit warning) and avoids the
+  // 60s+ "navigation/refresh done" stalls we saw in production logs.
+  if (_scrapeInFlight) return _scrapeInFlight;
+  _scrapeInFlight = (async () => {
+    if (!page) throw new Error('page not ready');
+    const _t0 = Date.now();
+    const _step = (label) => console.log(`[ims-bot][scrape] ${label} (+${Date.now() - _t0}ms)`);
+    const onCdrPage = /SMSCDRStats/i.test(page.url());
+    _step(`start onCdrPage=${onCdrPage} cdrReady=${_cdrPageReady}`);
 
   if (!onCdrPage || !_cdrPageReady) {
     // First visit (or after logout) — full navigation.
@@ -762,8 +769,14 @@ async function scrapeOtps() {
     });
     return out;
   });
-  _step(`done — extracted ${out.length} rows`);
-  return out;
+    _step(`done — extracted ${out.length} rows`);
+    return out;
+  })();
+  try {
+    return await _scrapeInFlight;
+  } finally {
+    _scrapeInFlight = null;
+  }
 }
 
 // One full pass.
