@@ -1022,11 +1022,10 @@ async function pollOtpsNow() {
   _otpBusyStartedAt = Date.now();
   const _pollT0 = Date.now();
   try {
-    // Bumped 30s → 45s — IMS CDR page can be slow under load and 30s caused
-    // false timeouts even when the scrape would have succeeded in 32-40s.
+    // Bumped 45s → 60s to accommodate slower CDR page loads + 10s populated wait.
     const delivered = await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 45s')), 45000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 60s')), 60000)),
     ]);
     const elapsed = Date.now() - _pollT0;
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
