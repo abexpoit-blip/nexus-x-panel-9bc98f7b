@@ -387,62 +387,46 @@ async function scrapeNumbers() {
 // IMS shows newest entries first (sorted by DATE desc) — we preserve that order
 // so the latest OTP wins when the same number appears multiple times.
 // Track which page the persistent browser is currently sitting on.
-// We only navigate ONCE — afterwards we just click "Show Report" to refresh data.
-// This eliminates 90% of the timeout problems (no full page reloads).
+// We navigate to CDR ONCE — afterwards we just call page.reload() to refresh data.
+// IMS auto-loads the CDR table on page load (no "Show Report" click needed).
 let _cdrPageReady = false;
 
 async function scrapeOtps() {
   const onCdrPage = /SMSCDRStats/i.test(page.url());
 
-  // Only navigate if we're not already on the CDR page (first scrape, or after re-login).
   if (!onCdrPage || !_cdrPageReady) {
+    // First visit (or after logout) — full navigation
     try {
       await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 12000 });
     } catch (e) {
       _cdrPageReady = false;
       throw new Error('CDR page navigation failed: ' + e.message);
     }
-    if (/\/login/i.test(page.url())) {
-      // Session expired — flag for re-login but DON'T kill the browser.
-      loggedIn = false; _cdrPageReady = false;
-      return [];
-    }
-    try { await page.waitForSelector('button, input[type=submit], form', { timeout: 4000 }); } catch (_) {}
+    if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
     _cdrPageReady = true;
+  } else {
+    // Already on CDR page — just reload to fetch fresh data (no button click needed).
+    // This is much faster + safer than clicking "Show Report".
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+    } catch (e) {
+      _cdrPageReady = false;
+      throw new Error('CDR page reload failed: ' + e.message);
+    }
+    if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
   }
 
-  // Click "Show Report" to refresh data (much faster than full navigation).
-  let clicked = null;
-  try {
-    clicked = await page.evaluate(() => {
-      const all = Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], a, [role=button]'));
-      const target = all.find(b => /show\s*report|search|filter|submit|refresh/i.test((b.innerText || b.value || b.title || '').trim()));
-      if (target) { target.click(); return (target.innerText || target.value || '').trim() || 'clicked'; }
-      const form = document.querySelector('form');
-      if (form) { form.submit(); return 'form-submit'; }
-      return null;
-    });
-  } catch (_) { _cdrPageReady = false; throw new Error('CDR page lost — will re-navigate next tick'); }
-
-  // Detect mid-scrape logout (page may have redirected after click)
-  if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
-
-  // Short wait for AJAX (IMS DataTables ~600-1500ms).
-  await new Promise(r => setTimeout(r, 1200));
-
-  // Poll briefly for data rows.
+  // Wait briefly for IMS DataTables AJAX to populate the table after page load.
   await page.waitForFunction(
     () => {
       const rows = document.querySelectorAll('table tbody tr');
       if (!rows.length) return false;
       const first = (rows[0].innerText || '').toLowerCase();
-      if (rows.length === 1 && /no data|empty|no record/i.test(first)) return false;
+      if (rows.length === 1 && /no data|empty|no record|loading/i.test(first)) return false;
       return Array.from(rows).some(r => /\d{8,15}/.test(r.innerText || ''));
     },
-    { timeout: 5000 }
+    { timeout: 6000 }
   ).catch(() => null);
-
-  if (!clicked) dwarn('[ims-bot] Show Report button not found on CDR page');
 
   return await page.evaluate(() => {
     const out = [];
