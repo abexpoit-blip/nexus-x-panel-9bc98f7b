@@ -564,7 +564,9 @@ async function scrapeNumbers() {
 // IMS auto-loads the CDR table on page load (no "Show Report" click needed).
 let _cdrPageReady = false;
 let _lastShowReportAt = 0;     // wall-clock ms of last successful Show Report click — used to enforce IMS's 15s minimum interval
+let _lastPageSizeCheckAt = 0;  // wall-clock ms of last page-size verification (re-bump if IMS reset to default)
 let _scrapeInFlight = null;    // Promise mutex — prevents parallel scrapeOtps() calls (was causing 90s overlap + race conditions)
+let _maxRowsSeen = 0;          // peak row count from any single scrape — used by status/burst metrics
 
 async function scrapeOtps() {
   // Mutex: if a scrape is already running, return the SAME promise instead
