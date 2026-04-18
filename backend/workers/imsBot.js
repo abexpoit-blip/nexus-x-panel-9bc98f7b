@@ -1115,22 +1115,52 @@ function start() {
     }
   }, INTERVAL * 1000);
 
-  // FAST OTP loop — every OTP_INTERVAL seconds (default 10s) we ONLY scrape the
-  // OTP/CDR page (no number list, no pagination). This is what makes assigned
-  // numbers receive their OTP within ~10s of arrival, even though the heavy
-  // number-list scrape only runs every 60s.
-  // Priority: DB setting (admin-tunable) > env var > default 10s. Clamp 3-120s.
+  // FAST OTP loop — adaptive interval based on burst load.
+  //   • idle (0 pending allocations)        → IDLE_INTERVAL    (gentler on IMS)
+  //   • light (1-9 pending)                  → BASE_INTERVAL    (admin-tuned default)
+  //   • burst (10+ pending, "100-300 OTP")   → BURST_INTERVAL   (IMS minimum + 3s safety)
+  //
+  // IMS enforces "minimum 15s between CDR refreshes" — going below triggers a
+  // warning page instead of data and risks an account ban. Hard floor: 18s.
   const dbOtpInt = +(readSetting('ims_otp_interval') || 0);
   const envOtpInt = +(process.env.IMS_OTP_INTERVAL || 20);
-  let OTP_INTERVAL = dbOtpInt > 0 ? dbOtpInt : envOtpInt;
-  // IMS enforces "minimum 15s between CDR refreshes" — going below triggers a
-  // warning page ("attempt is logged") instead of data, and risks account ban.
-  // Hard floor is 18s to give a 3s safety buffer against IMS clock skew.
-  if (OTP_INTERVAL < 18) OTP_INTERVAL = 18;
-  if (OTP_INTERVAL > 120) OTP_INTERVAL = 120;
-  status.otpIntervalSec = OTP_INTERVAL;
-  console.log(`✓ IMS fast-OTP poll every ${OTP_INTERVAL}s`);
-  otpTimer = setInterval(pollOtpsNow, OTP_INTERVAL * 1000);
+  let BASE_INTERVAL = dbOtpInt > 0 ? dbOtpInt : envOtpInt;
+  if (BASE_INTERVAL < 18) BASE_INTERVAL = 18;
+  if (BASE_INTERVAL > 120) BASE_INTERVAL = 120;
+  const BURST_INTERVAL = 18;                          // IMS floor + 3s safety
+  const IDLE_INTERVAL = Math.max(BASE_INTERVAL, 30);  // slow down when nothing's pending
+  status.otpIntervalSec = BASE_INTERVAL;
+  status.otpIntervalBurstSec = BURST_INTERVAL;
+  status.otpIntervalIdleSec = IDLE_INTERVAL;
+  console.log(`✓ IMS fast-OTP poll: base=${BASE_INTERVAL}s, burst=${BURST_INTERVAL}s, idle=${IDLE_INTERVAL}s (adaptive)`);
+
+  // Adaptive scheduler — recomputes next delay after each tick based on burst state.
+  let _scheduledStop = false;
+  function _scheduleNextPoll() {
+    if (_scheduledStop) return;
+    let nextDelay = BASE_INTERVAL;
+    let mode = 'base';
+    try {
+      const pending = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='active' AND otp IS NULL").get().c;
+      status.pendingAlloc = pending;
+      if (pending === 0) { nextDelay = IDLE_INTERVAL; mode = 'idle'; }
+      else if (pending >= 10) { nextDelay = BURST_INTERVAL; mode = 'burst'; }
+      else { nextDelay = BASE_INTERVAL; mode = 'base'; }
+      status.otpScheduleMode = mode;
+      status.otpNextPollIn = nextDelay;
+    } catch (_) { /* fall through with base */ }
+    otpTimer = setTimeout(async () => {
+      try { await pollOtpsNow(); } finally { _scheduleNextPoll(); }
+    }, nextDelay * 1000);
+  }
+  // Kick off the adaptive loop. Wrap stop() so it can cancel the recursive chain.
+  const _origStop = stop;
+  stop = async function () {
+    _scheduledStop = true;
+    if (otpTimer) { clearTimeout(otpTimer); otpTimer = null; }
+    return _origStop();
+  };
+  _scheduleNextPoll();
 }
 
 // Lightweight OTP-only poll — runs frequently between heavy ticks.
