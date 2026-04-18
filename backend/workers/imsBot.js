@@ -679,9 +679,8 @@ async function scrapeOtps() {
             // If currently small, bump back up
             if (cur > 0 && cur < 100) {
               const opts = Array.from(sel.options || []);
-              const pick = opts.find(o => /^all$/i.test(o.text) || o.value === '-1')
-                        || opts.find(o => +o.value === 1000)
-                        || opts.find(o => +o.value === 500)
+              const pick = opts.find(o => +o.value === 500)
+                        || opts.find(o => +o.value === 250)
                         || opts.find(o => +o.value === 100);
               if (pick) {
                 sel.value = pick.value;
