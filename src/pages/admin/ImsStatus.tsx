@@ -841,7 +841,7 @@ const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
   );
 };
 
-const CookiesEditor = ({ onSaved }: { onSaved: () => void }) => {
+const CookiesEditor = ({ onSaved, cookieFailStreak = 0 }: { onSaved: () => void; cookieFailStreak?: number }) => {
   const [open, setOpen] = useState(false);
   const [raw, setRaw] = useState("");
   const [saving, setSaving] = useState(false);
