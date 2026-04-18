@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { GlassCard } from "@/components/GlassCard";
 import { Input } from "@/components/ui/input";
-import { Search, RefreshCw, Copy, Check, Inbox } from "lucide-react";
+import { Search, RefreshCw, Copy, Check, Inbox, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -13,6 +13,9 @@ const shortRange = (operator?: string | null) => {
   const parts = operator.trim().split(/\s+/);
   return parts[parts.length - 1] || operator;
 };
+
+// Mask OTP digits: "785590" → "XXXXXX"
+const maskOtp = (otp?: string | null) => (otp ? "X".repeat(otp.length) : "");
 
 const AgentConsole = () => {
   const { data, refetch, isFetching } = useQuery({
