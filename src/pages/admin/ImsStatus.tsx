@@ -540,7 +540,76 @@ const OtpExpirySetting = ({ onSaved }: { onSaved: () => void }) => {
   );
 };
 
-const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
+// Admin-controllable "recent OTP" window. Drives how many hours of successful
+// OTPs stay visible on the agent's live Get Number / My Numbers list — older
+// ones move into the agent's permanent OTP History page (/agent/history).
+// Range: 1h - 168h (7 days). Default: 24h.
+const RecentOtpWindowSetting = ({ onSaved }: { onSaved: () => void }) => {
+  const [saving, setSaving] = useState(false);
+  const { data, refetch, isLoading } = useQuery({
+    queryKey: ["recent-otp-window"],
+    queryFn: () => api.admin.recentOtpWindow(),
+  });
+  const current = data?.hours ?? 24;
+  const opts = data?.options_hours ?? [1, 6, 12, 24, 48, 72, 168];
+
+  const fmt = (h: number) => (h >= 24 ? `${h / 24}d` : `${h}h`);
+
+  const save = async (h: number) => {
+    if (h === current) return;
+    setSaving(true);
+    try {
+      await api.admin.recentOtpWindowSave(h);
+      toast.success(`Recent OTP window set to ${fmt(h)} — older OTPs move to agent History page`);
+      await refetch();
+      onSaved();
+    } catch (e) {
+      toast.error("Failed: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <Zap className="w-4 h-4 text-neon-magenta" /> Recent OTP Visibility
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            How long delivered OTPs stay on the agent's live list before moving to permanent OTP History. Stats stay forever regardless.
+            {data && (
+              <span className="ml-2 font-mono">
+                Current: <span className="text-neon-magenta font-semibold">{fmt(current)}</span>
+                <span className="text-muted-foreground/60"> ({data.source})</span>
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {opts.map((v) => (
+            <button
+              key={v}
+              onClick={() => save(v)}
+              disabled={saving || isLoading}
+              className={cn(
+                "px-4 py-2 rounded-md text-xs font-semibold border transition disabled:opacity-50",
+                v === current
+                  ? "bg-neon-magenta/15 border-neon-magenta/40 text-neon-magenta"
+                  : "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground"
+              )}
+            >
+              {fmt(v)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
   const [open, setOpen] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
