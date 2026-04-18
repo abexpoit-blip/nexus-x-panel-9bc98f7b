@@ -390,6 +390,8 @@ async function tryCookieAuth() {
     const url = page.url();
     if (/\/login/i.test(url)) {
       dlog('[ims-bot] cookie auth: redirected to /login → cookies expired');
+      _cookieFailStreak++;
+      maybeAlertCookieExpired('redirected to /login');
       return false;
     }
     // Confirm we have actual logged-in content (table or dashboard)
@@ -400,19 +402,39 @@ async function tryCookieAuth() {
     }).catch(() => false);
     if (!hasContent) {
       dlog('[ims-bot] cookie auth: page loaded but no logged-in content');
+      _cookieFailStreak++;
+      maybeAlertCookieExpired('no logged-in content on page');
       return false;
     }
     loggedIn = true;
     status.loggedIn = true;
     status.lastLoginAt = Math.floor(Date.now() / 1000);
     _cdrPageReady = true;
+    _cookieFailStreak = 0; // success — reset
     console.log('[ims-bot] ✓ logged in via saved cookies (skipped captcha)');
     logEvent('success', 'Logged in via saved session cookies (no captcha needed)');
     return true;
   } catch (e) {
     dwarn('[ims-bot] cookie auth failed:', e.message);
+    _cookieFailStreak++;
+    maybeAlertCookieExpired(e.message);
     return false;
   }
+}
+
+// Fires red notification once cookie auth has failed 3+ times in a row,
+// throttled to once per 6 hours so we don't spam admins.
+function maybeAlertCookieExpired(reason) {
+  if (_cookieFailStreak < 3) return;
+  const now = Math.floor(Date.now() / 1000);
+  if (now - _lastCookieExpiryAlertAt < 6 * 3600) return;
+  _lastCookieExpiryAlertAt = now;
+  logEvent('error', `IMS cookies expired (${_cookieFailStreak} consecutive fails) — refresh needed`);
+  notifyAdmins(
+    '🍪 IMS Cookies Expired',
+    `Saved IMS session cookies have stopped working (${_cookieFailStreak} consecutive failures: ${reason}). Please log into imssms.org manually, copy the new PHPSESSID cookie, and paste it into Admin → IMS Bot → Bypass Captcha section.`,
+    'error'
+  );
 }
 
 // Public login() — tries saved cookies first, then falls back to form login
