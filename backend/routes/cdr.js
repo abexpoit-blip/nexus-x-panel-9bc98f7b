@@ -24,6 +24,35 @@ router.get('/mine', authRequired, (req, res) => {
   res.json({ cdr });
 });
 
+// GET /api/cdr/feed — PUBLIC activity feed (any logged-in agent)
+// Shows every OTP that hits the system, with phone + OTP MASKED so no agent
+// can steal another agent's codes. Purpose: agents can see which ranges are
+// actively receiving OTPs right now and pick hot ranges in Get Number.
+router.get('/feed', authRequired, (req, res) => {
+  const rows = db.prepare(`
+    SELECT id, phone_number, otp_code, operator, country_code,
+           provider, price_bdt, created_at
+    FROM cdr
+    WHERE otp_code IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 200
+  `).all();
+  // Mask sensitive bits before sending — server-side, so the raw OTP never
+  // leaves the box for non-owners.
+  const feed = rows.map(r => ({
+    id: r.id,
+    phone_masked: r.phone_number
+      ? r.phone_number.slice(0, 6) + 'X'.repeat(Math.max(0, r.phone_number.length - 6))
+      : '',
+    otp_length: r.otp_code ? r.otp_code.length : 0,
+    operator: r.operator,
+    country_code: r.country_code,
+    provider: r.provider,
+    created_at: r.created_at,
+  }));
+  res.json({ feed });
+});
+
 // POST /api/cdr/refund/:id — admin reverses a billed CDR
 router.post('/refund/:id', authRequired, adminOnly, (req, res) => {
   const id = +req.params.id;
