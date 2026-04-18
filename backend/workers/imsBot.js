@@ -622,11 +622,13 @@ async function scrapeOtps() {
         const opts = Array.from(sel.options || []).map(o => ({ text: o.text, value: o.value }));
         // Preference order: "All" → 1000 → 500 → 250 → 100 → highest numeric
         const findOpt = (pred) => Array.from(sel.options || []).find(pred);
-        let pick = findOpt(o => /^all$/i.test(o.text) || o.value === '-1')
-                || findOpt(o => +o.value === 1000)
-                || findOpt(o => +o.value === 500)
+        // Cap at 500 — "All"/1000 makes DataTables render 12k+ rows which
+        // hangs page.evaluate() (Runtime.callFunctionOn timeout). 500 is a
+        // safe sweet spot: handles 100+ agent burst, finishes in <2s.
+        let pick = findOpt(o => +o.value === 500)
                 || findOpt(o => +o.value === 250)
-                || findOpt(o => +o.value === 100);
+                || findOpt(o => +o.value === 100)
+                || findOpt(o => +o.value === 50);
         if (!pick) {
           // No preferred option — pick the highest numeric value available
           const nums = Array.from(sel.options || [])
