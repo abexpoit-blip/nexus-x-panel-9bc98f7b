@@ -296,6 +296,9 @@ const AdminImsStatus = () => {
           {/* Credentials editor */}
           <CredentialsEditor onSaved={() => refetch()} />
 
+          {/* Session cookies — bypass captcha entirely (recommended) */}
+          <CookiesEditor onSaved={() => refetch()} />
+
           {/* OTP poll interval setting */}
           <OtpIntervalSetting onSaved={() => refetch()} />
 
