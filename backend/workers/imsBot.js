@@ -301,9 +301,11 @@ async function loginOnce() {
   // Submit
   await Promise.all([
     page.evaluate(() => {
-      const btn = document.querySelector('button[type="submit"], input[type="submit"]') ||
-                  Array.from(document.querySelectorAll('button')).find(b => /login|sign in/i.test(b.innerText));
-      if (btn) btn.click();
+      try {
+        const btn = document.querySelector('button[type="submit"], input[type="submit"]') ||
+                    Array.from(document.querySelectorAll('button')).find(b => /login|sign in/i.test((b && b.innerText) || ''));
+        if (btn) btn.click();
+      } catch (_) { /* swallow — wait-for-nav will handle outcome */ }
     }),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null),
   ]);
