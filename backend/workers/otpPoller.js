@@ -17,7 +17,7 @@ async function pollOnce() {
       SELECT * FROM allocations
       WHERE status = 'active' AND otp IS NULL
         AND provider_ref IS NOT NULL
-        AND allocated_at > strftime('%s','now') - 1800   -- last 30 min only
+        AND allocated_at > strftime('%s','now') - 480    -- last 8 min only
       LIMIT 50
     `).all();
 
@@ -45,15 +45,17 @@ function start() {
     console.log(`✓ OTP poller started (every ${INTERVAL}s)`);
   }
 
-  // Every 1 minute: expire stale 'active' allocations (>30 min, no OTP).
-  // 30 min gives IMS enough time to deliver slow OTPs (was 10 min — too short).
+  // Every 1 minute: expire stale 'active' allocations (>8 min, no OTP).
+  // 8 min window matches the agent UI countdown — after that the number is
+  // released back so other agents can pick it up. OTPs arriving AFTER expiry
+  // are NOT credited (the allocation is no longer 'active').
   cron.schedule('* * * * *', () => {
     const r = db.prepare(`
       UPDATE allocations SET status = 'expired'
       WHERE status = 'active' AND otp IS NULL
-        AND allocated_at < strftime('%s','now') - 1800
+        AND allocated_at < strftime('%s','now') - 480
     `).run();
-    if (r.changes) console.log(`[cleanup] expired ${r.changes} allocations (30min timeout)`);
+    if (r.changes) console.log(`[cleanup] expired ${r.changes} allocations (8min timeout)`);
   });
 }
 
