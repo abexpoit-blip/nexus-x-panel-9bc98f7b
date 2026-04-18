@@ -145,6 +145,22 @@ const AdminImsStatus = () => {
     }
   };
 
+  const handleScrapeNumbersBg = async () => {
+    setBgStarting(true);
+    try {
+      const r = await api.admin.imsScrapeNumbersStart();
+      if (r.ok) {
+        toast.success("Background numbers scrape started — progress shown below", { duration: 4000 });
+      } else {
+        toast.error(r.error || "Failed to start background scrape");
+      }
+    } catch (e) {
+      toast.error("Failed: " + (e as Error).message);
+    } finally {
+      setBgStarting(false);
+    }
+  };
+
   return (
     <div className="relative space-y-6">
       <GradientMesh variant="default" />
