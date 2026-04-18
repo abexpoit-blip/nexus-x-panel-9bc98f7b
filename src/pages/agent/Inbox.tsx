@@ -29,7 +29,11 @@ const AgentInbox = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
-  const items = data?.notifications || [];
+  // Inbox shows admin notices/broadcasts only — OTP notifications live in Console.
+  const items = (data?.notifications || []).filter(
+    (n) => n.title !== "OTP received"
+  );
+  const unreadCount = items.filter((n) => !n.is_read).length;
 
   return (
     <div className="space-y-6">
@@ -37,11 +41,11 @@ const AgentInbox = () => {
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground flex items-center gap-2">
             <InboxIcon className="w-7 h-7 text-primary" /> Inbox
-            {data?.unread ? <span className="text-sm bg-neon-magenta/20 text-neon-magenta px-2 py-0.5 rounded-full">{data.unread} new</span> : null}
+            {unreadCount ? <span className="text-sm bg-neon-magenta/20 text-neon-magenta px-2 py-0.5 rounded-full">{unreadCount} new</span> : null}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Notifications and broadcasts from admins</p>
+          <p className="text-sm text-muted-foreground mt-1">Admin notices & broadcasts only — OTPs appear in Console</p>
         </div>
-        <Button variant="outline" onClick={() => markAll.mutate()} disabled={!data?.unread}>
+        <Button variant="outline" onClick={() => markAll.mutate()} disabled={!unreadCount}>
           <CheckCheck className="w-4 h-4 mr-2" /> Mark all read
         </Button>
       </div>
