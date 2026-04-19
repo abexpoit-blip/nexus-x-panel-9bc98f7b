@@ -596,8 +596,9 @@ async function scrapeOtps() {
 
   if (!onCdrPage || !_cdrPageReady) {
     // First visit (or after logout) — full navigation.
+    // Use networkidle2 so DataTables AJAX has time to populate before we touch the page.
     try {
-      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.goto(`${BASE_URL}/client/SMSCDRStats`, { waitUntil: 'networkidle2', timeout: 30000 });
     } catch (e) {
       _cdrPageReady = false;
       throw new Error('CDR page navigation failed: ' + e.message);
@@ -694,21 +695,25 @@ async function scrapeOtps() {
           }
         } catch (_) { /* non-fatal */ }
       }
-      // STRATEGY CHANGE (v2): Show-report click was hanging the page (DataTables
-      // redraw with 500 rows + AJAX overlay = JS thread frozen → callFunctionOn
-      // timeout). Use page.reload() instead — IMS auto-loads CDR table on visit,
-      // which is far more reliable than driving the click + waiting for redraw.
+      // STRATEGY (v3): Stay on the CDR page and click "Show Report" to trigger
+      // a fresh AJAX fetch. We WAIT FOR THE XHR RESPONSE itself (not for DOM
+      // changes), so we don't get blocked by frozen JS thread. Page-size stays
+      // at 100, so DataTables redraw is fast (~1-2s).
       try {
-        await Promise.race([
-          page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('reload timeout 22s')), 22000)),
-        ]);
-        if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
+        const xhrWait = page.waitForResponse(
+          (r) => /SMSCDRStats|sms.*cdr|datatables|ajax/i.test(r.url()) && r.request().method() !== 'OPTIONS',
+          { timeout: 25000 }
+        ).catch(() => null);
+        await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn, a'));
+          const showBtn = btns.find(b => /show\s*report/i.test((b.innerText || b.value || '').trim()));
+          if (showBtn) showBtn.click();
+        });
+        const resp = await xhrWait;
         _lastShowReportAt = Date.now();
-        _cdrPageReady = false; // force page-size re-init on next scrape (auto-load needs bump)
-        _step('reload done');
+        _step(`show-report click ${resp ? 'AJAX ' + resp.status() : 'no-AJAX (cached?)'}`);
       } catch (e) {
-        _step(`reload failed (${e.message}) — recycling page next tick`);
+        _step(`show-report failed (${e.message}) — recycling page next tick`);
         _cdrPageReady = false;
       }
     }
@@ -718,8 +723,13 @@ async function scrapeOtps() {
   // Poll for table population via short evaluate() calls instead of
   // waitForFunction (which runs INSIDE the page — useless if JS thread frozen).
   // Each evaluate is raced against 1.5s; if 5 attempts all timeout → page frozen.
+  // Brief settle so DataTables can paint rows after AJAX response arrived
+  await new Promise(r => setTimeout(r, 1500));
+  // Poll for table population via short evaluate() calls instead of
+  // waitForFunction (which runs INSIDE the page — useless if JS thread frozen).
+  // Each evaluate is raced against 2s; up to 15 attempts (~30s) — IMS can be slow.
   let populated = false;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 15; i++) {
     try {
       const ok = await Promise.race([
         page.evaluate(() => {
@@ -733,15 +743,14 @@ async function scrapeOtps() {
           }
           return false;
         }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('eval timeout 1.5s')), 1500)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('eval timeout 2s')), 2000)),
       ]);
       if (ok) { populated = true; break; }
     } catch (e) {
-      // page frozen — break early, don't waste more attempts
-      _step(`poll attempt ${i + 1} timed out (${e.message}) — page may be frozen`);
-      break;
+      // Single eval timed out — page might be mid-redraw, keep trying
+      _step(`poll attempt ${i + 1} timed out (${e.message})`);
     }
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1500));
   }
   _step(`table populated=${populated}`);
 
