@@ -1263,12 +1263,13 @@ async function pollOtpsNow() {
   _otpBusyStartedAt = Date.now();
   const _pollT0 = Date.now();
   try {
-    // 120s wrapper — IMS slow-day reality: page-size bump + AJAX show-report
-    // + 500-row populated wait can legitimately reach 60-90s. 120s gives
-    // headroom without masking truly-stuck cases (browser recycle at 5 fails).
+    // 90s wrapper — if a single scrape takes longer than this, the page is
+    // almost certainly stuck (frozen AJAX, dead socket). Faster timeout +
+    // aggressive page-reset on first fail = quicker recovery than waiting
+    // for 5 consecutive fails to recycle the whole browser.
     const delivered = await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 150s')), 150000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 90s')), 90000)),
     ]);
     const elapsed = Date.now() - _pollT0;
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
