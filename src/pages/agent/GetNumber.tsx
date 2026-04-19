@@ -67,7 +67,76 @@ const AgentGetNumber = () => {
   const [page, setPage] = useState(1);
   const [nowTick, setNowTick] = useState(() => Math.floor(Date.now() / 1000));
   const [expirySec, setExpirySec] = useState<number>(480); // fallback 8 min
+  // Auto-release expired toggle — persisted in localStorage so it survives
+  // reload. When ON, any number expired for >60s is released automatically.
+  const [autoRelease, setAutoRelease] = useState<boolean>(
+    () => localStorage.getItem("nx_auto_release") === "1"
+  );
+  useEffect(() => {
+    localStorage.setItem("nx_auto_release", autoRelease ? "1" : "0");
+  }, [autoRelease]);
+  // Browser desktop notification permission state
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>(
+    () => (typeof Notification !== "undefined" ? Notification.permission : "denied")
+  );
+  // Track IDs we've already auto-released so we don't loop on stale rows.
+  const autoReleasedIds = useRef<Set<number>>(new Set());
   const PAGE_SIZE = 25;
+
+  // Web Audio beep — no asset needed. Two short ascending tones (660→880 Hz)
+  // play when a fresh OTP lands. Catches the agent's attention in another tab.
+  const playBeep = () => {
+    try {
+      const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+      if (!AC) return;
+      const ctx = new AC();
+      const tone = (freq: number, start: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur + 0.02);
+      };
+      tone(660, 0, 0.18);
+      tone(880, 0.18, 0.22);
+      setTimeout(() => ctx.close().catch(() => {}), 800);
+    } catch { /* sound is best-effort */ }
+  };
+
+  // Desktop notification — only fires when tab is hidden (when visible,
+  // toast + green row flash is already obvious).
+  const showDesktopNotif = (title: string, body: string) => {
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission !== "granted") return;
+    if (document.visibilityState === "visible") return;
+    try {
+      const n = new Notification(title, { body, tag: "nexus-otp", icon: "/favicon.ico" });
+      n.onclick = () => { window.focus(); n.close(); };
+      setTimeout(() => n.close(), 8000);
+    } catch { /* ignore */ }
+  };
+
+  const requestNotifPermission = () => {
+    if (typeof Notification === "undefined") {
+      toast({ title: "Notifications not supported in this browser", variant: "destructive" });
+      return;
+    }
+    Notification.requestPermission()
+      .then((p) => {
+        setNotifPerm(p);
+        toast({
+          title: p === "granted" ? "Desktop notifications enabled" : "Notifications blocked",
+          description: p === "granted" ? "You'll get a popup when OTP arrives even if tab is hidden" : "Enable in browser site settings to receive popups",
+          variant: p === "granted" ? "default" : "destructive",
+        });
+      })
+      .catch(() => {});
+  };
 
   // Tick once per second so elapsed-time column re-renders live
   useEffect(() => {
