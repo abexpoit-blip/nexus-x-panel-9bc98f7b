@@ -1265,7 +1265,7 @@ async function pollOtpsNow() {
     // headroom without masking truly-stuck cases (browser recycle at 5 fails).
     const delivered = await Promise.race([
       deliverOtps(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 120s')), 120000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fast-poll timeout 150s')), 150000)),
     ]);
     const elapsed = Date.now() - _pollT0;
     status.lastScrapeAt = Math.floor(Date.now() / 1000);
