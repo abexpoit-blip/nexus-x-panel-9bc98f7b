@@ -724,14 +724,21 @@ async function scrapeOtps() {
   }
 
   _step('navigation/refresh done');
-  // Brief settle so DataTables can paint rows after AJAX response arrived
-  await new Promise(r => setTimeout(r, 1500));
+  // Brief settle so DataTables can paint rows after AJAX response arrived.
+  // Bumped 1500→2500ms — IMS DataTables sometimes needs >2s to paint 500 rows.
+  await new Promise(r => setTimeout(r, 2500));
   // Poll for table population. CRITICAL: detect the rate-limit warning row
   // ("CDR Data related pages Refresh must be done with atleast 15 second...")
   // which IMS returns INSTEAD of data when we re-click too fast.
+  //
+  // Eval timeout bumped 2s→8s: a simple querySelectorAll on a 500-row table can
+  // legitimately take 3-5s when the page is mid-render or the CPU is busy with
+  // other Puppeteer evals. 2s was causing every poll attempt to spuriously fail
+  // even though the data was actually arriving — wasting 50+ seconds per scrape.
   let populated = false;
   let rateLimited = false;
-  for (let i = 0; i < 15; i++) {
+  let consecEvalTimeouts = 0;
+  for (let i = 0; i < 8; i++) {
     try {
       const result = await Promise.race([
         page.evaluate(() => {
@@ -749,14 +756,21 @@ async function scrapeOtps() {
           if (hasWarning) return { state: 'rate-limited' };
           return { state: 'pending' };
         }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('eval timeout 2s')), 2000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('eval timeout 8s')), 8000)),
       ]);
+      consecEvalTimeouts = 0;
       if (result.state === 'data') { populated = true; break; }
       if (result.state === 'rate-limited') { rateLimited = true; break; }
     } catch (e) {
+      consecEvalTimeouts++;
       _step(`poll attempt ${i + 1} timed out (${e.message})`);
+      if (consecEvalTimeouts >= 3) {
+        _step(`page frozen (${consecEvalTimeouts} consec eval timeouts) — abort poll, mark CDR for recycle`);
+        _cdrPageReady = false;
+        break;
+      }
     }
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 2000));
   }
   _step(`table populated=${populated}${rateLimited ? ' (RATE-LIMITED — bot polling too fast!)' : ''}`);
   if (rateLimited) {
