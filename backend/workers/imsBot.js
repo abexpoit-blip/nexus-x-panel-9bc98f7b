@@ -782,6 +782,17 @@ async function scrapeOtps() {
   _step(`table populated=${populated}${rateLimited ? ' (RATE-LIMITED — bot polling too fast!)' : ''}`);
   if (rateLimited) {
     logEvent('warn', 'IMS rate-limit warning row seen — bot polling faster than 15s');
+    // Rate-limit warning means our short-circuit show-report click hit IMS too fast.
+    // Force next tick to re-run FULL sequence (date+page-size+show with 15s cooldowns).
+    _cdrPageReady = false;
+  }
+  // OLD WORKING LOGIC RESTORED: re-run FULL sequence every poll cycle.
+  // The "click Show Report only" shortcut was causing page.evaluate() to freeze
+  // because IMS DataTables enters a bad state without the date/page-size reset.
+  // The 48s overhead is acceptable — old bot worked reliably with this exact flow.
+  if (populated) {
+    _cdrPageReady = false;
+    _step('full-sequence mode: next poll will re-run date+page-size+show-report');
   }
 
   // Debug snapshot — when populated check fails, dump page diagnostics so we
