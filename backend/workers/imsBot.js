@@ -605,39 +605,24 @@ async function scrapeOtps() {
     }
     if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
 
-    // LIVE-VERIFIED behavior of /client/SMSCDRStats (browser-tested 2026-04-19):
-    //   • Page DOES NOT auto-load any rows — table starts empty until you click "Show Report".
-    //   • Default date range is today 00:00 → today 23:59 — if no SMS today, table stays empty.
-    //   • Default page size = 25. We bump to 100.
-    //   • Clicking "Show Report" faster than 15s shows a rate-limit warning row.
-    //     The warning row REPLACES the data table — so quick re-clicks make us
-    //     see "0 OTPs" forever even when data exists. We MUST wait ≥18s.
-    //   • To reliably catch any fresh OTP, set the START date to YESTERDAY 00:00
-    //     (rolling 48h window). Recent OTPs sort first.
+    // LIVE-VERIFIED behavior of /client/SMSCDRStats (user-confirmed 2026-04-19):
+    //   • Default date range is already TODAY 00:00 → TODAY 23:59 — DO NOT touch dates.
+    //   • Default page size = 25. We bump to 100 (one-time, persists for session).
+    //   • IMS enforces a HARD 15s wait between any "interactive" actions:
+    //       - First page load → wait 15s before changing page-size
+    //       - Page-size change → wait 18s before clicking Show Report
+    //       - Subsequent Show Report clicks → ≥16s gap
+    //     Violating this returns a warning dialog "Refresh must be done with at
+    //     least 15 second interval" and the table stays empty.
+    //   • OTP delivery latency is acceptable — correctness > speed.
     try {
       await page.waitForSelector('table tbody, .dataTables_wrapper', { timeout: 10000 });
 
-      // Set date-from to yesterday 00:00 (48h rolling window catches all fresh OTPs)
-      const fromDateStr = (() => {
-        const d = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd} 00:00:00`;
-      })();
-      await page.evaluate((fromStr) => {
-        const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
-        const dateRe = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/;
-        const dateInputs = inputs.filter(i => dateRe.test(i.value || ''));
-        if (dateInputs.length >= 1) {
-          dateInputs[0].value = fromStr;
-          dateInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-          dateInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }, fromDateStr);
-      _step(`date-from set to ${fromDateStr} (48h rolling window)`);
+      // STEP 1 — IMS cooldown after page load (15s minimum)
+      _step('first-visit cooldown: waiting 15s before page-size change');
+      await new Promise(r => setTimeout(r, 15000));
 
-      // Bump page size to 100
+      // STEP 2 — Bump page size to 100
       const sizeResult = await page.evaluate(() => {
         const sel = document.querySelector('select[name$="_length"], select.dataTable-selector, .dataTables_length select');
         if (!sel) return { ok: false, reason: 'no length selector found' };
@@ -651,11 +636,16 @@ async function scrapeOtps() {
         return { ok: true, picked: { text: pick.text, value: pick.value } };
       });
       if (sizeResult.ok) _step(`page-size set to "${sizeResult.picked.text}"`);
+      else _step(`page-size skipped: ${sizeResult.reason}`);
 
-      // Click Show Report — wait for AJAX (short, won't hang scrape cycle)
+      // STEP 3 — IMS cooldown after page-size change (18s, > 15s rule)
+      _step('post-size cooldown: waiting 18s before Show Report');
+      await new Promise(r => setTimeout(r, 18000));
+
+      // STEP 4 — Click Show Report and wait for AJAX
       const xhrWait = page.waitForResponse(
         (r) => /SMSCDRStats|datatables|ajax/i.test(r.url()) && r.request().method() !== 'OPTIONS',
-        { timeout: 10000 }
+        { timeout: 15000 }
       ).catch(() => null);
       await Promise.race([
         page.evaluate(() => {
@@ -665,7 +655,7 @@ async function scrapeOtps() {
         }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('click-evaluate timeout 5s')), 5000)),
       ]);
-      _step('first show-report clicked, waiting AJAX (max 10s)');
+      _step('first show-report clicked, waiting AJAX (max 15s)');
       const resp = await xhrWait;
       _step(`first show-report ${resp ? 'AJAX ' + resp.status() : 'no-AJAX (proceeding)'}`);
     } catch (e) {
@@ -673,7 +663,7 @@ async function scrapeOtps() {
     }
     _cdrPageReady = true;
     _lastShowReportAt = Date.now();
-    _step('first-visit prep done');
+    _step('first-visit prep done (records=100 set for session)');
   } else {
     // Subsequent polls: STAY on the same page, click Show Report ONLY (never reload).
     // IMS rate limit: must wait ≥15s between Show Report clicks.
