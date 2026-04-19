@@ -765,8 +765,15 @@ async function scrapeOtps() {
       consecEvalTimeouts++;
       _step(`poll attempt ${i + 1} timed out (${e.message})`);
       if (consecEvalTimeouts >= 3) {
-        _step(`page frozen (${consecEvalTimeouts} consec eval timeouts) — abort poll, mark CDR for recycle`);
+        _step(`page frozen (${consecEvalTimeouts} consec eval timeouts) — FULL BROWSER RECYCLE`);
         _cdrPageReady = false;
+        // Force-close the frozen browser. Next tick will re-launch fresh.
+        // Just marking _cdrPageReady=false isn't enough — page.goto() on a
+        // frozen page also hangs, so we need a clean browser restart.
+        try { await Promise.race([browser?.close(), new Promise(r => setTimeout(r, 3000))]); } catch (_) {}
+        browser = null; page = null; loggedIn = false;
+        status.loggedIn = false;
+        logEvent('warn', 'Browser recycled — page.evaluate frozen 3x at 8s');
         break;
       }
     }
