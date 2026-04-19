@@ -605,24 +605,50 @@ async function scrapeOtps() {
     }
     if (/\/login/i.test(page.url())) { loggedIn = false; _cdrPageReady = false; return []; }
 
-    // LIVE-VERIFIED behavior of /client/SMSCDRStats (user-confirmed 2026-04-19):
-    //   • Default date range is already TODAY 00:00 → TODAY 23:59 — DO NOT touch dates.
-    //   • Default page size = 25. We bump to 100 (one-time, persists for session).
-    //   • IMS enforces a HARD 15s wait between any "interactive" actions:
-    //       - First page load → wait 15s before changing page-size
-    //       - Page-size change → wait 18s before clicking Show Report
-    //       - Subsequent Show Report clicks → ≥16s gap
-    //     Violating this returns a warning dialog "Refresh must be done with at
-    //     least 15 second interval" and the table stays empty.
+    // LIVE-VERIFIED behavior of /client/SMSCDRStats (browser-tested 2026-04-19):
+    //   • Default date range = TODAY 00:00 → TODAY 23:59. If no SMS today, table is empty.
+    //   • To catch any fresh OTP we widen to YESTERDAY 00:00 → today (48h rolling window).
+    //   • Default page size = 25. We bump to 100 once per session.
+    //   • IMS HARD 15s rule between any two interactive actions:
+    //       - page load → date-change (15s)
+    //       - date-change → page-size change (15s)
+    //       - page-size change → Show Report click (18s)
+    //       - any subsequent Show Report click (≥16s gap)
+    //     Violating returns "Refresh must be done with at least 15 second interval"
+    //     warning row INSTEAD of data, making us see 0 rows forever.
     //   • OTP delivery latency is acceptable — correctness > speed.
     try {
       await page.waitForSelector('table tbody, .dataTables_wrapper', { timeout: 10000 });
 
-      // STEP 1 — IMS cooldown after page load (15s minimum)
-      _step('first-visit cooldown: waiting 15s before page-size change');
+      // STEP 1 — IMS cooldown after page load (15s)
+      _step('first-visit cooldown #1: waiting 15s before date-change');
       await new Promise(r => setTimeout(r, 15000));
 
-      // STEP 2 — Bump page size to 100
+      // STEP 2 — Set date-from to yesterday 00:00 (48h rolling window catches fresh OTPs)
+      const fromDateStr = (() => {
+        const d = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd} 00:00:00`;
+      })();
+      await page.evaluate((fromStr) => {
+        const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
+        const dateRe = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/;
+        const dateInputs = inputs.filter(i => dateRe.test(i.value || ''));
+        if (dateInputs.length >= 1) {
+          dateInputs[0].value = fromStr;
+          dateInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+          dateInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, fromDateStr);
+      _step(`date-from set to ${fromDateStr} (48h rolling window)`);
+
+      // STEP 3 — IMS cooldown #2 (15s) before page-size change
+      _step('first-visit cooldown #2: waiting 15s before page-size change');
+      await new Promise(r => setTimeout(r, 15000));
+
+      // STEP 4 — Bump page size to 100
       const sizeResult = await page.evaluate(() => {
         const sel = document.querySelector('select[name$="_length"], select.dataTable-selector, .dataTables_length select');
         if (!sel) return { ok: false, reason: 'no length selector found' };
@@ -638,11 +664,11 @@ async function scrapeOtps() {
       if (sizeResult.ok) _step(`page-size set to "${sizeResult.picked.text}"`);
       else _step(`page-size skipped: ${sizeResult.reason}`);
 
-      // STEP 3 — IMS cooldown after page-size change (18s, > 15s rule)
-      _step('post-size cooldown: waiting 18s before Show Report');
+      // STEP 5 — IMS cooldown #3 (18s) before Show Report click
+      _step('first-visit cooldown #3: waiting 18s before Show Report');
       await new Promise(r => setTimeout(r, 18000));
 
-      // STEP 4 — Click Show Report and wait for AJAX
+      // STEP 6 — Click Show Report and wait for AJAX
       const xhrWait = page.waitForResponse(
         (r) => /SMSCDRStats|datatables|ajax/i.test(r.url()) && r.request().method() !== 'OPTIONS',
         { timeout: 15000 }
