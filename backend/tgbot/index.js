@@ -31,6 +31,33 @@ function getPublicChannelId() {
   } catch { return null; }
 }
 
+function getBotConfig() {
+  try {
+    const rows = db.prepare(`
+      SELECT key, value FROM settings
+      WHERE key IN ('tg_public_channel', 'tg_required_group', 'tg_required_otp_group', 'tg_terms_text')
+    `).all();
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    return {
+      publicChannel: map.tg_public_channel || '',
+      requiredGroup: map.tg_required_group || 'https://t.me/nexusxotpbot',
+      requiredGroupChat: map.tg_required_group_chat || '',
+      otpGroup: map.tg_required_otp_group || 'https://t.me/+6RUOKrkz6YU1Yjk1',
+      otpGroupChat: map.tg_required_otp_group_chat || '',
+      terms: map.tg_terms_text || 'By using this bot you agree to follow our rules, keep OTP data private, and use numbers responsibly.',
+    };
+  } catch {
+    return {
+      publicChannel: '',
+      requiredGroup: 'https://t.me/nexusxotpbot',
+      requiredGroupChat: '',
+      otpGroup: 'https://t.me/+6RUOKrkz6YU1Yjk1',
+      otpGroupChat: '',
+      terms: 'By using this bot you agree to follow our rules, keep OTP data private, and use numbers responsibly.',
+    };
+  }
+}
+
 const bot = new Telegraf(TOKEN);
 
 // ---------- Helpers ----------
@@ -108,6 +135,73 @@ function welcomeText(u) {
     `📊 Total OTPs: <b>${u.total_otps}</b>\n\n` +
     `Tap a button below to begin.`
   );
+}
+
+function firstTimeWelcomeText(u) {
+  const cfg = getBotConfig();
+  const nm = u.first_name || u.username || 'friend';
+  return (
+    `✨ <b>Welcome to Nexus X, ${escapeHtml(nm)}!</b>\n\n` +
+    `🚀 Fast OTP numbers\n🧾 Clean copy format\n📣 Live public OTP history\n🔐 Safe wallet-based access\n\n` +
+    `<b>Before first use:</b>\n` +
+    `1. Join public group: ${cfg.requiredGroup}\n` +
+    `2. Join OTP history group: ${cfg.otpGroup}\n` +
+    `3. Accept terms and verify below\n\n` +
+    `📜 <b>Terms</b>\n${escapeHtml(cfg.terms)}`
+  );
+}
+
+function onboardingKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('✅ I Joined & Accept', 'onboard:accept')],
+    [Markup.button.callback('🔄 Check Again', 'onboard:check')],
+  ]);
+}
+
+function isOnboarded(tgUserId) {
+  try {
+    const note = db.prepare('SELECT notes FROM tg_users WHERE tg_user_id = ?').get(tgUserId)?.notes || '';
+    return /onboarded=true/.test(String(note));
+  } catch {
+    return false;
+  }
+}
+
+function markOnboarded(tgUserId) {
+  const current = db.prepare('SELECT notes FROM tg_users WHERE tg_user_id = ?').get(tgUserId)?.notes || '';
+  const cleaned = String(current).replace(/\bonboarded=true\b/g, '').trim();
+  const next = [cleaned, 'onboarded=true'].filter(Boolean).join(' | ');
+  db.prepare('UPDATE tg_users SET notes = ? WHERE tg_user_id = ?').run(next, tgUserId);
+}
+
+async function verifyRequiredMembership(ctx) {
+  const cfg = getBotConfig();
+  const checks = [
+    { chatId: cfg.requiredGroupChat, label: 'public group' },
+    { chatId: cfg.otpGroupChat, label: 'OTP history group' },
+  ].filter((x) => x.chatId);
+  if (checks.length === 0) return true;
+  for (const check of checks) {
+    try {
+      const member = await bot.telegram.getChatMember(check.chatId, ctx.from.id);
+      if (!['creator', 'administrator', 'member'].includes(member.status)) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function ensureBotReady(ctx, tgUser) {
+  if (isBanned(tgUser)) {
+    await ctx.reply('🚫 You have been banned from using this bot.');
+    return false;
+  }
+  if (!isOnboarded(tgUser.tg_user_id)) {
+    await ctx.replyWithHTML(firstTimeWelcomeText(tgUser), onboardingKeyboard());
+    return false;
+  }
+  return true;
 }
 
 function escapeHtml(s) {
@@ -293,7 +387,7 @@ function numberCardKeyboard() {
 bot.start(async (ctx) => {
   const u = ensureTgUser(ctx);
   if (!u) return;
-  if (isBanned(u)) return ctx.reply('🚫 You have been banned from using this bot.');
+  if (!(await ensureBotReady(ctx, u))) return;
   // Check existing active assignments — re-show them
   const active = getActiveAssignments(u.tg_user_id);
   if (active.length > 0) {
@@ -306,29 +400,48 @@ bot.start(async (ctx) => {
   }
 });
 
+bot.action('onboard:check', async (ctx) => {
+  await ctx.answerCbQuery();
+  const u = ensureTgUser(ctx);
+  if (!u || isOnboarded(u.tg_user_id)) return ctx.replyWithHTML(welcomeText(u), mainMenuKeyboard());
+  await ctx.replyWithHTML(firstTimeWelcomeText(u), onboardingKeyboard());
+});
+
+bot.action('onboard:accept', async (ctx) => {
+  await ctx.answerCbQuery();
+  const u = ensureTgUser(ctx);
+  if (!u) return;
+  const verified = await verifyRequiredMembership(ctx);
+  if (!verified) {
+    return ctx.replyWithHTML('⚠️ <b>Join verification failed.</b>\nPlease join both required groups first, then tap verify again.', onboardingKeyboard());
+  }
+  markOnboarded(u.tg_user_id);
+  await ctx.replyWithHTML(`✅ <b>Verification complete.</b>\nYou can use the bot now.`, mainMenuKeyboard());
+});
+
 // ----- Main menu buttons (text triggers) -----
 bot.hears('🌍 Get Number', async (ctx) => {
-  const u = ensureTgUser(ctx); if (isBanned(u)) return;
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showCountries(ctx);
 });
 
 bot.hears('📞 My Numbers', async (ctx) => {
-  const u = ensureTgUser(ctx); if (isBanned(u)) return;
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showMyNumbers(ctx);
 });
 
 bot.hears('📥 OTP History', async (ctx) => {
-  const u = ensureTgUser(ctx); if (isBanned(u)) return;
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showOtpHistory(ctx);
 });
 
 bot.hears('🏆 Leaderboard', async (ctx) => {
-  const u = ensureTgUser(ctx); if (isBanned(u)) return;
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showLeaderboard(ctx);
 });
 
 bot.hears('💰 Wallet', async (ctx) => {
-  const u = ensureTgUser(ctx); if (isBanned(u)) return;
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showWallet(ctx);
 });
 
@@ -395,7 +508,7 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
   const rangeName = decodeURIComponent(ctx.match[2]);
   const cc = ctx.match[3];
 
-  const u = ensureTgUser(ctx); if (isBanned(u)) return;
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
 
   // Wallet check
   const setting = db.prepare(
@@ -494,9 +607,21 @@ async function showMyNumbers(ctx) {
   if (active.length === 0) {
     return ctx.replyWithHTML('📭 No active numbers. Tap 🌍 Get Number.');
   }
+  const grouped = new Map();
+  for (const row of active) {
+    const key = row.batch_id || `single:${row.id}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
   await ctx.replyWithHTML(`<b>📞 Your Active Numbers (${active.length})</b>`);
-  for (const a of active) {
-    await ctx.replyWithHTML(renderNumberCard(a), numberCardKeyboard(a.id, a.status === 'otp_received'));
+  for (const [key, rows] of grouped.entries()) {
+    const allDone = !rows.some(a => a.status === 'active');
+    if (String(key).startsWith('single:')) {
+      const a = rows[0];
+      await ctx.replyWithHTML(renderNumberCard(a), numberCardKeyboard(a.id, a.status === 'otp_received'));
+    } else {
+      await ctx.replyWithHTML(renderBatchCard(rows), batchKeyboard(key, allDone));
+    }
   }
 }
 
@@ -569,6 +694,42 @@ async function showWallet(ctx) {
 
 let lastOtpScanAt = now();
 
+function mirrorOtpToWebsite(c) {
+  let sysUser = db.prepare("SELECT id FROM users WHERE username = '__ims_pool__'").get();
+  if (!sysUser) {
+    const r = db.prepare(`INSERT INTO users (username, password_hash, role, status) VALUES ('__ims_pool__', '!', 'agent', 'suspended')`).run();
+    sysUser = { id: r.lastInsertRowid };
+  }
+  db.prepare(`
+    INSERT INTO cdr (user_id, allocation_id, provider, country_code, operator, phone_number, otp_code, cli, price_bdt, status, note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'billed', ?)
+  `).run(
+    sysUser.id,
+    c.assignment_id,
+    c.provider || 'telegram',
+    c.country_code || null,
+    c.range_name || null,
+    c.phone_number,
+    c.otp,
+    c.cli || c.service || 'telegram',
+    c.rate_bdt || 0,
+    `tgbot:${c.tg_user_id}`
+  );
+}
+
+async function postPublicOtp(c) {
+  const chatId = getPublicChannelId();
+  if (!chatId) return;
+  const maskedNumber = maskLast4(c.phone_number);
+  const otpMasked = maskLast4(c.otp);
+  const msg =
+    `🔥 <b>New OTP Received</b>\n` +
+    `📱 <code>${maskedNumber}</code>\n` +
+    `🔐 <code>${otpMasked}</code>\n` +
+    `${flagOf(c.country_code)} ${escapeHtml(countryName(c.country_code))} • ${serviceIcon(c.service)} ${escapeHtml(c.range_name || c.service || 'OTP')}`;
+  await bot.telegram.sendMessage(chatId, msg, { parse_mode: 'HTML' });
+}
+
 async function pollOtps() {
   try {
     // Find allocations that received OTP since last scan AND have an active TG assignment
@@ -605,23 +766,35 @@ async function pollOtps() {
         db.prepare('UPDATE tg_users SET total_otps = total_otps + 1 WHERE tg_user_id = ?').run(c.tg_user_id);
       }
 
-      // edit existing card → OTP card
-      const card = {
-        phone_number: c.phone_number,
-        country_code: c.country_code,
-        service: c.service,
-        otp_code: c.otp,
-        otp_full_text: c.cli || c.otp,
-        rate_bdt: c.rate_bdt,
-        expires_at: c.expires_at,
-        status: 'otp_received',
-      };
+       mirrorOtpToWebsite(c);
+       await postPublicOtp(c).catch(() => {});
+
+       const batchId = db.prepare('SELECT batch_id FROM tg_assignments WHERE id = ?').get(c.assignment_id)?.batch_id || null;
+       const batchRows = batchId ? getBatchAssignments(batchId) : [];
       try {
         if (c.tg_chat_id && c.tg_message_id) {
-          await bot.telegram.editMessageText(
-            c.tg_chat_id, c.tg_message_id, undefined, renderNumberCard(card),
-            { parse_mode: 'HTML', reply_markup: numberCardKeyboard(c.assignment_id, true).reply_markup }
-          );
+           if (batchId && batchRows.length > 0) {
+             const allDone = !batchRows.some(a => a.status === 'active');
+             await bot.telegram.editMessageText(
+               c.tg_chat_id, c.tg_message_id, undefined, renderBatchCard(batchRows),
+               { parse_mode: 'HTML', reply_markup: batchKeyboard(batchId, allDone).reply_markup }
+             );
+           } else {
+             const card = {
+               phone_number: c.phone_number,
+               country_code: c.country_code,
+               service: c.service,
+               otp_code: c.otp,
+               otp_full_text: c.cli || c.otp,
+               rate_bdt: c.rate_bdt,
+               expires_at: c.expires_at,
+               status: 'otp_received',
+             };
+             await bot.telegram.editMessageText(
+               c.tg_chat_id, c.tg_message_id, undefined, renderNumberCard(card),
+               { parse_mode: 'HTML', reply_markup: numberCardKeyboard(c.assignment_id, true).reply_markup }
+             );
+           }
         }
       } catch (e) {
         console.warn('[tgbot] edit fail, sending new', e.message);

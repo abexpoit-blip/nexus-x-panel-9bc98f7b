@@ -633,6 +633,24 @@ export const api = {
         admin_username: string | null;
       }>;
     }>("/admin/tgbot/broadcasts"),
+    config: () => request<{
+      tg_public_channel: string;
+      tg_required_group: string;
+      tg_required_group_chat: string;
+      tg_required_otp_group: string;
+      tg_required_otp_group_chat: string;
+      tg_terms_text: string;
+    }>("/admin/tgbot/config"),
+    saveConfig: (body: {
+      tg_public_channel?: string;
+      tg_required_group?: string;
+      tg_required_group_chat?: string;
+      tg_required_otp_group?: string;
+      tg_required_otp_group_chat?: string;
+      tg_terms_text?: string;
+    }) => request<{ ok: boolean }>("/admin/tgbot/config", {
+      method: "PUT", body: JSON.stringify(body),
+    }),
   },
 };
 

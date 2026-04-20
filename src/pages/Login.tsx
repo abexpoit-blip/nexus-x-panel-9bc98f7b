@@ -23,14 +23,13 @@ const Login = () => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const ok = await login(username, password);
+    const loggedInUser = await login(username, password);
     setLoading(false);
-    if (!ok) {
+    if (!loggedInUser) {
       setError("Invalid username or password");
       return;
     }
-    const stored = JSON.parse(localStorage.getItem("nexus_user") || "{}");
-    if (stored.role === "admin") {
+    if (loggedInUser.role === "admin") {
       // Admins must use the dedicated admin portal — block here for separation
       setError("Admins must sign in via the admin portal");
       return;
