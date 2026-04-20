@@ -43,7 +43,7 @@ const iconFor = (n: ApiNotification): string => {
   return "🔔";
 };
 
-export const NotificationPanel = () => {
+export function NotificationPanel() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { panelOpen, closePanel, preferences, updatePreferences } = useNotifications();
@@ -249,4 +249,4 @@ export const NotificationPanel = () => {
       </AnimatePresence>
     </>
   );
-};
+}
