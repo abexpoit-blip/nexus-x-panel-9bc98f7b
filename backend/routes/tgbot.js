@@ -112,16 +112,19 @@ router.put('/range-settings', (req, res) => {
   res.json({ ok: true });
 });
 
-// Bulk enable / disable
+// Bulk enable / disable — supports inferred country codes
 router.post('/range-settings/bulk', (req, res) => {
   const { provider, country_code, tg_enabled, tg_rate_bdt, service } = req.body || {};
   if (!provider) return res.status(400).json({ error: 'provider required' });
-  const where = country_code ? 'AND country_code = ?' : '';
-  const args = country_code ? [provider, country_code] : [provider];
-  const ranges = db.prepare(`
-    SELECT DISTINCT COALESCE(operator,'Unknown') AS range_name FROM allocations
-    WHERE status = 'pool' AND provider = ? ${where}
-  `).all(...args);
+  // Pull all distinct ranges for this provider, then JS-side filter by inferred cc.
+  const all = db.prepare(`
+    SELECT DISTINCT COALESCE(operator,'Unknown') AS range_name, country_code
+    FROM allocations
+    WHERE status = 'pool' AND provider = ?
+  `).all(provider);
+  const ranges = country_code
+    ? all.filter(r => bestCountryCode(r.country_code, r.range_name) === country_code)
+    : all;
   const stmt = db.prepare(`
     INSERT INTO range_tg_settings (provider, range_name, tg_enabled, tg_rate_bdt, service, updated_at)
     VALUES (?, ?, ?, ?, ?, strftime('%s','now'))
