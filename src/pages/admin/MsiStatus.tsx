@@ -372,6 +372,12 @@ const MsiCookiesEditor = ({ onSaved, cookieFailStreak = 0 }: { onSaved: () => vo
     </div>
   );
 };
+
+// ---- OTP poll interval setting ----
+const MsiOtpIntervalSetting = ({ onSaved }: { onSaved: () => void }) => {
+  const [saving, setSaving] = useState(false);
+  const { data, refetch, isLoading } = useQuery({
+    queryKey: ["msi-otp-interval"],
     queryFn: () => api.admin.msiOtpInterval(),
   });
   const current = data?.interval_sec ?? 5;
