@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { GradientMesh, PageHeader } from "@/components/premium";
-import { Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText, AlertTriangle, RefreshCw, Power, Info, Play, Square, KeyRound, Save, Eye, EyeOff, Zap, Layers, ClipboardPaste, Plus, Trash2, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText, AlertTriangle, RefreshCw, Power, Info, Play, Square, KeyRound, Save, Eye, EyeOff, Zap, Layers, ClipboardPaste, Plus, Trash2, Sparkles, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -39,6 +39,69 @@ const fmtAgo = (ts: number | null) => {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
+};
+
+// ---- Reusable lock-reveal wrapper for sensitive sections ----
+const LockReveal = ({
+  title, subtitle, icon, accent = "neon-cyan", autoLockSec = 60, children,
+}: {
+  title: string; subtitle?: string; icon?: React.ReactNode;
+  accent?: string; autoLockSec?: number; children: React.ReactNode;
+}) => {
+  const [unlocked, setUnlocked] = useState(false);
+  const [remaining, setRemaining] = useState(autoLockSec);
+  useEffect(() => {
+    if (!unlocked) return;
+    setRemaining(autoLockSec);
+    const t = setInterval(() => {
+      setRemaining(r => {
+        if (r <= 1) { setUnlocked(false); return autoLockSec; }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [unlocked, autoLockSec]);
+
+  if (!unlocked) {
+    return (
+      <div className="glass-card border border-white/[0.06] rounded-xl p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+            `bg-${accent}/10 border border-${accent}/20`)}>
+            {icon ?? <EyeOff className={cn("w-4 h-4", `text-${accent}`)} />}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold flex items-center gap-2">
+              {title}
+              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.05] text-muted-foreground font-bold">Hidden</span>
+            </div>
+            <div className="text-xs text-muted-foreground truncate">
+              {subtitle || "Sensitive — click to reveal. Auto-hides after 60s."}
+            </div>
+          </div>
+        </div>
+        <button onClick={() => setUnlocked(true)}
+          className={cn("inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition shrink-0",
+            `bg-${accent}/10 border border-${accent}/30 text-${accent} hover:bg-${accent}/20`)}>
+          <Eye className="w-3.5 h-3.5" /> Reveal
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-end gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Clock className="w-3 h-3" />
+        Auto-locking in {remaining}s
+        <button onClick={() => setUnlocked(false)}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition">
+          <EyeOff className="w-3 h-3" /> Lock now
+        </button>
+      </div>
+      {children}
+    </div>
+  );
 };
 
 const Pill = ({ ok, label }: { ok: boolean; label: string }) => (
@@ -295,11 +358,25 @@ const AdminImsStatus = () => {
             <Pill ok={s.lastScrapeOk} label={s.lastScrapeOk ? "Last scrape OK" : "Last scrape failed"} />
           </div>
 
-          {/* Credentials editor */}
-          <CredentialsEditor onSaved={() => refetch()} />
+          {/* Credentials editor — hidden behind reveal for safety */}
+          <LockReveal
+            title="IMS Login Credentials"
+            subtitle="Username, password & base URL — sensitive. Click reveal to view/edit."
+            accent="neon-cyan"
+            icon={<KeyRound className="w-4 h-4 text-neon-cyan" />}
+          >
+            <CredentialsEditor onSaved={() => refetch()} />
+          </LockReveal>
 
           {/* Session cookies — bypass captcha entirely (recommended) */}
-          <CookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
+          <LockReveal
+            title="IMS Session Cookies"
+            subtitle="Saved browser session — paste once, skip captcha forever. Sensitive."
+            accent="neon-purple"
+            icon={<ClipboardPaste className="w-4 h-4 text-neon-purple" />}
+          >
+            <CookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
+          </LockReveal>
 
           {/* OTP poll interval setting */}
           <OtpIntervalSetting onSaved={() => refetch()} />

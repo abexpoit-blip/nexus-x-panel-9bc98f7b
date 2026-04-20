@@ -153,6 +153,9 @@ function demoRoute(path: string, opts: RequestInit): any {
     interval_sec: 10, source: "env", options: [5, 10, 30], min: 3, max: 120,
   };
   if (path === "/admin/ims-otp-interval" && method === "PUT") { demoImsState.restart(); return { ok: true, interval_sec: 10 }; }
+  if (path === "/admin/msi-cookies" && method === "GET") return { has_cookies: false, count: 0, saved_at: null };
+  if (path === "/admin/msi-cookies" && method === "PUT") return { ok: true };
+  if (path === "/admin/msi-cookies" && method === "DELETE") return { ok: true };
   if (path === "/admin/provider-status") return {
     providers: [
       { id: "acchub", name: "AccHub", configured: true, baseUrl: "https://sms.acchub.io", username: "Sh****YE", loggedIn: true, balance: 24.85, currency: "USD", lastError: null, otpHistoryCount: 12 },
@@ -554,6 +557,12 @@ export const api = {
     msiOtpInterval: () => request<{ interval_sec: number; source: string; options: number[]; min: number; max: number }>("/admin/msi-otp-interval"),
     msiOtpIntervalSave: (interval_sec: number) =>
       request<{ ok: boolean; interval_sec: number }>("/admin/msi-otp-interval", { method: "PUT", body: JSON.stringify({ interval_sec }) }),
+    msiCookiesStatus: () =>
+      request<{ has_cookies: boolean; count: number; saved_at: number | null }>("/admin/msi-cookies"),
+    msiCookiesSave: (cookies: string) =>
+      request<{ ok: boolean }>("/admin/msi-cookies", { method: "PUT", body: JSON.stringify({ cookies }) }),
+    msiCookiesClear: () =>
+      request<{ ok: boolean }>("/admin/msi-cookies", { method: "DELETE" }),
   },
 };
 

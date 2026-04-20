@@ -65,6 +65,13 @@ let otpTimer = null;
 let numbersTimer = null;
 let _stopped = false;
 let emptyStreak = 0;
+let _cookieFailStreak = 0;
+let _lastCookieExpiryAlertAt = 0;
+
+// Cookie domain — MSI runs on bare IP so we strip protocol
+function cookieDomain() {
+  try { return new URL(BASE_URL).hostname; } catch (_) { return '145.239.130.45'; }
+}
 
 const status = {
   enabled: false,
@@ -98,14 +105,20 @@ function getStatus() {
     const claimingSize = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='msi' AND status='claiming'").get().c;
     const activeAssigned = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='msi' AND status='active'").get().c;
     const otpReceived = db.prepare("SELECT COUNT(*) c FROM allocations WHERE provider='msi' AND status='received'").get().c;
+    const hasCookies = !!readSetting('msi_cookies');
     return {
       ...status, poolSize, claimingSize, activeAssigned, otpReceived,
       events: events.slice(),
       otpCacheSize: recentOtpCache.size,
       emptyStreak, emptyLimit: EMPTY_LIMIT,
+      cookieFailStreak: _cookieFailStreak, hasCookies,
     };
   } catch (_) {
-    return { ...status, poolSize: 0, claimingSize: 0, activeAssigned: 0, otpReceived: 0, events: events.slice(), otpCacheSize: 0, emptyStreak, emptyLimit: EMPTY_LIMIT };
+    return {
+      ...status, poolSize: 0, claimingSize: 0, activeAssigned: 0, otpReceived: 0,
+      events: events.slice(), otpCacheSize: 0, emptyStreak, emptyLimit: EMPTY_LIMIT,
+      cookieFailStreak: _cookieFailStreak, hasCookies: false,
+    };
   }
 }
 
@@ -228,12 +241,115 @@ async function loginOnce() {
   if (!ok) throw new Error('MSI login failed (likely captcha)');
 }
 
+// ---- Session cookie injection (skip captcha if cookies still valid) ----
+// Mirrors imsBot — admin pastes cookies (JSON or "k=v; k=v") in admin UI.
+function parseCookies(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  const txt = raw.trim();
+  if (!txt) return [];
+  const dom = cookieDomain();
+  if (txt.startsWith('[') || txt.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(txt);
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      return arr.filter(c => c && c.name && c.value).map(c => ({
+        name: c.name,
+        value: String(c.value),
+        domain: c.domain || dom,
+        path: c.path || '/',
+        httpOnly: !!c.httpOnly,
+        secure: c.secure === true,
+        sameSite: c.sameSite || 'Lax',
+      }));
+    } catch (_) { /* fall through */ }
+  }
+  const out = [];
+  for (const pair of txt.split(/;\s*/)) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (!name) continue;
+    out.push({ name, value, domain: dom, path: '/', httpOnly: false, secure: false, sameSite: 'Lax' });
+  }
+  return out;
+}
+
+async function tryCookieAuth() {
+  const raw = readSetting('msi_cookies');
+  if (!raw) return false;
+  const cookies = parseCookies(raw);
+  if (!cookies.length) {
+    dwarn('[msi-bot] saved cookies present but parse returned 0 entries');
+    return false;
+  }
+  try {
+    await page.setCookie(...cookies);
+    await page.goto(`${BASE_URL}/ints/agent/SMSCDRReports`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    const url = page.url();
+    if (/\/login/i.test(url)) {
+      dlog('[msi-bot] cookie auth: redirected to /login → expired');
+      _cookieFailStreak++;
+      maybeAlertCookieExpired('redirected to /login');
+      return false;
+    }
+    const hasContent = await page.evaluate(() => {
+      const t = document.querySelectorAll('table').length;
+      const txt = (document.body.innerText || '').toLowerCase();
+      return t > 0 || /logout|cdr|sms/i.test(txt);
+    }).catch(() => false);
+    if (!hasContent) {
+      dlog('[msi-bot] cookie auth: no logged-in content');
+      _cookieFailStreak++;
+      maybeAlertCookieExpired('no logged-in content on page');
+      return false;
+    }
+    loggedIn = true;
+    status.loggedIn = true;
+    status.lastLoginAt = Math.floor(Date.now() / 1000);
+    _cdrReady = true;
+    _cookieFailStreak = 0;
+    console.log('[msi-bot] ✓ logged in via saved cookies (skipped captcha)');
+    logEvent('success', 'Logged in via saved session cookies (no captcha needed)');
+    return true;
+  } catch (e) {
+    dwarn('[msi-bot] cookie auth failed:', e.message);
+    _cookieFailStreak++;
+    maybeAlertCookieExpired(e.message);
+    return false;
+  }
+}
+
+function maybeAlertCookieExpired(reason) {
+  if (_cookieFailStreak < 3) return;
+  const now = Math.floor(Date.now() / 1000);
+  if (now - _lastCookieExpiryAlertAt < 6 * 3600) return;
+  _lastCookieExpiryAlertAt = now;
+  logEvent('error', `MSI cookies expired (${_cookieFailStreak} consecutive fails) — refresh needed`);
+}
+
 async function login() {
+  // 1) Try cookie auth first — instant, no captcha
+  if (await tryCookieAuth()) return;
+
+  // 2) Fall back to form login (math captcha)
   let lastErr = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await loginOnce();
       if (attempt > 1) logEvent('success', `Login OK on attempt ${attempt}`);
+      // Save fresh cookies so next restart skips captcha
+      try {
+        const fresh = await page.cookies();
+        if (fresh && fresh.length) {
+          db.prepare(`
+            INSERT INTO settings (key, value, updated_at) VALUES ('msi_cookies', ?, strftime('%s','now'))
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+          `).run(JSON.stringify(fresh));
+          dlog(`[msi-bot] saved ${fresh.length} fresh cookies for next session`);
+          logEvent('success', `Saved ${fresh.length} fresh session cookies`);
+        }
+      } catch (e) { dwarn('[msi-bot] failed to save fresh cookies:', e.message); }
       return;
     } catch (e) {
       lastErr = e;
