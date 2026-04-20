@@ -414,31 +414,99 @@ async function login() {
 }
 
 // ---- Scrape MySMSNumbers (number pool) ----
+// MSI table layout (verified live): Range | Prefix | Number | My Payout | Client | Payout | Limits
+// We must:
+//  • CLEAR any range/client filter ("Select Range" / "Select Client" dropdowns) so we get ALL numbers
+//  • Bump page size via DataTables API (jQuery selector $('table').DataTable().page.len(...))
+//  • Walk through every page until pagination ends
 async function scrapeNumbers() {
-  await page.goto(`${BASE_URL}/ints/agent/MySMSNumbers`, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => null);
+  await page.goto(`${BASE_URL}/ints/agent/MySMSNumbers`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => null);
   if (/\/login/i.test(page.url())) { loggedIn = false; return []; }
 
-  // Bump page-size to max
-  await page.evaluate(() => {
-    const sel = document.querySelector('select[name$="_length"], .dataTables_length select');
-    if (!sel) return;
-    const opts = Array.from(sel.options || []);
-    const all = opts.find(o => /all/i.test(o.text) || o.value === '-1');
-    if (all) { sel.value = all.value; sel.dispatchEvent(new Event('change', { bubbles: true })); return; }
-    const maxNum = opts.filter(o => /^\d+$/.test(o.value)).map(o => +o.value).sort((a, b) => b - a)[0];
-    if (maxNum) { sel.value = String(maxNum); sel.dispatchEvent(new Event('change', { bubbles: true })); }
-  }).catch(() => {});
-  await new Promise(r => setTimeout(r, 800));
+  // Reset any pre-applied range/client filters by clicking the red "reset" pill or
+  // re-loading without query params, then maximize page size via every API we know.
+  const sizeInfo = await page.evaluate(() => {
+    // 1) Clear any DataTables search/filters
+    try {
+      // eslint-disable-next-line no-undef
+      if (typeof window.jQuery === 'function' && window.jQuery.fn && window.jQuery.fn.dataTable) {
+        const $ = window.jQuery;
+        const $tables = $('table.dataTable, table');
+        $tables.each(function () {
+          try {
+            const dt = $(this).DataTable();
+            dt.search('').columns().search('');
+            // Bump page size to ALL (-1) or max numeric option
+            const sel = $(this).closest('.dataTables_wrapper').find('select[name$="_length"]')[0];
+            let target = -1;
+            if (sel) {
+              const nums = Array.from(sel.options).map(o => +o.value).filter(n => !isNaN(n));
+              if (nums.includes(-1)) target = -1;
+              else if (nums.length) target = Math.max(...nums);
+            }
+            dt.page.len(target).draw();
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+
+    // 2) Native fallback: change every length <select>
+    let bumped = 0;
+    document.querySelectorAll('select').forEach(sel => {
+      const opts = Array.from(sel.options || []);
+      const isLength = /length|show|records|per[\s_]?page/i.test(sel.name || sel.id || sel.className || sel.parentElement?.className || '');
+      if (!isLength) return;
+      const all = opts.find(o => /all/i.test(o.text) || o.value === '-1');
+      let target = null;
+      if (all) target = all.value;
+      else {
+        const nums = opts.filter(o => /^\d+$/.test(o.value)).map(o => +o.value);
+        if (nums.length) target = String(Math.max(...nums));
+      }
+      if (target !== null && sel.value !== target) {
+        sel.value = target;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        bumped++;
+      }
+    });
+
+    // 3) Try clicking any "Reset" / red filter button if present (clears Select Range/Client)
+    Array.from(document.querySelectorAll('button, a')).forEach(b => {
+      const txt = (b.innerText || b.title || '').trim().toLowerCase();
+      if (/reset|clear/i.test(txt) && /filter/i.test((b.title || b.innerText || ''))) {
+        try { b.click(); } catch (_) {}
+      }
+    });
+
+    // Return diagnostics
+    const info = document.querySelector('.dataTables_info')?.innerText || '';
+    const tableRows = document.querySelectorAll('table tbody tr').length;
+    return { bumped, info, tableRows };
+  }).catch(() => ({ bumped: 0, info: '', tableRows: 0 }));
+
+  // Wait for the DataTable to redraw after page-size bump
+  await new Promise(r => setTimeout(r, 1500));
+  dlog(`[msi-bot] scrapeNumbers init: page-size selectors bumped=${sizeInfo.bumped} info="${sizeInfo.info}" rows=${sizeInfo.tableRows}`);
 
   const extractRows = () => page.evaluate(() => {
     const out = [];
     document.querySelectorAll('table tbody tr').forEach((row) => {
       const cells = Array.from(row.querySelectorAll('td')).map(c => c.innerText.trim());
       if (!cells.length) return;
-      // Find phone (8-15 digits) and range (text label)
-      const phone = cells.find(t => /^\+?\d{8,15}$/.test(t.replace(/[\s-]/g, '')));
+      // Skip "no data" placeholder rows
+      if (cells.length === 1 && /no.*data|empty|loading/i.test(cells[0])) return;
+      // MSI: cells = [chk, Range, Prefix, Number, MyPayout, Client, Payout, Limits]
+      // Find the actual MSISDN: 10-15 digits, NOT the prefix (prefix is shorter ≤8 typically)
+      const phoneCells = cells.filter(t => /^\+?\d{8,15}$/.test(t.replace(/[\s-]/g, '')));
+      // Pick the LONGEST digit string as the actual number (prefix is shorter)
+      const phone = phoneCells.sort((a, b) => b.length - a.length)[0];
       if (!phone) return;
-      const range = cells.find(t => /[A-Za-z]/.test(t) && t.length < 60 && t !== phone && !/payout|weekly|monthly|sd\s*:|sw\s*:/i.test(t));
+      // Range = first cell containing letters that isn't a payout/limit/sms label
+      const range = cells.find(t =>
+        /[A-Za-z]/.test(t) &&
+        t.length < 60 &&
+        !/payout|weekly|monthly|sd\s*:|sw\s*:|\$|usd|eur|gbp/i.test(t)
+      );
       out.push({ phone_number: phone.replace(/[\s-]/g, ''), operator: range || null });
     });
     return out;
@@ -454,9 +522,10 @@ async function scrapeNumbers() {
     }
   };
   pushUnique(await extractRows());
+  dlog(`[msi-bot] page 1: ${all.length} unique numbers so far`);
 
-  // Paginate
-  for (let i = 0; i < 200; i++) {
+  // Paginate up to 500 pages (with 100/page that's 50k numbers — way more than MSI accounts hold)
+  for (let i = 0; i < 500; i++) {
     const clicked = await page.evaluate(() => {
       const isDisabled = (el) => {
         if (!el) return true;
@@ -465,6 +534,22 @@ async function scrapeNumbers() {
         if (el.getAttribute('aria-disabled') === 'true') return true;
         return false;
       };
+      // Try DataTables API first (most reliable)
+      try {
+        // eslint-disable-next-line no-undef
+        if (typeof window.jQuery === 'function' && window.jQuery.fn && window.jQuery.fn.dataTable) {
+          const $ = window.jQuery;
+          const $tbl = $('table.dataTable').first();
+          if ($tbl.length) {
+            const dt = $tbl.DataTable();
+            const info = dt.page.info();
+            if (info.page + 1 >= info.pages) return false;
+            dt.page('next').draw('page');
+            return true;
+          }
+        }
+      } catch (_) {}
+      // Fallback: classic pagination button
       let next = document.querySelector('a.paginate_button.next, li.next > a, a[rel="next"]');
       if (!next) {
         next = Array.from(document.querySelectorAll('a, button'))
@@ -475,11 +560,16 @@ async function scrapeNumbers() {
       return true;
     });
     if (!clicked) break;
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 700));
     const before = all.length;
     pushUnique(await extractRows());
-    if (all.length === before) break;
+    if (all.length === before) {
+      // No new rows on this page — likely reached end (or click silently failed)
+      dlog(`[msi-bot] pagination stopped at page ${i + 2} (no new rows)`);
+      break;
+    }
   }
+  dlog(`[msi-bot] scrapeNumbers DONE: ${all.length} total unique numbers across all pages`);
   return all;
 }
 

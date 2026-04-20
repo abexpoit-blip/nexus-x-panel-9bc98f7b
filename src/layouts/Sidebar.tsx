@@ -41,7 +41,8 @@ const adminNav: NavItem[] = [
   { label: "SMS CDR", path: "/admin/cdr", icon: FileText },
   { label: "IMS Bot", path: "/admin/ims-status", icon: Bot },
   { label: "MSI Bot", path: "/admin/msi-status", icon: Bot },
-  { label: "Provider Settings", path: "/admin/provider-settings", icon: Settings },
+  // Provider Settings (OTP expiry / recent-OTP window) is now embedded inside
+  // the IMS Bot page; route /admin/provider-settings still works for direct links.
   { label: "Notifications", path: "/admin/notifications", icon: Bell },
 ];
 
