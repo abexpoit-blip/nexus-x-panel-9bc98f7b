@@ -297,6 +297,8 @@ export const api = {
   msiRanges: () => request<{ ranges: { name: string; count: number }[] }>("/numbers/msi/ranges"),
   imsAddPool: (body: { numbers: string[]; range: string; country_code?: string }) =>
     request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/ims/pool", { method: "POST", body: JSON.stringify(body) }),
+  msiAddPool: (body: { numbers: string[]; range: string; country_code?: string }) =>
+    request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/msi/pool", { method: "POST", body: JSON.stringify(body) }),
   myNumbers: () => request<{ numbers: Allocation[]; recent_window_hours?: number }>("/numbers/my"),
   numberHistory: (params: { page?: number; page_size?: number; q?: string; from?: string; to?: string } = {}) => {
     const qs = new URLSearchParams();
@@ -549,6 +551,9 @@ export const api = {
     }>("/admin/msi-credentials"),
     msiCredentialsSave: (body: { username?: string; password?: string; base_url?: string; enabled?: boolean }) =>
       request<{ ok: boolean }>("/admin/msi-credentials", { method: "PUT", body: JSON.stringify(body) }),
+    msiOtpInterval: () => request<{ interval_sec: number; source: string; options: number[]; min: number; max: number }>("/admin/msi-otp-interval"),
+    msiOtpIntervalSave: (interval_sec: number) =>
+      request<{ ok: boolean; interval_sec: number }>("/admin/msi-otp-interval", { method: "PUT", body: JSON.stringify({ interval_sec }) }),
   },
 };
 

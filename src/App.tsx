@@ -39,6 +39,7 @@ const AdminPayments = lazy(() => import("@/pages/admin/Payments"));
 const AdminSecurity = lazy(() => import("@/pages/admin/Security"));
 const AdminImsStatus = lazy(() => import("@/pages/admin/ImsStatus"));
 const AdminMsiStatus = lazy(() => import("@/pages/admin/MsiStatus"));
+const AdminProviderSettings = lazy(() => import("@/pages/admin/ProviderSettings"));
 const AdminWithdrawals = lazy(() => import("@/pages/admin/Withdrawals"));
 
 const queryClient = new QueryClient({
@@ -115,6 +116,7 @@ const AppRoutes = () => {
             <Route path="/admin/cdr" element={<AdminCDR />} />
             <Route path="/admin/ims-status" element={<AdminImsStatus />} />
             <Route path="/admin/msi-status" element={<AdminMsiStatus />} />
+            <Route path="/admin/provider-settings" element={<AdminProviderSettings />} />
             <Route path="/admin/notifications" element={<AdminNotifications />} />
           </Route>
 

@@ -902,5 +902,33 @@ router.put('/msi-credentials', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ---- MSI OTP poll interval (mirrors IMS) ----
+router.get('/msi-otp-interval', (req, res) => {
+  const dbVal = +(db.prepare("SELECT value FROM settings WHERE key = 'msi_otp_interval'").get()?.value || 0);
+  const envVal = +(process.env.MSI_SCRAPE_INTERVAL || 5);
+  const effective = dbVal > 0 ? dbVal : envVal;
+  res.json({ interval_sec: effective, source: dbVal > 0 ? 'database' : 'env', options: [3, 5, 10, 30], min: 3, max: 120 });
+});
+
+router.put('/msi-otp-interval', async (req, res) => {
+  try {
+    const interval = +(req.body?.interval_sec);
+    if (!Number.isFinite(interval) || interval < 3 || interval > 120) {
+      return res.status(400).json({ error: 'interval_sec must be a number between 3 and 120' });
+    }
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('msi_otp_interval', ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `).run(String(interval));
+    logFromReq(req, 'msi_otp_interval_updated', { meta: { interval_sec: interval } });
+    try {
+      const bot = require('../workers/msiBot');
+      await bot.restart();
+      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
+    } catch (e) { console.warn('msi-otp-interval restart:', e.message); }
+    res.json({ ok: true, interval_sec: interval });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 

@@ -45,11 +45,17 @@ function resolveCreds() {
     PASSWORD: dbPass || process.env.MSI_PASSWORD || '',
   };
 }
+function resolveOtpInterval() {
+  const db = +(readSetting('msi_otp_interval') || 0);
+  const env = +(process.env.MSI_SCRAPE_INTERVAL || 5);
+  return Math.max(3, db > 0 ? db : env);
+}
 let { ENABLED, BASE_URL, USERNAME, PASSWORD } = resolveCreds();
 const HEADLESS = String(process.env.MSI_HEADLESS || 'true').toLowerCase() !== 'false';
 const CHROME_PATH = process.env.MSI_CHROME_PATH || undefined;
-const OTP_INTERVAL = Math.max(3, +(process.env.MSI_SCRAPE_INTERVAL || 5));
+let OTP_INTERVAL = resolveOtpInterval();
 const NUMBERS_INTERVAL = Math.max(60, +(process.env.MSI_NUMBERS_INTERVAL || 600));
+const EMPTY_LIMIT = Math.max(0, +(process.env.MSI_EMPTY_LIMIT || 0)); // 0 = disabled by default for MSI
 
 let browser = null;
 let page = null;
@@ -58,6 +64,7 @@ let busy = false;
 let otpTimer = null;
 let numbersTimer = null;
 let _stopped = false;
+let emptyStreak = 0;
 
 const status = {
   enabled: false,
@@ -95,9 +102,10 @@ function getStatus() {
       ...status, poolSize, claimingSize, activeAssigned, otpReceived,
       events: events.slice(),
       otpCacheSize: recentOtpCache.size,
+      emptyStreak, emptyLimit: EMPTY_LIMIT,
     };
   } catch (_) {
-    return { ...status, poolSize: 0, claimingSize: 0, activeAssigned: 0, otpReceived: 0, events: events.slice(), otpCacheSize: 0 };
+    return { ...status, poolSize: 0, claimingSize: 0, activeAssigned: 0, otpReceived: 0, events: events.slice(), otpCacheSize: 0, emptyStreak, emptyLimit: EMPTY_LIMIT };
   }
 }
 
@@ -478,9 +486,15 @@ async function syncPool() {
   const nums = await scrapeNumbers();
   status.lastNumbersScrapeAt = Math.floor(Date.now() / 1000);
   if (!nums.length) {
-    logEvent('warn', 'Number scrape returned 0 rows');
+    emptyStreak++;
+    logEvent('warn', `Number scrape returned 0 rows (empty streak ${emptyStreak}${EMPTY_LIMIT > 0 ? '/' + EMPTY_LIMIT : ''})`);
+    if (EMPTY_LIMIT > 0 && emptyStreak >= EMPTY_LIMIT) {
+      logEvent('warn', `Auto-pausing bot — ${emptyStreak} consecutive empty scrapes`);
+      await stop();
+    }
     return { added: 0, removed: 0, kept: 0, scraped: 0 };
   }
+  emptyStreak = 0;
   const live = new Set(nums.map(n => n.phone_number));
   const sysUser = ensurePoolUser();
   let added = 0, removed = 0, kept = 0;
@@ -544,6 +558,7 @@ async function syncLive() {
 // ---- Main loop ----
 function start() {
   ({ ENABLED, BASE_URL, USERNAME, PASSWORD } = resolveCreds());
+  OTP_INTERVAL = resolveOtpInterval();
   status.enabled = ENABLED;
   status.baseUrl = BASE_URL;
   status.otpIntervalSec = OTP_INTERVAL;

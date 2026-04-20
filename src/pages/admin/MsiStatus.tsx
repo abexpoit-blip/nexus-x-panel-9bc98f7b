@@ -5,6 +5,7 @@ import { GradientMesh, PageHeader } from "@/components/premium";
 import {
   Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText,
   RefreshCw, Power, Play, Square, Save, Eye, EyeOff, Zap, Sparkles, Layers,
+  Clock, ClipboardPaste, Plus, Info, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -33,6 +34,8 @@ type MsiStatus = {
   otpReceived: number;
   otpCacheSize: number;
   events?: { ts: number; level: string; message: string; meta: unknown }[];
+  emptyStreak?: number;
+  emptyLimit?: number;
 };
 
 const fmtAgo = (ts: number | null) => {
@@ -157,6 +160,182 @@ const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
   );
 };
 
+// ---- OTP poll interval setting ----
+const MsiOtpIntervalSetting = ({ onSaved }: { onSaved: () => void }) => {
+  const [saving, setSaving] = useState(false);
+  const { data, refetch, isLoading } = useQuery({
+    queryKey: ["msi-otp-interval"],
+    queryFn: () => api.admin.msiOtpInterval(),
+  });
+  const current = data?.interval_sec ?? 5;
+  const opts = data?.options ?? [3, 5, 10, 30];
+
+  const save = async (sec: number) => {
+    if (sec === current) return;
+    setSaving(true);
+    try {
+      await api.admin.msiOtpIntervalSave(sec);
+      toast.success(`OTP poll set to ${sec}s — bot restarting`);
+      await refetch();
+      onSaved();
+    } catch (e) { toast.error("Failed: " + (e as Error).message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <Clock className="w-4 h-4 text-neon-cyan" /> OTP Poll Interval
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            How often the bot scrapes the MSI CDR page for new OTPs. Lower = faster delivery, more CPU.
+            {data && (
+              <span className="ml-2 font-mono">
+                Current: <span className="text-neon-cyan font-semibold">{current}s</span>
+                <span className="text-muted-foreground/60"> ({data.source})</span>
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {opts.map(v => (
+            <button key={v} onClick={() => save(v)} disabled={saving || isLoading}
+              className={cn(
+                "px-4 py-2 rounded-md text-xs font-semibold border transition disabled:opacity-50",
+                v === current
+                  ? "bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan"
+                  : "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground"
+              )}>
+              {v}s
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---- Manual paste-numbers (mirror IMS) ----
+const MsiManualPaste = ({ existingRanges, onAdded }: { existingRanges: string[]; onAdded: () => void }) => {
+  const [open, setOpen] = useState(false);
+  const [rangeMode, setRangeMode] = useState<"existing" | "new">("existing");
+  const [selectedRange, setSelectedRange] = useState("");
+  const [newRange, setNewRange] = useState("");
+  const [countryCode, setCountryCode] = useState("");
+  const [raw, setRaw] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const parsed = raw
+    .split(/[\s,;\n\r\t]+/)
+    .map(s => s.replace(/[^\d+]/g, "").replace(/^\++/, "+"))
+    .filter(s => s.replace(/\D/g, "").length >= 6);
+  const uniqueCount = new Set(parsed).size;
+
+  const submit = async () => {
+    const range = (rangeMode === "existing" ? selectedRange : newRange).trim();
+    if (!range) { toast.error("Range name required"); return; }
+    if (!parsed.length) { toast.error("Paste at least one valid number"); return; }
+    setSubmitting(true);
+    try {
+      const r = await api.msiAddPool({
+        numbers: Array.from(new Set(parsed)),
+        range,
+        country_code: countryCode.trim() || undefined,
+      });
+      toast.success(`Added ${r.added} numbers to "${r.range}"` +
+        (r.skipped ? ` · ${r.skipped} dup` : "") +
+        (r.invalid ? ` · ${r.invalid} invalid` : ""));
+      setRaw(""); setNewRange(""); setSelectedRange(""); setCountryCode("");
+      onAdded();
+    } catch (e) { toast.error("Add failed: " + (e as Error).message); }
+    finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="glass-card border border-white/[0.06] rounded-xl overflow-hidden">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-neon-magenta/10 border border-neon-magenta/20 flex items-center justify-center">
+            <ClipboardPaste className="w-4 h-4 text-neon-magenta" />
+          </div>
+          <div className="text-left">
+            <div className="text-sm font-semibold">Manual Paste — Add Numbers to MSI Pool</div>
+            <div className="text-xs text-muted-foreground">
+              Paste copied numbers from MSI panel, pick a range, instantly available to agents
+            </div>
+          </div>
+        </div>
+        <span className="text-xs text-muted-foreground">{open ? "Hide" : "Open"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-white/[0.06] p-5 space-y-4 bg-black/20">
+          <p className="text-xs text-muted-foreground flex items-start gap-2">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-neon-magenta" />
+            Numbers are deduplicated against the current pool. Range name is what agents see in the dropdown.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs uppercase tracking-wider text-muted-foreground">Range</label>
+              <div className="flex gap-1 my-1.5">
+                <button type="button" onClick={() => setRangeMode("existing")} disabled={!existingRanges.length}
+                  className={cn("px-3 py-1 rounded text-xs font-semibold transition border",
+                    rangeMode === "existing"
+                      ? "bg-neon-magenta/15 border-neon-magenta/40 text-neon-magenta"
+                      : "bg-white/[0.03] border-white/[0.08] text-muted-foreground hover:text-foreground")}>
+                  Existing
+                </button>
+                <button type="button" onClick={() => setRangeMode("new")}
+                  className={cn("px-3 py-1 rounded text-xs font-semibold transition border inline-flex items-center gap-1",
+                    rangeMode === "new"
+                      ? "bg-neon-magenta/15 border-neon-magenta/40 text-neon-magenta"
+                      : "bg-white/[0.03] border-white/[0.08] text-muted-foreground hover:text-foreground")}>
+                  <Plus className="w-3 h-3" /> New
+                </button>
+              </div>
+              {rangeMode === "existing" ? (
+                <select value={selectedRange} onChange={e => setSelectedRange(e.target.value)}
+                  className="w-full bg-black/40 border border-white/[0.08] rounded-md px-3 py-2 text-sm focus:border-neon-magenta/50 outline-none">
+                  <option value="">— select existing range —</option>
+                  {existingRanges.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              ) : (
+                <input value={newRange} onChange={e => setNewRange(e.target.value)}
+                  placeholder="e.g. India Airtel TF01"
+                  className="w-full bg-black/40 border border-white/[0.08] rounded-md px-3 py-2 text-sm font-mono focus:border-neon-magenta/50 outline-none" />
+              )}
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wider text-muted-foreground">Country Code (optional)</label>
+              <input value={countryCode} onChange={e => setCountryCode(e.target.value.toUpperCase())} maxLength={4}
+                placeholder="IN"
+                className="mt-1.5 w-full bg-black/40 border border-white/[0.08] rounded-md px-3 py-2 text-sm font-mono uppercase focus:border-neon-magenta/50 outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Numbers — paste one per line, comma, or space ({uniqueCount} unique detected)
+            </label>
+            <textarea value={raw} onChange={e => setRaw(e.target.value)} rows={8} spellCheck={false}
+              placeholder={"+919876543210\n+919876543211\n..."}
+              className="mt-1.5 w-full bg-black/40 border border-white/[0.08] rounded-md px-3 py-2 text-sm font-mono focus:border-neon-magenta/50 outline-none resize-y" />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={submit} disabled={submitting || !uniqueCount}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-xs font-semibold bg-neon-magenta/10 border border-neon-magenta/30 text-neon-magenta hover:bg-neon-magenta/20 transition disabled:opacity-50">
+              <Plus className={cn("w-3.5 h-3.5", submitting && "animate-pulse")} />
+              {submitting ? "Adding…" : `Add ${uniqueCount || ""} to pool`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AdminMsiStatus = () => {
   const [restarting, setRestarting] = useState(false);
   const [scraping, setScraping] = useState(false);
@@ -276,6 +455,38 @@ const AdminMsiStatus = () => {
           </div>
 
           <CredentialsEditor onSaved={() => refetch()} />
+
+          <MsiOtpIntervalSetting onSaved={() => refetch()} />
+
+          <MsiManualPaste
+            existingRanges={poolData?.ranges?.map(r => r.name) ?? []}
+            onAdded={() => { refetch(); refetchPool(); }}
+          />
+
+          {(s.emptyLimit ?? 0) > 0 && (
+            <div className="glass-card border border-white/[0.06] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-neon-amber" /> Auto-pause guard
+                </span>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {s.emptyStreak ?? 0} / {s.emptyLimit} empty scrapes
+                </span>
+              </div>
+              <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full transition-all duration-500",
+                    (s.emptyStreak ?? 0) >= (s.emptyLimit ?? 10) * 0.7 ? "bg-destructive" :
+                    (s.emptyStreak ?? 0) >= (s.emptyLimit ?? 10) * 0.4 ? "bg-neon-amber" : "bg-neon-green"
+                  )}
+                  style={{ width: `${Math.min(100, ((s.emptyStreak ?? 0) / (s.emptyLimit ?? 10)) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Bot will auto-stop if {s.emptyLimit} consecutive scrapes return zero numbers (set MSI_EMPTY_LIMIT env to enable; 0 = disabled).
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Stat icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Last login" value={fmtAgo(s.lastLoginAt)}
