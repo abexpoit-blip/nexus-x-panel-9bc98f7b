@@ -1,26 +1,32 @@
-// NUMPANEL Browser Bot — headless Chrome that stays logged into 51.89.99.105/ints
-// and scrapes the agent's numbers + OTP CDRs.
+// NUMPANEL Bot — hybrid: Puppeteer login + REST API for OTPs.
+// Verified live 2026-04-20 against http://51.89.99.105/NumberPanel/agent
 //
-// NUMPANEL panel structure (verified live 2026-04-20):
-//   /NumberPanel/agent/login                  → form: username, password, math captcha (e.g. "What is 6+5=?")
-//   /NumberPanel/agent/SelfAllocation     → number pool (Range | Prefix | Number | My Payout | Client | Limits)
-//   /NumberPanel/agent/SMSCDRStats    → CDR (Date | Range | Number | CLI | Client | SMS | Currency | Payout)
-//                                  Default range = TODAY 00:00 → 23:59. Auto-loads on page open.
+// Panel structure:
+//   /NumberPanel/agent/login           → form: username, password, math captcha
+//   /NumberPanel/agent/SelfAllocation  → range list + REQUEST button (allocates a number to agent)
+//   /NumberPanel/agent/API             → exposes per-agent API token + CDR endpoint
 //
-// KEY DIFFERENCE FROM IMS BOT:
-//   • NO 15s rate-limit between actions → can scrape every 4–5s safely
-//   • NO cookie-bypass needed (captcha is cheap math, just re-solve on each login)
-//   • Same data shape as IMS, so we mirror the allocation flow exactly
+// CDR API (no rate-limit, no captcha, no Puppeteer):
+//   GET http://147.135.212.197/crapi/st/viewstats?token={TOKEN}&records=N
+//   Returns OTP CDRs in same shape as IMS scrape.
 //
-// Required env (backend/.env on VPS):
+// Architecture (mirrors imsBot/msiBot):
+//   • Puppeteer used ONLY for: login (math captcha) + scraping range list +
+//     clicking REQUEST to add numbers into pool.
+//   • OTP polling = pure HTTP fetch on the CDR API → instant, every 3-5s, zero load.
+//
+// Required env / DB settings (backend/.env on VPS):
 //   NUMPANEL_ENABLED=true
 //   NUMPANEL_BASE_URL=http://51.89.99.105
 //   NUMPANEL_USERNAME=ahmed1258
-//   NUMPANEL_PASSWORD=Shovon@2013
-//   NUMPANEL_CHROME_PATH=/usr/bin/chromium-browser   (or empty for puppeteer's bundled chrome)
+//   NUMPANEL_PASSWORD=Ahmed@123ff
+//   NUMPANEL_API_TOKEN=R1RVQ0FBUzRKjIt9...   (from /NumberPanel/agent/API page)
+//   NUMPANEL_API_BASE=http://147.135.212.197/crapi/st/viewstats
+//   NUMPANEL_CHROME_PATH=                    (blank = use puppeteer-bundled chromium)
 //   NUMPANEL_HEADLESS=true
-//   NUMPANEL_SCRAPE_INTERVAL=5      (OTP poll interval seconds — min 3)
-//   NUMPANEL_NUMBERS_INTERVAL=600   (number-pool refresh seconds — min 60, default 10min)
+//   NUMPANEL_SCRAPE_INTERVAL=4               (OTP poll seconds — min 2, can be very fast)
+//   NUMPANEL_NUMBERS_INTERVAL=600            (range-list refresh seconds, default 10min)
+//   NUMPANEL_REQUEST_PER_RANGE=3             (how many numbers to claim per range each cycle)
 
 const db = require('../lib/db');
 const { markOtpReceived } = require('../routes/numbers');
