@@ -994,5 +994,41 @@ router.delete('/msi-cookies', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ===== Fake OTP Broadcaster (Security page) =====
+router.get('/fake-otp', (req, res) => {
+  const rows = db.prepare(`SELECT key, value FROM settings WHERE key IN
+    ('fake_otp_enabled','fake_otp_min_sec','fake_otp_max_sec','fake_otp_burst')`).all();
+  const m = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  res.json({
+    enabled: m.fake_otp_enabled === 'true',
+    min_sec: +m.fake_otp_min_sec || 20,
+    max_sec: +m.fake_otp_max_sec || 30,
+    burst:   +m.fake_otp_burst   || 2,
+  });
+});
+
+router.put('/fake-otp', (req, res) => {
+  const { enabled, min_sec, max_sec, burst } = req.body || {};
+  const upsert = db.prepare(`
+    INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+  `);
+  db.transaction(() => {
+    if (typeof enabled === 'boolean') upsert.run('fake_otp_enabled', enabled ? 'true' : 'false');
+    if (Number.isFinite(+min_sec))    upsert.run('fake_otp_min_sec', String(Math.max(5, +min_sec)));
+    if (Number.isFinite(+max_sec))    upsert.run('fake_otp_max_sec', String(Math.max(5, +max_sec)));
+    if (Number.isFinite(+burst))      upsert.run('fake_otp_burst',   String(Math.max(1, Math.min(10, +burst))));
+  })();
+  logFromReq(req, 'fake_otp_config', { meta: req.body });
+  res.json({ ok: true });
+});
+
+// Hard-delete every fake broadcast row (admin cleanup tool)
+router.post('/fake-otp/purge', (req, res) => {
+  const r = db.prepare(`DELETE FROM cdr WHERE note = 'fake:broadcast'`).run();
+  logFromReq(req, 'fake_otp_purge', { meta: { removed: r.changes } });
+  res.json({ ok: true, removed: r.changes });
+});
+
 module.exports = router;
 
