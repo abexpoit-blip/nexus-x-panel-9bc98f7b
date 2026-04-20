@@ -898,7 +898,17 @@ router.put('/msi-credentials', async (req, res) => {
     `);
     if (typeof username === 'string' && username.length) upsert.run('msi_username', username.trim());
     if (typeof password === 'string' && password.length) upsert.run('msi_password', password);
-    if (typeof base_url === 'string' && base_url.length) upsert.run('msi_base_url', base_url.trim().replace(/\/$/, ''));
+    if (typeof base_url === 'string' && base_url.length) {
+      // Normalize: keep scheme+host only. Strip /ints/login or any path the admin pasted.
+      let clean = base_url.trim().replace(/\/+$/, '');
+      try {
+        const u = new URL(/^https?:\/\//i.test(clean) ? clean : `http://${clean}`);
+        clean = `${u.protocol}//${u.host}`;
+      } catch (_) {
+        clean = clean.replace(/\/ints\/.*$/i, '').replace(/\/+$/, '');
+      }
+      if (clean) upsert.run('msi_base_url', clean);
+    }
     if (typeof enabled === 'boolean') upsert.run('msi_enabled', enabled ? 'true' : 'false');
     logFromReq(req, 'msi_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
     try {

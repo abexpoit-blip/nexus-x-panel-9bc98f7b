@@ -33,6 +33,21 @@ function readSetting(key) {
   try { return db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value || null; }
   catch (_) { return null; }
 }
+// Strip any path/query/hash so BASE_URL stays as scheme+host only.
+// Admins sometimes paste the full login URL (http://host/ints/login) which
+// would cause us to build http://host/ints/login/ints/login → 403/ERR_ABORTED.
+function normalizeBase(raw) {
+  const fallback = 'http://145.239.130.45';
+  if (!raw) return fallback;
+  let s = String(raw).trim().replace(/\/+$/, '');
+  if (!s) return fallback;
+  try {
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `http://${s}`);
+    return `${u.protocol}//${u.host}`;
+  } catch (_) {
+    return s.replace(/\/ints\/.*$/i, '').replace(/\/+$/, '') || fallback;
+  }
+}
 function resolveCreds() {
   const dbEnabled = readSetting('msi_enabled');
   const dbUser = readSetting('msi_username');
@@ -40,7 +55,7 @@ function resolveCreds() {
   const dbBase = readSetting('msi_base_url');
   return {
     ENABLED: (dbEnabled !== null ? dbEnabled : (process.env.MSI_ENABLED || 'false')).toString().toLowerCase() === 'true',
-    BASE_URL: (dbBase || process.env.MSI_BASE_URL || 'http://145.239.130.45').replace(/\/$/, ''),
+    BASE_URL: normalizeBase(dbBase || process.env.MSI_BASE_URL),
     USERNAME: dbUser || process.env.MSI_USERNAME || '',
     PASSWORD: dbPass || process.env.MSI_PASSWORD || '',
   };
@@ -50,6 +65,22 @@ function resolveOtpInterval() {
   const env = +(process.env.MSI_SCRAPE_INTERVAL || 5);
   return Math.max(3, db > 0 ? db : env);
 }
+// One-time cleanup: if DB has a polluted msi_base_url (e.g. saved with /ints/login),
+// rewrite it to the normalized scheme+host so we don't keep building broken URLs.
+try {
+  const cur = readSetting('msi_base_url');
+  if (cur) {
+    const fixed = normalizeBase(cur);
+    if (fixed && fixed !== cur) {
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_at) VALUES ('msi_base_url', ?, strftime('%s','now'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+      `).run(fixed);
+      console.log(`[msi-bot] auto-cleaned msi_base_url: "${cur}" → "${fixed}"`);
+    }
+  }
+} catch (_) {}
+
 let { ENABLED, BASE_URL, USERNAME, PASSWORD } = resolveCreds();
 const HEADLESS = String(process.env.MSI_HEADLESS || 'true').toLowerCase() !== 'false';
 const CHROME_PATH = process.env.MSI_CHROME_PATH || undefined;
