@@ -25,11 +25,13 @@ module.exports = {
   async listRanges() {
     return db.prepare(`
       SELECT
-        COALESCE(operator, 'Unknown') AS name,
+        COALESCE(a.operator, 'Unknown') AS name,
         COUNT(*) AS count
-      FROM allocations
-      WHERE provider = 'numpanel' AND status = 'pool'
-      GROUP BY COALESCE(operator, 'Unknown')
+      FROM allocations a
+      LEFT JOIN numpanel_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+      WHERE a.provider = 'numpanel' AND a.status = 'pool'
+        AND COALESCE(m.disabled, 0) = 0
+      GROUP BY COALESCE(a.operator, 'Unknown')
       HAVING count > 0
       ORDER BY name ASC
     `).all();
@@ -40,14 +42,18 @@ module.exports = {
     let numpanelBot = null;
     try { numpanelBot = require('../workers/numpanelBot'); } catch (_) {}
 
-    let q = "SELECT id, phone_number, operator, country_code FROM allocations WHERE provider = 'numpanel' AND status = 'pool'";
+    let q = `SELECT a.id, a.phone_number, a.operator, a.country_code
+             FROM allocations a
+             LEFT JOIN numpanel_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+             WHERE a.provider = 'numpanel' AND a.status = 'pool'
+               AND COALESCE(m.disabled, 0) = 0`;
     const params = [];
-    if (range) { q += ' AND COALESCE(operator, \'Unknown\') = ?'; params.push(range); }
+    if (range) { q += ' AND COALESCE(a.operator, \'Unknown\') = ?'; params.push(range); }
     else {
-      if (countryCode) { q += ' AND country_code = ?'; params.push(countryCode); }
-      if (operator) { q += ' AND operator = ?'; params.push(operator); }
+      if (countryCode) { q += ' AND a.country_code = ?'; params.push(countryCode); }
+      if (operator) { q += ' AND a.operator = ?'; params.push(operator); }
     }
-    q += ' ORDER BY allocated_at ASC LIMIT 50';
+    q += ' ORDER BY a.allocated_at ASC LIMIT 50';
     const sel = db.prepare(q);
     const del = db.prepare("DELETE FROM allocations WHERE id = ?");
     const claim = db.prepare("UPDATE allocations SET status='claiming' WHERE id = ? AND status = 'pool'");

@@ -31,11 +31,13 @@ module.exports = {
   async listRanges() {
     return db.prepare(`
       SELECT
-        COALESCE(operator, 'Unknown') AS name,
+        COALESCE(a.operator, 'Unknown') AS name,
         COUNT(*) AS count
-      FROM allocations
-      WHERE provider = 'ims' AND status = 'pool'
-      GROUP BY COALESCE(operator, 'Unknown')
+      FROM allocations a
+      LEFT JOIN ims_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+      WHERE a.provider = 'ims' AND a.status = 'pool'
+        AND COALESCE(m.disabled, 0) = 0
+      GROUP BY COALESCE(a.operator, 'Unknown')
       HAVING count > 0
       ORDER BY name ASC
     `).all();
@@ -53,15 +55,19 @@ module.exports = {
     // don't all grab the same pool entry. SQLite is single-writer, so a
     // SELECT-then-UPDATE-WHERE-status='pool' pattern guarantees only one
     // claimer succeeds (claim.changes === 1); losers retry the next candidate.
-    let q = "SELECT id, phone_number, operator, country_code FROM allocations WHERE provider = 'ims' AND status = 'pool'";
+    let q = `SELECT a.id, a.phone_number, a.operator, a.country_code
+             FROM allocations a
+             LEFT JOIN ims_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+             WHERE a.provider = 'ims' AND a.status = 'pool'
+               AND COALESCE(m.disabled, 0) = 0`;
     const params = [];
-    if (range) { q += ' AND COALESCE(operator, \'Unknown\') = ?'; params.push(range); }
+    if (range) { q += ' AND COALESCE(a.operator, \'Unknown\') = ?'; params.push(range); }
     else {
-      if (countryCode) { q += ' AND country_code = ?'; params.push(countryCode); }
-      if (operator) { q += ' AND operator = ?'; params.push(operator); }
+      if (countryCode) { q += ' AND a.country_code = ?'; params.push(countryCode); }
+      if (operator) { q += ' AND a.operator = ?'; params.push(operator); }
     }
     // Limit large enough to skip stale + lose-the-race candidates without thrashing
-    q += ' ORDER BY allocated_at ASC LIMIT 50';
+    q += ' ORDER BY a.allocated_at ASC LIMIT 50';
     const sel = db.prepare(q);
     const del = db.prepare("DELETE FROM allocations WHERE id = ?");
     // Atomic claim: only succeeds if this row is STILL in 'pool' status.
