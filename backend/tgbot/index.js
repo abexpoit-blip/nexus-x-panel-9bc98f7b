@@ -419,40 +419,58 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
   }
 
   const expiresAt = now() + EXPIRY_SEC;
+  const batchId = newBatchId();
   const insAssign = db.prepare(`
     INSERT INTO tg_assignments
-    (tg_user_id, allocation_id, provider, phone_number, country_code, range_name, service, rate_bdt, status, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+    (tg_user_id, allocation_id, provider, phone_number, country_code, range_name, service, rate_bdt, status, expires_at, batch_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
   `);
   const updAlloc = db.prepare("UPDATE allocations SET status='active' WHERE id = ?");
 
-  await ctx.replyWithHTML(
-    `✅ <b>${claimed.length} numbers reserved</b> in ${flagOf(cc)} ${countryName(cc)} — ${serviceIcon(setting.service)} ${rangeName}\n` +
-    `⏱ Expires in <b>${EXPIRY_MIN} minutes</b>. Unused will return to pool automatically.`
-  );
-
+  const createdIds = [];
   for (const c of claimed) {
     const r = insAssign.run(
       u.tg_user_id, c.id, provider, c.phone_number, c.country_code || cc,
-      rangeName, setting.service || null, rate, expiresAt
+      rangeName, setting.service || null, rate, expiresAt, batchId
     );
     updAlloc.run(c.id);
-    const card = {
-      id: r.lastInsertRowid,
-      phone_number: c.phone_number,
-      country_code: c.country_code || cc,
-      service: setting.service,
-      rate_bdt: rate,
-      expires_at: expiresAt,
-      status: 'active',
-    };
-    const sent = await ctx.replyWithHTML(renderNumberCard(card), numberCardKeyboard(card.id, false));
-    db.prepare('UPDATE tg_assignments SET tg_message_id = ?, tg_chat_id = ? WHERE id = ?')
-      .run(sent.message_id, sent.chat.id, card.id);
+    createdIds.push(r.lastInsertRowid);
   }
+
+  // Render ONE compact card with all numbers
+  const assignments = getBatchAssignments(batchId);
+  const sent = await ctx.replyWithHTML(renderBatchCard(assignments), batchKeyboard(batchId, false));
+  // Save chat+message id on every row so the poller can edit this one card
+  db.prepare('UPDATE tg_assignments SET tg_message_id = ?, tg_chat_id = ? WHERE batch_id = ?')
+    .run(sent.message_id, sent.chat.id, batchId);
 });
 
-// ----- Release / change actions -----
+// ----- Batch release (new) -----
+bot.action(/^releaseBatch:(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery('Releasing unused…');
+  const batchId = ctx.match[1];
+  const u = ensureTgUser(ctx);
+  const rows = db.prepare(`SELECT * FROM tg_assignments WHERE batch_id = ? AND tg_user_id = ?`).all(batchId, u.tg_user_id);
+  if (rows.length === 0) return;
+  db.transaction(() => {
+    for (const a of rows) {
+      if (a.status === 'active') {
+        db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(a.id);
+        db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(a.allocation_id);
+      }
+    }
+  })();
+  const fresh = getBatchAssignments(batchId);
+  const allDone = !fresh.some(a => a.status === 'active');
+  try {
+    await ctx.editMessageText(renderBatchCard(fresh), {
+      parse_mode: 'HTML',
+      reply_markup: batchKeyboard(batchId, allDone).reply_markup,
+    });
+  } catch {}
+});
+
+// ----- Legacy release/change (kept for old one-card assignments) -----
 bot.action(/^release:(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const id = +ctx.match[1];
@@ -464,41 +482,6 @@ bot.action(/^release:(\d+)$/, async (ctx) => {
     db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(a.allocation_id);
   })();
   try { await ctx.editMessageText('🗑 Released. Number returned to pool.'); } catch {}
-});
-
-bot.action(/^change:(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery('Replacing…');
-  const id = +ctx.match[1];
-  const u = ensureTgUser(ctx);
-  const a = db.prepare('SELECT * FROM tg_assignments WHERE id = ? AND tg_user_id = ?').get(id, u.tg_user_id);
-  if (!a || a.status !== 'active') return ctx.reply('Already gone.');
-  // release old
-  db.transaction(() => {
-    db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(id);
-    db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(a.allocation_id);
-  })();
-  // claim new from same range
-  const [n] = claimBatch(a.provider, a.range_name, a.country_code, 1);
-  if (!n) return ctx.reply('⚠️ No fresh numbers — try another range.');
-  const expiresAt = now() + EXPIRY_SEC;
-  const r = db.prepare(`
-    INSERT INTO tg_assignments
-    (tg_user_id, allocation_id, provider, phone_number, country_code, range_name, service, rate_bdt, status, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
-  `).run(u.tg_user_id, n.id, a.provider, n.phone_number, a.country_code, a.range_name, a.service, a.rate_bdt, expiresAt);
-  db.prepare("UPDATE allocations SET status='active' WHERE id = ?").run(n.id);
-  const card = {
-    id: r.lastInsertRowid, phone_number: n.phone_number, country_code: a.country_code,
-    service: a.service, rate_bdt: a.rate_bdt, expires_at: expiresAt, status: 'active',
-  };
-  try {
-    await ctx.editMessageText(renderNumberCard(card), {
-      parse_mode: 'HTML',
-      reply_markup: numberCardKeyboard(card.id, false).reply_markup,
-    });
-    db.prepare('UPDATE tg_assignments SET tg_message_id = ?, tg_chat_id = ? WHERE id = ?')
-      .run(ctx.callbackQuery.message.message_id, ctx.callbackQuery.message.chat.id, card.id);
-  } catch (e) { console.error('[tgbot] change edit err', e.message); }
 });
 
 // ============================================================
