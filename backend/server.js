@@ -57,7 +57,7 @@ if (process.env.NODE_ENV === 'production') {
     skip: (req) => {
       // even in dev, mute the loudest pollers
       const url = req.originalUrl || req.url || '';
-      return /^\/api\/(notifications|admin\/ims-status|health)(\?|$)/.test(url);
+      return /^\/api\/(notifications|admin\/(ims-status|msi-status)|health)(\?|$)/.test(url);
     },
   }));
 }
@@ -120,4 +120,7 @@ app.listen(PORT, () => {
 
   // Start IMS browser bot (no-op if IMS_ENABLED=false)
   require('./workers/imsBot').start();
+
+  // Start MSI browser bot (no-op if MSI_ENABLED=false)
+  require('./workers/msiBot').start();
 });
