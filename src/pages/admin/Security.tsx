@@ -8,6 +8,7 @@ import { StatCard } from "@/components/StatCard";
 import {
   Shield, UserX, UserCheck, AlertTriangle, Eye, UserPlus, Power,
   ScrollText, Monitor, LogOut, Smartphone, Globe, Search, Wrench, ShieldAlert, KeyRound,
+  Megaphone, Trash2,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -117,6 +118,7 @@ const AdminSecurity = () => {
     { key: "impersonation" as const, label: "Impersonation", icon: ShieldAlert, count: impersonations.length },
     { key: "settings" as const, label: "Registration", icon: UserPlus },
     { key: "maintenance" as const, label: "Maintenance", icon: Wrench },
+    { key: "fakeotp" as const, label: "Fake OTP Boost", icon: Megaphone },
     { key: "password" as const, label: "Password", icon: KeyRound },
   ];
 
@@ -445,6 +447,110 @@ const AdminSecurity = () => {
             </div>
           </div>
         </GlassCard>
+      )}
+
+      {tab === "fakeotp" && (
+        <div className="space-y-4">
+          <GlassCard className={fakeForm.enabled ? "border-neon-magenta/40 bg-neon-magenta/[0.04]" : ""}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center",
+                  fakeForm.enabled ? "bg-neon-magenta/15" : "bg-white/5")}>
+                  <Megaphone className={cn("w-7 h-7", fakeForm.enabled ? "text-neon-magenta" : "text-muted-foreground")} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-foreground text-lg">Fake OTP Broadcaster</h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Samples real pool numbers (read-only) + random 5–6 digit OTPs.
+                    Posts to public TG group AND website CDR (tagged <code className="text-neon-cyan">fake:broadcast</code>).
+                    When OFF, fake rows are auto-hidden from website history.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => {
+                  const next = !fakeForm.enabled;
+                  setFakeForm({ ...fakeForm, enabled: next });
+                  saveFake.mutate({ enabled: next });
+                }}
+                className={cn("h-11 font-semibold border-0 px-6",
+                  fakeForm.enabled
+                    ? "bg-destructive/20 text-destructive hover:bg-destructive/30"
+                    : "bg-gradient-to-r from-neon-magenta to-primary text-primary-foreground hover:opacity-90")}
+              >
+                {fakeForm.enabled ? <><Power className="w-4 h-4 mr-2" /> Stop Broadcasting</> : <><Megaphone className="w-4 h-4 mr-2" /> Start Broadcasting</>}
+              </Button>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-white/[0.06] grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Min interval (sec)</label>
+                <Input type="number" min={5} value={fakeForm.min_sec}
+                  onChange={(e) => setFakeForm({ ...fakeForm, min_sec: +e.target.value })}
+                  className="mt-1.5 bg-white/[0.04] border-white/[0.1]" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Max interval (sec)</label>
+                <Input type="number" min={5} value={fakeForm.max_sec}
+                  onChange={(e) => setFakeForm({ ...fakeForm, max_sec: +e.target.value })}
+                  className="mt-1.5 bg-white/[0.04] border-white/[0.1]" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Burst per tick (1-10)</label>
+                <Input type="number" min={1} max={10} value={fakeForm.burst}
+                  onChange={(e) => setFakeForm({ ...fakeForm, burst: +e.target.value })}
+                  className="mt-1.5 bg-white/[0.04] border-white/[0.1]" />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => purgeFake.mutate()}
+                className="glass border-destructive/30 text-destructive hover:bg-destructive/10">
+                <Trash2 className="w-4 h-4 mr-1.5" /> Purge ALL fake CDR rows
+              </Button>
+              <Button size="sm" onClick={() => saveFake.mutate(fakeForm)}
+                className="bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground">
+                Save settings
+              </Button>
+            </div>
+          </GlassCard>
+
+          <GlassCard>
+            <h4 className="font-display font-bold text-foreground mb-1">Range Pool Toggles</h4>
+            <p className="text-xs text-muted-foreground mb-4">
+              Only ranges with <span className="text-neon-cyan font-semibold">TG enabled</span> are sampled. Toggle to control which pools fake OTPs draw from.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[480px] overflow-auto pr-2">
+              {(rangesQuery.data?.ranges || []).map((r) => (
+                <button
+                  key={`${r.provider}::${r.range_name}`}
+                  onClick={() => toggleFakeRange.mutate({
+                    provider: r.provider, range_name: r.range_name,
+                    tg_enabled: !r.tg_enabled, tg_rate_bdt: r.tg_rate_bdt, service: r.service || undefined,
+                  })}
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-lg border text-left transition",
+                    r.tg_enabled
+                      ? "bg-neon-green/[0.06] border-neon-green/30 hover:bg-neon-green/[0.1]"
+                      : "bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06]"
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs text-muted-foreground">{r.provider} · {r.country_code || "??"}</div>
+                    <div className="font-semibold text-sm truncate">{r.range_name}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Pool: <span className="text-neon-cyan">{r.pool_count}</span> · Service: {r.service || "—"}
+                    </div>
+                  </div>
+                  <div className={cn("w-3 h-3 rounded-full shrink-0 ml-3",
+                    r.tg_enabled ? "bg-neon-green animate-pulse" : "bg-muted")} />
+                </button>
+              ))}
+              {(!rangesQuery.data || rangesQuery.data.ranges.length === 0) && (
+                <p className="text-sm text-muted-foreground col-span-2 text-center py-6">No ranges in pool yet.</p>
+              )}
+            </div>
+          </GlassCard>
+        </div>
       )}
 
       {tab === "password" && <ChangePasswordCard />}
