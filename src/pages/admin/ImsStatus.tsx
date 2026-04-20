@@ -358,11 +358,25 @@ const AdminImsStatus = () => {
             <Pill ok={s.lastScrapeOk} label={s.lastScrapeOk ? "Last scrape OK" : "Last scrape failed"} />
           </div>
 
-          {/* Credentials editor */}
-          <CredentialsEditor onSaved={() => refetch()} />
+          {/* Credentials editor — hidden behind reveal for safety */}
+          <LockReveal
+            title="IMS Login Credentials"
+            subtitle="Username, password & base URL — sensitive. Click reveal to view/edit."
+            accent="neon-cyan"
+            icon={<KeyRound className="w-4 h-4 text-neon-cyan" />}
+          >
+            <CredentialsEditor onSaved={() => refetch()} />
+          </LockReveal>
 
           {/* Session cookies — bypass captcha entirely (recommended) */}
-          <CookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
+          <LockReveal
+            title="IMS Session Cookies"
+            subtitle="Saved browser session — paste once, skip captcha forever. Sensitive."
+            accent="neon-purple"
+            icon={<ClipboardPaste className="w-4 h-4 text-neon-purple" />}
+          >
+            <CookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
+          </LockReveal>
 
           {/* OTP poll interval setting */}
           <OtpIntervalSetting onSaved={() => refetch()} />
