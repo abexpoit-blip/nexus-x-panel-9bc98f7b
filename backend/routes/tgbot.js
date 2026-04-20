@@ -177,20 +177,22 @@ router.get('/broadcasts', (req, res) => {
 });
 
 router.get('/config', (req, res) => {
-  const keys = ['tg_public_channel', 'tg_required_group', 'tg_required_otp_group', 'tg_terms_text'];
+  const keys = ['tg_public_channel', 'tg_required_group', 'tg_required_group_chat', 'tg_required_otp_group', 'tg_required_otp_group_chat', 'tg_terms_text'];
   const rows = db.prepare(`SELECT key, value FROM settings WHERE key IN (${keys.map(() => '?').join(',')})`).all(...keys);
   const settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   res.json({
     tg_public_channel: settings.tg_public_channel || '',
     tg_required_group: settings.tg_required_group || 'https://t.me/nexusxotpbot',
+    tg_required_group_chat: settings.tg_required_group_chat || '',
     tg_required_otp_group: settings.tg_required_otp_group || 'https://t.me/+6RUOKrkz6YU1Yjk1',
+    tg_required_otp_group_chat: settings.tg_required_otp_group_chat || '',
     tg_terms_text: settings.tg_terms_text || 'By using this bot you agree to follow our rules, keep OTP data private, and use numbers responsibly.',
   });
 });
 
 router.put('/config', (req, res) => {
   const payload = req.body || {};
-  const allowed = ['tg_public_channel', 'tg_required_group', 'tg_required_otp_group', 'tg_terms_text'];
+  const allowed = ['tg_public_channel', 'tg_required_group', 'tg_required_group_chat', 'tg_required_otp_group', 'tg_required_otp_group_chat', 'tg_terms_text'];
   const stmt = db.prepare(`
     INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at

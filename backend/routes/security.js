@@ -7,7 +7,7 @@ const router = express.Router();
 
 // PUBLIC settings (no auth) — exposes safe flags like signup_enabled, maintenance_mode
 router.get('/settings/public', (req, res) => {
-  const keys = ['signup_enabled', 'maintenance_mode', 'maintenance_message', 'tg_public_channel', 'tg_required_group', 'tg_required_otp_group'];
+  const keys = ['signup_enabled', 'maintenance_mode', 'maintenance_message', 'tg_public_channel', 'tg_required_group', 'tg_required_group_chat', 'tg_required_otp_group', 'tg_required_otp_group_chat'];
   const out = {};
   for (const k of keys) {
     const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);
@@ -19,7 +19,9 @@ router.get('/settings/public', (req, res) => {
     maintenance_message: out.maintenance_message || '',
     tg_public_channel: out.tg_public_channel || '',
     tg_required_group: out.tg_required_group || '',
+    tg_required_group_chat: out.tg_required_group_chat || '',
     tg_required_otp_group: out.tg_required_otp_group || '',
+    tg_required_otp_group_chat: out.tg_required_otp_group_chat || '',
   });
 });
 
