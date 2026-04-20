@@ -198,7 +198,67 @@ function getActiveAssignments(tgUserId) {
   `).all(tgUserId, now());
 }
 
-// ---------- Render the number card ----------
+// ---------- Render ONE compact card listing all numbers in a batch ----------
+function renderBatchCard(assignments) {
+  if (!assignments || assignments.length === 0) return '📭 No numbers.';
+  const live = assignments.filter(a => a.status !== 'released');
+  const head = live[0] || assignments[0];
+  const cc = bestCountryCode(head.country_code, head.range_name);
+  const flag = flagOf(cc);
+  const cName = countryName(cc);
+  const svc = head.service ? `${serviceIcon(head.service)} ${head.service}` : '📡 SMS';
+  const remaining = Math.max(0, head.expires_at - now());
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  const timer = `⏱ ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+  const gotOtps = assignments.filter(a => a.status === 'otp_received' && a.otp_code);
+  const copyAll = gotOtps.map(a => `${a.phone_number}|${a.otp_code}`).join('\n');
+
+  let txt =
+    `📱 <b>Your Numbers (${assignments.length})</b>\n` +
+    `${flag} <b>${escapeHtml(cName)}</b> — ${svc}\n` +
+    `${timer} until expiry • Rate: ${fmtBdt(head.rate_bdt)} per OTP\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n`;
+
+  assignments.forEach((a, i) => {
+    const idx = `${(i + 1).toString().padStart(2, '0')}.`;
+    if (a.status === 'otp_received' && a.otp_code) {
+      txt += `✅ ${idx} <code>${a.phone_number}|${escapeHtml(a.otp_code)}</code>\n`;
+    } else if (a.status === 'expired' || a.status === 'released') {
+      txt += `⛔ ${idx} <s>${a.phone_number}</s>\n`;
+    } else {
+      txt += `⏳ ${idx} <code>${a.phone_number}</code>\n`;
+    }
+  });
+
+  if (gotOtps.length > 0) {
+    txt += `━━━━━━━━━━━━━━━━━━━━\n📋 <b>Copy ALL received (${gotOtps.length}):</b>\n<code>${escapeHtml(copyAll)}</code>`;
+  } else {
+    txt += `\n<i>Tap any number above to copy. OTPs arrive here automatically.</i>`;
+  }
+  return txt;
+}
+
+function batchKeyboard(batchId, allDone) {
+  const rows = [];
+  if (!allDone) {
+    rows.push([
+      Markup.button.callback('🗑 Release Unused', `releaseBatch:${batchId}`),
+      Markup.button.callback('🌍 Get More', 'menu:get'),
+    ]);
+  } else {
+    rows.push([Markup.button.callback('🌍 Get Another Batch', 'menu:get')]);
+  }
+  return Markup.inlineKeyboard(rows);
+}
+
+// Fetch batch assignments in stable order
+function getBatchAssignments(batchId) {
+  return db.prepare(`SELECT * FROM tg_assignments WHERE batch_id = ? ORDER BY id ASC`).all(batchId);
+}
+
+// ---------- Legacy single-card render (used by My Numbers list) ----------
 function renderNumberCard(a) {
   const cc = bestCountryCode(a.country_code, a.range_name);
   const flag = flagOf(cc);
@@ -208,40 +268,22 @@ function renderNumberCard(a) {
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
   const timer = `⏱ ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-
   if (a.status === 'otp_received' && a.otp_code) {
     return (
-      `✅ <b>OTP Received!</b>\n\n` +
-      `📞 Number: <code>${a.phone_number}</code>\n` +
-      `${flag} Country: <b>${escapeHtml(cName)}</b>\n` +
-      `🔧 Service: <b>${escapeHtml(a.service || '—')}</b>\n` +
-      `🔑 Code: <code>${escapeHtml(a.otp_code)}</code>\n\n` +
-      `📋 <b>Tap to copy (Number|OTP):</b>\n` +
-      `<code>${a.phone_number}|${escapeHtml(a.otp_code)}</code>\n\n` +
-      (a.otp_full_text ? `💬 Full message:\n<code>${escapeHtml(a.otp_full_text).slice(0, 400)}</code>` : '')
+      `✅ ${flag} ${escapeHtml(cName)} — ${svc}\n` +
+      `📋 <code>${a.phone_number}|${escapeHtml(a.otp_code)}</code>\n` +
+      `<i>${fmtAgo(a.otp_received_at)}</i>`
     );
   }
   return (
-    `📱 <b>Your Number is Ready!</b>\n\n` +
-    `${flag} <b>${escapeHtml(cName)}</b> — ${svc}\n` +
-    `📋 Tap to copy:\n<code>${a.phone_number}</code>\n\n` +
-    `${timer} until expiry • Rate: ${fmtBdt(a.rate_bdt)}\n` +
-    `Keep this chat open — incoming OTP will arrive here.`
+    `📱 ${flag} ${escapeHtml(cName)} — ${svc}\n` +
+    `📋 <code>${a.phone_number}</code>\n` +
+    `${timer} until expiry`
   );
 }
 
-function numberCardKeyboard(assignmentId, hasOtp) {
-  if (hasOtp) {
-    return Markup.inlineKeyboard([
-      [Markup.button.callback('🔄 Get Another Number', 'menu:get')],
-      [Markup.button.callback('📞 My Active Numbers', 'menu:mine')],
-    ]);
-  }
-  return Markup.inlineKeyboard([
-    [Markup.button.callback('🔁 Change Number', `change:${assignmentId}`),
-     Markup.button.callback('🗑 Release', `release:${assignmentId}`)],
-    [Markup.button.callback('🌍 Get Another (different)', 'menu:get')],
-  ]);
+function numberCardKeyboard() {
+  return Markup.inlineKeyboard([[Markup.button.callback('🌍 Get Number', 'menu:get')]]);
 }
 
 // ============================================================
