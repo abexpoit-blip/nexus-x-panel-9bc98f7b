@@ -152,18 +152,19 @@ function firstTimeWelcomeText(u) {
     `  💎 Wallet-based, no surprises\n` +
     `  📊 Live public OTP feed\n\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🚪 <b>One-time setup — join both groups:</b>\n\n` +
-    `1️⃣  <a href="${cfg.requiredGroup}">📣 Public Channel</a>\n` +
-    `2️⃣  <a href="${cfg.otpGroup}">📥 OTP History Group</a>\n\n` +
+    `🚪 <b>One-time setup</b>\n` +
+    `Tap the buttons below to join <b>both</b> groups, then press ✅\n\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📜 <b>Terms of Use</b>\n<i>${escapeHtml(cfg.terms)}</i>\n\n` +
-    `Tap <b>"✅ I Joined &amp; Accept"</b> below 👇`
+    `📜 <b>Terms of Use</b>\n<i>${escapeHtml(cfg.terms)}</i>`
   );
 }
 
 function onboardingKeyboard() {
+  const cfg = getBotConfig();
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✅ I Joined & Accept', 'onboard:accept')],
+    [Markup.button.url('📣 Join Public Channel', cfg.requiredGroup)],
+    [Markup.button.url('📥 Join OTP History Group', cfg.otpGroup)],
+    [Markup.button.callback('✅ I Joined & Accept Terms', 'onboard:accept')],
     [Markup.button.callback('🔄 Check Again', 'onboard:check')],
   ]);
 }
