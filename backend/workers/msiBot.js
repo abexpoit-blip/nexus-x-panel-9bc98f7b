@@ -177,10 +177,25 @@ async function ensureBrowser() {
 // ---- Login (handles math captcha) ----
 async function loginOnce() {
   dlog('[msi-bot] navigating to login page');
-  await page.goto(`${BASE_URL}/ints/login`, { waitUntil: 'networkidle2', timeout: 30000 });
+  // Block recaptcha + heavy assets so page actually finishes loading in headless
+  try {
+    if (!page.__msiReqIntercept) {
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const u = req.url();
+        const t = req.resourceType();
+        if (/google\.com\/recaptcha|gstatic\.com\/recaptcha/i.test(u)) return req.abort();
+        if (t === 'image' || t === 'font' || t === 'media') return req.abort();
+        return req.continue();
+      });
+      page.__msiReqIntercept = true;
+    }
+  } catch (_) {}
 
-  // Wait for form
-  await page.waitForSelector('input[type="password"]', { timeout: 15000 });
+  await page.goto(`${BASE_URL}/ints/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+  // Wait for password field — try multiple selectors
+  await page.waitForSelector('input[type="password"], input[name="password"]', { timeout: 30000 });
 
   // Resolve username/password fields (MSI uses unnamed inputs inside a form)
   const fields = await page.evaluate(() => {
