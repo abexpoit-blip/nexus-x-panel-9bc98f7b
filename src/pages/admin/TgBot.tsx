@@ -28,6 +28,24 @@ const flagOf = (cc?: string | null) => {
   return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65) +
          String.fromCodePoint(0x1F1E6 + cc.charCodeAt(1) - 65);
 };
+const COUNTRY_NAMES: Record<string, string> = {
+  AF:"Afghanistan",AL:"Albania",DZ:"Algeria",AR:"Argentina",AM:"Armenia",AU:"Australia",AT:"Austria",AZ:"Azerbaijan",
+  BD:"Bangladesh",BY:"Belarus",BE:"Belgium",BO:"Bolivia",BR:"Brazil",BG:"Bulgaria",KH:"Cambodia",CM:"Cameroon",
+  CA:"Canada",CL:"Chile",CN:"China",CO:"Colombia",CR:"Costa Rica",HR:"Croatia",CU:"Cuba",CY:"Cyprus",CZ:"Czechia",
+  DK:"Denmark",DO:"Dominican Republic",EC:"Ecuador",EG:"Egypt",SV:"El Salvador",EE:"Estonia",ET:"Ethiopia",FI:"Finland",
+  FR:"France",GE:"Georgia",DE:"Germany",GH:"Ghana",GR:"Greece",GT:"Guatemala",HN:"Honduras",HK:"Hong Kong",HU:"Hungary",
+  IS:"Iceland",IN:"India",ID:"Indonesia",IR:"Iran",IQ:"Iraq",IE:"Ireland",IL:"Israel",IT:"Italy",JM:"Jamaica",JP:"Japan",
+  JO:"Jordan",KZ:"Kazakhstan",KE:"Kenya",KW:"Kuwait",KG:"Kyrgyzstan",LA:"Laos",LV:"Latvia",LB:"Lebanon",LY:"Libya",
+  LT:"Lithuania",LU:"Luxembourg",MO:"Macao",MY:"Malaysia",ML:"Mali",MT:"Malta",MX:"Mexico",MD:"Moldova",MN:"Mongolia",
+  MA:"Morocco",MM:"Myanmar",NP:"Nepal",NL:"Netherlands",NZ:"New Zealand",NI:"Nicaragua",NG:"Nigeria",NO:"Norway",
+  OM:"Oman",PK:"Pakistan",PA:"Panama",PY:"Paraguay",PE:"Peru",PH:"Philippines",PL:"Poland",PT:"Portugal",PR:"Puerto Rico",
+  QA:"Qatar",RO:"Romania",RU:"Russia",SA:"Saudi Arabia",RS:"Serbia",SG:"Singapore",SK:"Slovakia",SI:"Slovenia",
+  ZA:"South Africa",KR:"South Korea",ES:"Spain",LK:"Sri Lanka",SD:"Sudan",SE:"Sweden",CH:"Switzerland",SY:"Syria",
+  TW:"Taiwan",TJ:"Tajikistan",TZ:"Tanzania",TH:"Thailand",TR:"Turkey",TM:"Turkmenistan",UG:"Uganda",UA:"Ukraine",
+  AE:"UAE",GB:"United Kingdom",US:"United States",UY:"Uruguay",UZ:"Uzbekistan",VE:"Venezuela",VN:"Vietnam",YE:"Yemen",
+  ZM:"Zambia",ZW:"Zimbabwe",
+};
+const countryName = (cc?: string | null) => (cc && COUNTRY_NAMES[cc.toUpperCase()]) || cc || "Unknown";
 const serviceIcon = (s?: string | null) => {
   const x = (s || "").toLowerCase();
   if (x.includes("facebook")) return "🟦";
@@ -257,9 +275,13 @@ function RangesTab() {
                 <tr key={key} className="border-t border-white/[0.04] hover:bg-white/[0.02]">
                   <td className="py-2.5 px-4 uppercase font-mono text-[10px] text-neon-cyan">{r.provider}</td>
                   <td className="py-2.5 px-4">
-                    {flagOf(r.country_code)} <span className="text-muted-foreground">{r.country_code || "—"}</span>
+                    <span className="text-base mr-1.5">{flagOf(r.country_code)}</span>
+                    <span className="font-medium">{countryName(r.country_code)}</span>
+                    <span className="text-muted-foreground ml-1.5 text-[10px] font-mono">{r.country_code || "—"}</span>
                   </td>
-                  <td className="py-2.5 px-4 font-medium">{r.range_name}</td>
+                  <td className="py-2.5 px-4 font-medium">
+                    <span className="mr-1.5">{flagOf(r.country_code)}</span>{r.range_name}
+                  </td>
                   <td className="py-2.5 px-4 text-right font-mono text-neon-green">{r.pool_count.toLocaleString()}</td>
                   <td className="py-2.5 px-4">
                     <select
