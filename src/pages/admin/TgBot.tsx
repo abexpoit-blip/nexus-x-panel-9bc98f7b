@@ -158,27 +158,85 @@ function Kpi({ icon, label, value, accent }: { icon: React.ReactNode; label: str
 // OVERVIEW
 // ============================================================
 function OverviewTab() {
+  const [savingExpiry, setSavingExpiry] = useState(false);
+  const { data: expiry, refetch: refetchExpiry, isLoading: expiryLoading } = useQuery({
+    queryKey: ["tgbot-otp-expiry"],
+    queryFn: () => api.admin.otpExpiry(),
+  });
+  const currentMin = expiry?.expiry_min ?? 30;
+  const expiryOpts = expiry?.options_min ?? [5, 8, 10, 15, 20, 30];
+
+  const saveExpiry = async (min: number) => {
+    if (min === currentMin) return;
+    setSavingExpiry(true);
+    try {
+      await api.admin.otpExpirySave(min);
+      toast.success(`OTP expiry set to ${min} min — shared across website + Telegram bot`);
+      await refetchExpiry();
+    } catch (e) {
+      toast.error("Failed: " + (e as Error).message);
+    } finally {
+      setSavingExpiry(false);
+    }
+  };
+
   return (
-    <div className="glass-premium p-6 rounded-xl border border-white/[0.06] text-sm space-y-3">
-      <h3 className="text-base font-display font-bold flex items-center gap-2">
-        <Bot className="w-5 h-5 text-primary" /> NEXUS X Number Panel — TG Bot
-      </h3>
-      <p className="text-muted-foreground leading-relaxed">
-        This bot runs as <code className="text-neon-cyan">nexus-tgbot</code> — a separate pm2 process
-        sharing the same number pool as the website. Users browse country &amp; range,
-        get a batch of <b>10 numbers</b> per request, and OTPs are pushed to them automatically with a
-        copy-to-clipboard <code className="text-neon-magenta">Number|OTP</code> format.
-      </p>
-      <ul className="space-y-2 text-muted-foreground">
-        <li>• ⏱ Numbers auto-expire after <b>30 min</b> if no OTP — returned to pool.</li>
-        <li>• 🔄 Users with active numbers can request more without losing existing ones.</li>
-        <li>• 💰 Each OTP success deducts the per-range rate (admin sets).</li>
-        <li>• 📊 Last 24h leaderboard (top countries + top ranges) shown to users.</li>
-        <li>• 📣 Broadcast a message to all active TG users from the Broadcast tab.</li>
-      </ul>
-      <div className="text-xs text-muted-foreground pt-2 border-t border-white/[0.05]">
-        Manage which ranges are exposed to the bot in <b>Range Toggles</b>. Only enabled ranges with
-        pool &gt; 0 appear in the bot menu.
+    <div className="space-y-4">
+      <div className="glass-premium p-6 rounded-xl border border-white/[0.06] text-sm space-y-3">
+        <h3 className="text-base font-display font-bold flex items-center gap-2">
+          <Bot className="w-5 h-5 text-primary" /> NEXUS X Number Panel — TG Bot
+        </h3>
+        <p className="text-muted-foreground leading-relaxed">
+          This bot runs as <code className="text-neon-cyan">nexus-tgbot</code> — a separate pm2 process
+          sharing the same number pool as the website. Users browse country &amp; range,
+          get a batch of <b>10 numbers</b> per request, and OTPs are pushed to them automatically with a
+          copy-to-clipboard <code className="text-neon-magenta">Number|OTP</code> format.
+        </p>
+        <ul className="space-y-2 text-muted-foreground">
+          <li>• ⏱ Numbers auto-expire after <b>{currentMin} min</b> if no OTP — returned to pool.</li>
+          <li>• 🔄 Users with active numbers can request more without losing existing ones.</li>
+          <li>• 💰 Each OTP success deducts the per-range rate (admin sets).</li>
+          <li>• 🔍 Active Range Checker shows top countries + top ranges.</li>
+          <li>• 📣 Broadcast a message to all active TG users from the Broadcast tab.</li>
+        </ul>
+        <div className="text-xs text-muted-foreground pt-2 border-t border-white/[0.05]">
+          Manage which ranges are exposed to the bot in <b>Range Toggles</b>. Only enabled ranges with
+          pool &gt; 0 appear in the bot menu.
+        </div>
+      </div>
+
+      <div className="glass-premium p-5 rounded-xl border border-white/[0.06] space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" /> Shared Number Expiry Window
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              One setting for both website panel and Telegram bot. Agents and TG users follow the same timer.
+              <span className="ml-2 font-mono">
+                Current: <span className="text-primary font-semibold">{currentMin} min</span>
+                {expiry && <span className="text-muted-foreground/60"> ({expiry.source})</span>}
+              </span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {expiryOpts.map((v) => (
+              <button
+                key={v}
+                onClick={() => saveExpiry(v)}
+                disabled={savingExpiry || expiryLoading}
+                className={cn(
+                  "px-4 py-2 rounded-md text-xs font-semibold border transition disabled:opacity-50",
+                  v === currentMin
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground"
+                )}
+              >
+                {v}m
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

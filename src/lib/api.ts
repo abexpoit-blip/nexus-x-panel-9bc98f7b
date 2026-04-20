@@ -290,7 +290,7 @@ export const api = {
 
   // Numbers
   providers: () => request<{ providers: { id: string; name: string }[] }>("/numbers/providers"),
-  numbersConfig: () => request<{ otp_expiry_sec: number }>("/numbers/config"),
+  numbersConfig: () => request<{ otp_expiry_sec: number; server_now: number }>("/numbers/config"),
   countries: (provider: string) => request<{ countries: any[] }>(`/numbers/countries/${provider}`),
   operators: (provider: string, countryId: number) =>
     request<{ operators: any[] }>(`/numbers/operators/${provider}/${countryId}`),
@@ -302,7 +302,7 @@ export const api = {
     request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/ims/pool", { method: "POST", body: JSON.stringify(body) }),
   msiAddPool: (body: { numbers: string[]; range: string; country_code?: string }) =>
     request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/msi/pool", { method: "POST", body: JSON.stringify(body) }),
-  myNumbers: () => request<{ numbers: Allocation[]; recent_window_hours?: number }>("/numbers/my"),
+  myNumbers: () => request<{ numbers: Allocation[]; recent_window_hours?: number; otp_expiry_sec?: number; server_now?: number }>("/numbers/my"),
   numberHistory: (params: { page?: number; page_size?: number; q?: string; from?: string; to?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.page) qs.set("page", String(params.page));

@@ -66,8 +66,9 @@ const AgentGetNumber = () => {
   const [flashOtpIds, setFlashOtpIds] = useState<Set<number>>(new Set());
   const [quantity, setQuantity] = useState(1);
   const [page, setPage] = useState(1);
+  const [serverDriftSec, setServerDriftSec] = useState(0);
   const [nowTick, setNowTick] = useState(() => Math.floor(Date.now() / 1000));
-  const [expirySec, setExpirySec] = useState<number>(480); // fallback 8 min
+  const [expirySec, setExpirySec] = useState<number>(1800); // fallback 30 min
   // Auto-release expired toggle — persisted in localStorage so it survives
   // reload. When ON, any number expired for >60s is released automatically.
   const [autoRelease, setAutoRelease] = useState<boolean>(
@@ -83,6 +84,7 @@ const AgentGetNumber = () => {
   // Track IDs we've already auto-released so we don't loop on stale rows.
   const autoReleasedIds = useRef<Set<number>>(new Set());
   const PAGE_SIZE = 25;
+  const serverNowSec = nowTick - serverDriftSec;
 
   // Web Audio beep — no asset needed. Two short ascending tones (660→880 Hz)
   // play when a fresh OTP lands. Catches the agent's attention in another tab.
@@ -145,13 +147,13 @@ const AgentGetNumber = () => {
     return () => clearInterval(i);
   }, []);
 
-  // Fetch admin-configured OTP expiry window once on mount (5-30 min).
-  // Drives the per-number countdown timer so it always matches the backend
-  // cleanup cron — no more "UI says 2 min left but server already expired it".
+  // Fetch shared expiry config + server time once on mount so the website UI
+  // matches backend/TG logic and is immune to browser clock drift.
   useEffect(() => {
     api.numbersConfig()
-      .then(({ otp_expiry_sec }) => {
+      .then(({ otp_expiry_sec, server_now }) => {
         if (otp_expiry_sec > 0) setExpirySec(otp_expiry_sec);
+        if (server_now > 0) setServerDriftSec(Math.floor(Date.now() / 1000) - server_now);
       })
       .catch(() => {/* keep fallback */});
   }, []);
@@ -272,7 +274,7 @@ const AgentGetNumber = () => {
           : { country_id: Number(countryId), operator_id: Number(operatorId) }),
         count: quantity,
       });
-      const nowSec = Math.floor(Date.now() / 1000);
+      const nowSec = serverNowSec;
       setNumbers((prev) => [...allocated.map((a: AllocatedNumber) => ({ ...a, status: "active" as const, allocated_at: a.allocated_at ?? nowSec })), ...prev]);
       setPage(1);
       if (allocated.length) {
@@ -307,8 +309,10 @@ const AgentGetNumber = () => {
     const interval = setInterval(async () => {
       try {
         await api.syncOtp();
-        const { numbers: fresh } = await api.myNumbers();
+        const { numbers: fresh, otp_expiry_sec, server_now } = await api.myNumbers();
         const freshList = fresh as AllocatedNumber[];
+        if (otp_expiry_sec && otp_expiry_sec > 0) setExpirySec(otp_expiry_sec);
+        if (server_now && server_now > 0) setServerDriftSec(Math.floor(Date.now() / 1000) - server_now);
         // Diff: which previously-pending IDs now have an OTP?
         const prevPendingIds = new Set(numbers.filter((n) => !n.otp).map((n) => n.id));
         const newlyReceived = freshList.filter((n) => n.otp && prevPendingIds.has(n.id));
@@ -355,14 +359,14 @@ const AgentGetNumber = () => {
   useEffect(() => {
     if (!autoRelease) return;
     const sweep = async () => {
-      const nowS = Math.floor(Date.now() / 1000);
-      const toRelease = numbers.filter((n) => {
-        if (n.otp) return false;
-        if (autoReleasedIds.current.has(n.id)) return false;
-        const allocAt = n.allocated_at || nowS;
-        const expiredFor = nowS - allocAt - expirySec;
-        return expiredFor >= 60; // 60s grace
-      });
+        const nowS = serverNowSec;
+        const toRelease = numbers.filter((n) => {
+          if (n.otp) return false;
+          if (autoReleasedIds.current.has(n.id)) return false;
+          const allocAt = n.allocated_at || nowS;
+          const expiredFor = nowS - allocAt - expirySec;
+          return expiredFor >= 60; // 60s grace
+        });
       if (toRelease.length === 0) return;
       const releasedIds: number[] = [];
       for (const n of toRelease) {
@@ -712,8 +716,8 @@ const AgentGetNumber = () => {
                 type="button"
                 onClick={() => setAutoRelease((v) => !v)}
                 title={autoRelease
-                  ? "Auto-release ON — expired numbers are released automatically after 60s grace"
-                  : "Auto-release OFF — expired numbers stay in the list until you release them manually"}
+                  ? `Auto-release ON — expired numbers are released automatically after 60s grace (expiry: ${Math.round(expirySec / 60)}m)`
+                  : `Auto-release OFF — expired numbers stay in the list until you release them manually (expiry: ${Math.round(expirySec / 60)}m)`}
                 className={cn(
                   "h-8 px-3 rounded-md text-[11px] font-semibold border transition-all flex items-center gap-1.5",
                   autoRelease
@@ -724,6 +728,12 @@ const AgentGetNumber = () => {
                 <span className={cn("w-1.5 h-1.5 rounded-full", autoRelease ? "bg-neon-green animate-pulse" : "bg-muted-foreground/50")} />
                 Auto-release {autoRelease ? "ON" : "OFF"}
               </button>
+              <span className="h-8 px-3 rounded-md border border-white/[0.08] bg-white/[0.03] text-[11px] font-semibold text-muted-foreground inline-flex items-center">
+                Expiry {Math.round(expirySec / 60)}m
+              </span>
+              <span className="h-8 px-3 rounded-md border border-white/[0.08] bg-white/[0.03] text-[11px] font-semibold text-muted-foreground inline-flex items-center">
+                Expiry {Math.round(expirySec / 60)}m
+              </span>
               {/* Desktop notification permission */}
               <button
                 type="button"
@@ -765,10 +775,10 @@ const AgentGetNumber = () => {
 
           <div className="space-y-1">
             {pageItems.map((n, idx) => {
-              const allocAt = n.allocated_at || nowTick;
+              const allocAt = n.allocated_at || serverNowSec;
               // For received OTPs: show how long it took to arrive.
               // For pending: show REMAINING time before expiry (counts down).
-              const elapsed = nowTick - allocAt;
+              const elapsed = serverNowSec - allocAt;
               const remaining = Math.max(0, expirySec - elapsed);
               const tookSec = n.otp && n.otp_received_at ? n.otp_received_at - allocAt : 0;
               const isExpired = !n.otp && remaining <= 0;

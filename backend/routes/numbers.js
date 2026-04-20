@@ -8,10 +8,14 @@ const { getOtpExpirySec, getRecentOtpHours } = require('../lib/settings');
 
 const router = express.Router();
 
-// GET /api/numbers/config — config the agent UI needs (OTP expiry for the
-// per-number countdown timer). Authed-only so we don't leak settings publicly.
+// GET /api/numbers/config — shared live-number timing config used by website
+// countdown + auto-release logic. We also return server_now so the frontend can
+// correct browser clock drift and avoid false "instant expired" states.
 router.get('/config', authRequired, (req, res) => {
-  res.json({ otp_expiry_sec: getOtpExpirySec() });
+  res.json({
+    otp_expiry_sec: getOtpExpirySec(),
+    server_now: Math.floor(Date.now() / 1000),
+  });
 });
 
 // GET /api/numbers/providers
@@ -172,7 +176,12 @@ router.get('/my', authRequired, (req, res) => {
       )
     ORDER BY allocated_at DESC LIMIT 200
   `).all(req.user.id, cutoff);
-  res.json({ numbers, recent_window_hours: recentHours });
+  res.json({
+    numbers,
+    recent_window_hours: recentHours,
+    otp_expiry_sec: getOtpExpirySec(),
+    server_now: Math.floor(Date.now() / 1000),
+  });
 });
 
 // GET /api/numbers/history — paginated, searchable history of ALL successful
