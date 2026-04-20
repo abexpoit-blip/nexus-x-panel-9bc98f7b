@@ -5,7 +5,7 @@ import { GradientMesh, PageHeader } from "@/components/premium";
 import {
   Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText,
   RefreshCw, Power, Play, Square, Save, Eye, EyeOff, Zap, Sparkles, Layers,
-  Clock, ClipboardPaste, Plus, Info, AlertTriangle,
+  Clock, ClipboardPaste, Plus, Info, AlertTriangle, Edit3, Trash2, ArrowUp, ArrowDown, Tag, Hash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
