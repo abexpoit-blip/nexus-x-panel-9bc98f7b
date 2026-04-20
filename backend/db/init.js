@@ -39,6 +39,8 @@ addColIfMissing('withdrawals', 'reviewed_by', 'INTEGER REFERENCES users(id) ON D
 addColIfMissing('withdrawals', 'reviewed_at', 'INTEGER');
 addColIfMissing('allocations', 'cli', 'TEXT');
 addColIfMissing('cdr', 'cli', 'TEXT');
+addColIfMissing('cdr', 'note', 'TEXT');
+addColIfMissing('tg_assignments', 'batch_id', 'TEXT');
 
 // Seed default admin (only if no admin exists)
 const adminExists = db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin'").get();
