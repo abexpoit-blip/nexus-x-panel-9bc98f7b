@@ -415,16 +415,21 @@ router.get('/ims-numbers-job', (req, res) => {
 router.get('/ims-pool-breakdown', (req, res) => {
   const ranges = db.prepare(`
     SELECT
-      COALESCE(operator, 'Unknown') AS name,
+      COALESCE(a.operator, 'Unknown') AS name,
       COUNT(*) AS count,
-      MAX(allocated_at) AS last_added
-    FROM allocations
-    WHERE provider = 'ims' AND status = 'pool'
-    GROUP BY COALESCE(operator, 'Unknown')
-    ORDER BY count DESC
+      MAX(a.allocated_at) AS last_added,
+      MIN(a.allocated_at) AS first_added,
+      m.custom_name, m.tag_color, m.priority,
+      m.request_override, m.notes, m.disabled, m.service_tag
+    FROM allocations a
+    LEFT JOIN ims_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+    WHERE a.provider = 'ims' AND a.status = 'pool'
+    GROUP BY COALESCE(a.operator, 'Unknown')
+    ORDER BY COALESCE(m.priority, 0) DESC, count DESC
   `).all();
   const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='active'`).get().c;
-  res.json({ ranges, totalActive });
+  const totalUsed = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='ims' AND status='used'`).get().c;
+  res.json({ ranges, totalActive, totalUsed });
 });
 
 // POST /api/admin/ims-pool-cleanup — manually purge old/invalid numbers from the pool.
@@ -857,16 +862,21 @@ router.post('/msi-sync-live', async (req, res) => {
 router.get('/msi-pool-breakdown', (req, res) => {
   const ranges = db.prepare(`
     SELECT
-      COALESCE(operator, 'Unknown') AS name,
+      COALESCE(a.operator, 'Unknown') AS name,
       COUNT(*) AS count,
-      MAX(allocated_at) AS last_added
-    FROM allocations
-    WHERE provider = 'msi' AND status = 'pool'
-    GROUP BY COALESCE(operator, 'Unknown')
-    ORDER BY count DESC
+      MAX(a.allocated_at) AS last_added,
+      MIN(a.allocated_at) AS first_added,
+      m.custom_name, m.tag_color, m.priority,
+      m.request_override, m.notes, m.disabled, m.service_tag
+    FROM allocations a
+    LEFT JOIN msi_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+    WHERE a.provider = 'msi' AND a.status = 'pool'
+    GROUP BY COALESCE(a.operator, 'Unknown')
+    ORDER BY COALESCE(m.priority, 0) DESC, count DESC
   `).all();
   const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='msi' AND status='active'`).get().c;
-  res.json({ ranges, totalActive });
+  const totalUsed = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='msi' AND status='used'`).get().c;
+  res.json({ ranges, totalActive, totalUsed });
 });
 
 router.get('/msi-credentials', (req, res) => {
