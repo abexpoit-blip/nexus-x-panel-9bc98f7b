@@ -53,7 +53,7 @@ db.exec(`
   );
 `);
 addColIfMissing('numpanel_range_meta', 'disabled', 'INTEGER DEFAULT 0');
-addColIfMissing('numpanel_range_meta', 'service_tag', 'TEXT'); -- facebook|whatsapp|telegram|other
+addColIfMissing('numpanel_range_meta', 'service_tag', 'TEXT'); // facebook|whatsapp|telegram|other
 
 // IMS range metadata (mirror of numpanel)
 db.exec(`
