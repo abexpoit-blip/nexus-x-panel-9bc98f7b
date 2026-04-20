@@ -62,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }).catch(() => {});
   }, []);
 
-  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (username: string, password: string): Promise<User | null> => {
     try {
       const { token, user } = await api.login(username, password);
       tokenStore.set(token);
@@ -70,9 +70,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem(IMP_KEY);
       setUser(user);
       setImpersonator(null);
-      return true;
+      return user;
     } catch {
-      return false;
+      return null;
     }
   }, []);
 

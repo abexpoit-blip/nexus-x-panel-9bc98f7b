@@ -22,14 +22,13 @@ const AdminLogin = () => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const ok = await login(username, password);
+    const loggedInUser = await login(username, password);
     setLoading(false);
-    if (!ok) {
+    if (!loggedInUser) {
       setError("Invalid credentials");
       return;
     }
-    const stored = JSON.parse(localStorage.getItem("nexus_user") || "{}");
-    if (stored.role !== "admin") {
+    if (loggedInUser.role !== "admin") {
       setError("This portal is for administrators only");
       return;
     }
