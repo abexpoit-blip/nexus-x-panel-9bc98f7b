@@ -563,14 +563,24 @@ function start() {
   status.baseUrl = BASE_URL;
   status.otpIntervalSec = OTP_INTERVAL;
   status.numbersIntervalSec = NUMBERS_INTERVAL;
+  const now = Math.floor(Date.now() / 1000);
   if (!ENABLED) {
+    status.running = false;
+    status.loggedIn = false;
+    status.lastError = 'MSI bot disabled';
+    status.lastErrorAt = now;
+    logEvent('warn', 'Start skipped — bot disabled');
     console.log('✗ MSI bot disabled (set MSI_ENABLED=true or enable from admin panel)');
-    return;
+    return false;
   }
   if (!USERNAME || !PASSWORD) {
     console.warn('✗ MSI bot: credentials not set');
     status.lastError = 'MSI credentials not set';
-    return;
+    status.lastErrorAt = now;
+    status.running = false;
+    status.loggedIn = false;
+    logEvent('error', 'Start skipped — MSI credentials not set');
+    return false;
   }
   if (otpTimer) { clearTimeout(otpTimer); otpTimer = null; }
   if (numbersTimer) { clearInterval(numbersTimer); numbersTimer = null; }
@@ -582,6 +592,8 @@ function start() {
   } catch (_) {}
 
   status.running = true;
+  status.lastError = null;
+  status.lastErrorAt = null;
   _stopped = false;
   console.log(`✓ MSI bot starting (OTP poll ${OTP_INTERVAL}s, number sync ${NUMBERS_INTERVAL}s, headless=${HEADLESS}, base=${BASE_URL})`);
 
@@ -656,6 +668,8 @@ function start() {
     catch (e) { console.warn('[msi-bot] periodic syncPool failed:', e.message); }
     finally { busy = false; }
   }, NUMBERS_INTERVAL * 1000);
+
+  return true;
 }
 
 async function stop() {

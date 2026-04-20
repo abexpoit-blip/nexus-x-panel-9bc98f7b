@@ -810,11 +810,19 @@ router.post('/msi-restart', async (req, res) => {
 
 router.post('/msi-start', async (req, res) => {
   try {
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('msi_enabled', 'true', strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = strftime('%s','now')
+    `).run();
     const bot = require('../workers/msiBot');
     bot.start();
+    const snapshot = bot.getStatus ? bot.getStatus() : null;
+    if (!snapshot?.running) {
+      return res.status(400).json({ error: snapshot?.lastError || 'MSI bot did not start', status: snapshot, auto_enabled: true });
+    }
     bot.logEvent && bot.logEvent('success', 'Bot started by admin');
     logFromReq(req, 'msi_bot_start');
-    res.json({ ok: true });
+    res.json({ ok: true, status: snapshot, auto_enabled: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
