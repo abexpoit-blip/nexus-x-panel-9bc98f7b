@@ -632,7 +632,7 @@ bot.action(/^release:(\d+)$/, async (ctx) => {
   if (!a || a.status !== 'active') return ctx.reply('Already gone.');
   db.transaction(() => {
     db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(id);
-    db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(a.allocation_id);
+    db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'").run(a.allocation_id);
   })();
   try { await ctx.editMessageText('🗑 Released. Number returned to pool.'); } catch {}
 });
