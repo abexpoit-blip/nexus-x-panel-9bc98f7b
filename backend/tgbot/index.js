@@ -465,6 +465,11 @@ bot.hears('📥 OTP History', async (ctx) => {
   await showOtpHistory(ctx);
 });
 
+bot.hears('🔍 Active Range Checker', async (ctx) => {
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
+  await showLeaderboard(ctx);
+});
+// Legacy label fallback for older keyboards
 bot.hears('🏆 Leaderboard', async (ctx) => {
   const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showLeaderboard(ctx);
