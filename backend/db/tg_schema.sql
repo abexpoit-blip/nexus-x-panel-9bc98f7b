@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS tg_assignments (
   status          TEXT NOT NULL DEFAULT 'active', -- active | otp_received | expired | released
   otp_code        TEXT,
   otp_full_text   TEXT,
-  tg_message_id   INTEGER,                        -- chat message that contains the number card
+  batch_id        TEXT,                            -- groups assignments claimed together (single card)
+  tg_message_id   INTEGER,                         -- chat message that contains the batch card
   tg_chat_id      INTEGER,
   assigned_at     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
   expires_at      INTEGER NOT NULL,
@@ -63,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_tga_user_status ON tg_assignments(tg_user_id, sta
 CREATE INDEX IF NOT EXISTS idx_tga_alloc      ON tg_assignments(allocation_id);
 CREATE INDEX IF NOT EXISTS idx_tga_expiry     ON tg_assignments(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_tga_recv       ON tg_assignments(otp_received_at);
+CREATE INDEX IF NOT EXISTS idx_tga_batch      ON tg_assignments(batch_id);
 
 CREATE TABLE IF NOT EXISTS tg_broadcasts (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,

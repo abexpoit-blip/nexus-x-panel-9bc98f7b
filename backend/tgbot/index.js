@@ -19,6 +19,18 @@ const EXPIRY_MIN        = Math.round(EXPIRY_SEC / 60);
 const SUPPORT_URL       = process.env.TG_SUPPORT_URL || 'https://t.me/';
 const SITE_URL          = process.env.TG_SITE_URL || 'https://nexus-x.site';
 
+// ---------- Public OTP history channel (admin configurable) ----------
+// Admin sets setting key `tg_public_channel` to a channel/group chat id like -1001234567890.
+// Every received OTP is posted there with number & OTP last-4 masked.
+function getPublicChannelId() {
+  try {
+    const v = db.prepare("SELECT value FROM settings WHERE key = 'tg_public_channel'").get()?.value;
+    if (!v) return null;
+    const n = String(v).trim();
+    return n || null;
+  } catch { return null; }
+}
+
 const bot = new Telegraf(TOKEN);
 
 // ---------- Helpers ----------
@@ -186,7 +198,6 @@ function renderNumberCard(a) {
   const timer = `⏱ ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 
   if (a.status === 'otp_received' && a.otp_code) {
-    // Compact OTP card with copy block: Number|OTP
     return (
       `✅ <b>OTP Received!</b>\n\n` +
       `📞 Number: <code>${a.phone_number}</code>\n` +
