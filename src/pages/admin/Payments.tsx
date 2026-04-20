@@ -242,6 +242,10 @@ const AdminPayments = () => {
           />
           {isLoading && <p className="text-center text-muted-foreground text-sm">Loading…</p>}
         </TabsContent>
+
+        <TabsContent value="config" className="mt-4">
+          <PaymentConfigCard />
+        </TabsContent>
       </Tabs>
     </div>
   );
