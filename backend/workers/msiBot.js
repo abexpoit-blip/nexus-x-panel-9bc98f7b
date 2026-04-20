@@ -423,6 +423,36 @@ async function scrapeNumbers() {
   await page.goto(`${BASE_URL}/ints/agent/MySMSNumbers`, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => null);
   if (/\/login/i.test(page.url())) { loggedIn = false; return []; }
 
+  // CRITICAL: Reset "Select Range" and "Select Client" dropdowns to show ALL numbers.
+  // MSI panel pre-selects the first range by default, hiding all other ranges.
+  await page.evaluate(() => {
+    document.querySelectorAll('select').forEach(sel => {
+      const label = (sel.name || sel.id || sel.className || '').toLowerCase() +
+                    ((sel.previousElementSibling?.innerText || '') + (sel.closest('label')?.innerText || '')).toLowerCase();
+      const isFilter = /range|client|filter/i.test(label) ||
+                       Array.from(sel.options).some(o => /select\s*(range|client|all)/i.test(o.text));
+      if (!isFilter) return;
+      // Pick the blank / "Select Range" / "All" option (usually first with empty value)
+      const allOpt = Array.from(sel.options).find(o =>
+        o.value === '' || o.value === '0' || /^select|^all|^--/i.test(o.text.trim())
+      );
+      if (allOpt && sel.value !== allOpt.value) {
+        sel.value = allOpt.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  }).catch(() => {});
+  // Wait for table to reload after filter reset
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Also click the Filter button if present (MSI requires clicking Filter after dropdown change)
+  await page.evaluate(() => {
+    const btn = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'))
+      .find(b => /^filter$/i.test((b.innerText || b.value || '').trim()));
+    if (btn) btn.click();
+  }).catch(() => {});
+  await new Promise(r => setTimeout(r, 2000));
+
   // Reset any pre-applied range/client filters by clicking the red "reset" pill or
   // re-loading without query params, then maximize page size via every API we know.
   const sizeInfo = await page.evaluate(() => {
@@ -757,7 +787,7 @@ async function syncPool() {
   const sysUser = ensurePoolUser();
   let added = 0, removed = 0, kept = 0;
 
-  const exists = db.prepare("SELECT 1 FROM allocations WHERE provider='msi' AND phone_number=? LIMIT 1");
+  const exists = db.prepare("SELECT 1 FROM allocations WHERE provider='msi' AND phone_number=? AND status IN ('pool','active','claiming') LIMIT 1");
   const ins = db.prepare(`
     INSERT INTO allocations (user_id, provider, phone_number, country_code, operator, status, allocated_at)
     VALUES (?, 'msi', ?, ?, ?, 'pool', strftime('%s','now'))
