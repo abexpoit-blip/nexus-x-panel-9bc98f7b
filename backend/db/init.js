@@ -19,6 +19,13 @@ const db = new Database(DB_PATH);
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// Apply Telegram bot schema (additive)
+const tgSchemaPath = path.join(__dirname, 'tg_schema.sql');
+if (fs.existsSync(tgSchemaPath)) {
+  db.exec(fs.readFileSync(tgSchemaPath, 'utf8'));
+  console.log('✓ TG schema applied');
+}
+
 // --- Idempotent column-add migrations for existing databases ---
 function addColIfMissing(table, col, ddl) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
