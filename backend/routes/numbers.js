@@ -387,6 +387,47 @@ router.post('/ims/pool', authRequired, adminOnly, (req, res) => {
   res.json({ added, skipped, invalid, range: rangeName });
 });
 
+// =============================================================
+// MSI MANUAL endpoints (admin only) — mirror of IMS paste-pool
+// =============================================================
+
+// POST /api/numbers/msi/pool — admin adds numbers manually to MSI pool
+router.post('/msi/pool', authRequired, adminOnly, (req, res) => {
+  const { numbers, country_code, operator, range } = req.body || {};
+  const rangeName = (range || operator || '').toString().trim();
+  if (!Array.isArray(numbers) || !numbers.length) return res.status(400).json({ error: 'numbers[] required' });
+  if (!rangeName) return res.status(400).json({ error: 'range name required' });
+
+  let sysUser = db.prepare("SELECT id FROM users WHERE username = '__msi_pool__'").get();
+  if (!sysUser) {
+    const r = db.prepare(`INSERT INTO users (username, password_hash, role, status) VALUES ('__msi_pool__', '!', 'agent', 'suspended')`).run();
+    sysUser = { id: r.lastInsertRowid };
+  }
+
+  const exists = db.prepare(`
+    SELECT 1 FROM allocations WHERE provider='msi' AND phone_number=? AND status IN ('pool','active')
+  `);
+  const insertMsi = db.prepare(`
+    INSERT INTO allocations (user_id, provider, phone_number, country_code, operator, status, allocated_at)
+    VALUES (?, 'msi', ?, ?, ?, 'pool', strftime('%s','now'))
+  `);
+
+  let added = 0, skipped = 0, invalid = 0;
+  const tx = db.transaction((arr) => {
+    for (const n of arr) {
+      let phone = (typeof n === 'string' ? n : n?.phone_number || '').toString().trim();
+      phone = phone.replace(/[^\d+]/g, '').replace(/^\++/, '+');
+      if (!phone || phone.replace(/\D/g, '').length < 6) { invalid++; continue; }
+      if (exists.get(phone)) { skipped++; continue; }
+      insertMsi.run(sysUser.id, phone, country_code || null, rangeName);
+      added++;
+    }
+  });
+  tx(numbers);
+  logFromReq(req, 'msi_pool_added', { meta: { added, skipped, invalid, range: rangeName } });
+  res.json({ added, skipped, invalid, range: rangeName });
+});
+
 // POST /api/numbers/ims/otp — admin pushes received OTP for an IMS number
 router.post('/ims/otp', authRequired, adminOnly, async (req, res) => {
   const { phone_number, otp } = req.body || {};
