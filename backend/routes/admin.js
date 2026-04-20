@@ -1063,16 +1063,63 @@ router.post('/numpanel-sync-live', async (req, res) => {
 router.get('/numpanel-pool-breakdown', (req, res) => {
   const ranges = db.prepare(`
     SELECT
-      COALESCE(operator, 'Unknown') AS name,
+      COALESCE(a.operator, 'Unknown') AS name,
       COUNT(*) AS count,
-      MAX(allocated_at) AS last_added
-    FROM allocations
-    WHERE provider = 'numpanel' AND status = 'pool'
-    GROUP BY COALESCE(operator, 'Unknown')
-    ORDER BY count DESC
+      MAX(a.allocated_at) AS last_added,
+      MIN(a.allocated_at) AS first_added,
+      m.custom_name AS custom_name,
+      m.tag_color   AS tag_color,
+      m.priority    AS priority,
+      m.request_override AS request_override,
+      m.notes       AS notes
+    FROM allocations a
+    LEFT JOIN numpanel_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+    WHERE a.provider = 'numpanel' AND a.status = 'pool'
+    GROUP BY COALESCE(a.operator, 'Unknown')
+    ORDER BY COALESCE(m.priority, 0) DESC, count DESC
   `).all();
   const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='numpanel' AND status='active'`).get().c;
-  res.json({ ranges, totalActive });
+  const totalUsed = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='numpanel' AND status='used'`).get().c;
+  res.json({ ranges, totalActive, totalUsed });
+});
+
+// ---- NumPanel range metadata (custom names, colors, priority) ----
+router.get('/numpanel-range-meta', (req, res) => {
+  const rows = db.prepare(`SELECT * FROM numpanel_range_meta ORDER BY priority DESC, range_prefix`).all();
+  res.json({ ranges: rows });
+});
+
+router.put('/numpanel-range-meta', (req, res) => {
+  const { range_prefix, custom_name, tag_color, priority, request_override, notes } = req.body || {};
+  if (!range_prefix || typeof range_prefix !== 'string') {
+    return res.status(400).json({ error: 'range_prefix required' });
+  }
+  db.prepare(`
+    INSERT INTO numpanel_range_meta (range_prefix, custom_name, tag_color, priority, request_override, notes, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+    ON CONFLICT(range_prefix) DO UPDATE SET
+      custom_name      = COALESCE(excluded.custom_name, numpanel_range_meta.custom_name),
+      tag_color        = COALESCE(excluded.tag_color, numpanel_range_meta.tag_color),
+      priority         = COALESCE(excluded.priority, numpanel_range_meta.priority),
+      request_override = COALESCE(excluded.request_override, numpanel_range_meta.request_override),
+      notes            = COALESCE(excluded.notes, numpanel_range_meta.notes),
+      updated_at       = strftime('%s','now')
+  `).run(
+    range_prefix.trim(),
+    typeof custom_name === 'string' ? custom_name.trim() : null,
+    typeof tag_color === 'string' ? tag_color.trim() : null,
+    Number.isFinite(+priority) ? +priority : null,
+    Number.isFinite(+request_override) ? +request_override : null,
+    typeof notes === 'string' ? notes.trim() : null,
+  );
+  logFromReq(req, 'numpanel_range_meta_set', { meta: req.body });
+  res.json({ ok: true });
+});
+
+router.delete('/numpanel-range-meta/:prefix', (req, res) => {
+  db.prepare(`DELETE FROM numpanel_range_meta WHERE range_prefix = ?`).run(req.params.prefix);
+  logFromReq(req, 'numpanel_range_meta_delete', { meta: { prefix: req.params.prefix } });
+  res.json({ ok: true });
 });
 
 router.get('/numpanel-credentials', (req, res) => {
