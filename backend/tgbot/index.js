@@ -139,7 +139,7 @@ function isBanned(tgUser) { return tgUser && tgUser.status === 'banned'; }
 function mainMenuKeyboard() {
   return Markup.keyboard([
     ['🌍 Get Number', '📞 My Numbers'],
-    ['📥 OTP History', '🏆 Leaderboard'],
+    ['📥 OTP History', '🔍 Active Range Checker'],
     ['💰 Wallet', 'ℹ️ Support'],
   ]).resize();
 }
@@ -465,6 +465,11 @@ bot.hears('📥 OTP History', async (ctx) => {
   await showOtpHistory(ctx);
 });
 
+bot.hears('🔍 Active Range Checker', async (ctx) => {
+  const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
+  await showLeaderboard(ctx);
+});
+// Legacy label fallback for older keyboards
 bot.hears('🏆 Leaderboard', async (ctx) => {
   const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
   await showLeaderboard(ctx);
@@ -568,7 +573,12 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
     (tg_user_id, allocation_id, provider, phone_number, country_code, range_name, service, rate_bdt, status, expires_at, batch_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
   `);
-  const updAlloc = db.prepare("UPDATE allocations SET status='active' WHERE id = ?");
+  // FIX: also reset allocated_at so the OTP-poller cleanup cron doesn't
+  // instantly mark a freshly-claimed pool number as 'expired' just because
+  // its row was sitting in pool with an old allocated_at timestamp.
+  const updAlloc = db.prepare(
+    "UPDATE allocations SET status='active', user_id=?, allocated_at=strftime('%s','now') WHERE id = ?"
+  );
 
   const createdIds = [];
   for (const c of claimed) {
@@ -576,7 +586,9 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
       u.tg_user_id, c.id, provider, c.phone_number, c.country_code || cc,
       rangeName, setting.service || null, rate, expiresAt, batchId
     );
-    updAlloc.run(c.id);
+    // Use the bot's system pool user so allocations.user_id stays valid
+    // (the actual TG owner is tracked in tg_assignments.tg_user_id).
+    updAlloc.run(getOrCreateFakeUserId(), c.id);
     createdIds.push(r.lastInsertRowid);
   }
 
@@ -599,7 +611,10 @@ bot.action(/^releaseBatch:(.+)$/, async (ctx) => {
     for (const a of rows) {
       if (a.status === 'active') {
         db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(a.id);
-        db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(a.allocation_id);
+        // Reset allocated_at so the next claimer (TG or website) gets a clean
+        // expiry window — prevents "instant expired" on subsequent grabs.
+        db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'")
+          .run(a.allocation_id);
       }
     }
   })();
@@ -622,7 +637,7 @@ bot.action(/^release:(\d+)$/, async (ctx) => {
   if (!a || a.status !== 'active') return ctx.reply('Already gone.');
   db.transaction(() => {
     db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(id);
-    db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(a.allocation_id);
+    db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'").run(a.allocation_id);
   })();
   try { await ctx.editMessageText('🗑 Released. Number returned to pool.'); } catch {}
 });
@@ -674,26 +689,38 @@ async function showOtpHistory(ctx) {
 
 async function showLeaderboard(ctx) {
   const since = now() - 86400;
+  // Pull from CDR — captures BOTH real OTPs (note IS NULL or != fake:broadcast)
+  // AND fake-OTP broadcaster rows (note='fake:broadcast'). Counts merge into
+  // one number so agents see total range activity (real + boost).
   const topCountries = db.prepare(`
-    SELECT country_code, COUNT(*) cnt FROM tg_assignments
-    WHERE status = 'otp_received' AND otp_received_at >= ?
+    SELECT country_code, COUNT(*) cnt FROM cdr
+    WHERE status = 'billed' AND created_at >= ?
     GROUP BY country_code ORDER BY cnt DESC LIMIT 5
   `).all(since);
   const topRanges = db.prepare(`
-    SELECT country_code, range_name, service, COUNT(*) cnt FROM tg_assignments
-    WHERE status = 'otp_received' AND otp_received_at >= ?
-    GROUP BY country_code, range_name ORDER BY cnt DESC LIMIT 5
+    SELECT country_code, operator AS range_name, COUNT(*) cnt FROM cdr
+    WHERE status = 'billed' AND created_at >= ?
+    GROUP BY country_code, operator ORDER BY cnt DESC LIMIT 8
   `).all(since);
-  let txt = `<b>🏆 Leaderboard (last 24h)</b>\n\n<b>🌍 Top Countries</b>\n`;
+  // Total counter (real + boost combined)
+  const totalRow = db.prepare(`
+    SELECT COUNT(*) cnt FROM cdr WHERE status='billed' AND created_at >= ?
+  `).get(since);
+  const total = totalRow?.cnt || 0;
+
+  let txt = `<b>🔍 Active Range Checker (last 24h)</b>\n` +
+            `📊 Total OTPs delivered: <b>${total}</b>\n\n` +
+            `<b>🌍 Top Countries</b>\n`;
   if (topCountries.length === 0) txt += '<i>No data yet</i>\n';
   else topCountries.forEach((r, i) => {
     txt += `${i + 1}. ${flagOf(r.country_code)} ${countryName(r.country_code)} — <b>${r.cnt}</b> OTPs\n`;
   });
-  txt += `\n<b>📊 Top Ranges</b>\n`;
+  txt += `\n<b>📊 Top Active Ranges</b>\n`;
   if (topRanges.length === 0) txt += '<i>No data yet</i>\n';
   else topRanges.forEach((r, i) => {
-    txt += `${i + 1}. ${flagOf(r.country_code)} ${serviceIcon(r.service)} ${escapeHtml(r.range_name)} — <b>${r.cnt}</b>\n`;
+    txt += `${i + 1}. ${flagOf(r.country_code)} ${escapeHtml(r.range_name || '—')} — <b>${r.cnt}</b>\n`;
   });
+  txt += `\n<i>Tip: pick a hot range above for higher OTP delivery rates.</i>`;
   await ctx.replyWithHTML(txt);
 }
 
@@ -859,7 +886,7 @@ function expireOldAssignments() {
     const txn = db.transaction(() => {
       for (const e of expired) {
         db.prepare("UPDATE tg_assignments SET status='expired' WHERE id = ?").run(e.id);
-        db.prepare("UPDATE allocations SET status='pool' WHERE id = ? AND status='active'").run(e.allocation_id);
+        db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'").run(e.allocation_id);
       }
     });
     txn();

@@ -55,12 +55,16 @@ function start() {
   // Admin can change the window (5-30 min) via /api/admin/otp-expiry.
   cron.schedule('* * * * *', () => {
     const expirySec = getOtpExpirySec();
+    // Safety floor: NEVER expire allocations younger than 60s, even if admin
+    // misconfigures the window. Prevents the "instant expired" race where a
+    // fresh allocation gets killed before the agent can react.
+    const effectiveSec = Math.max(60, expirySec);
     const r = db.prepare(`
       UPDATE allocations SET status = 'expired'
       WHERE status = 'active' AND otp IS NULL
         AND allocated_at < strftime('%s','now') - ?
-    `).run(expirySec);
-    if (r.changes) console.log(`[cleanup] expired ${r.changes} allocations (${Math.round(expirySec/60)}min timeout)`);
+    `).run(effectiveSec);
+    if (r.changes) console.log(`[cleanup] expired ${r.changes} allocations (${Math.round(effectiveSec/60)}min timeout)`);
   });
 }
 
