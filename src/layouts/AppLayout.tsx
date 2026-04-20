@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { AnimatedOutlet } from "@/components/AnimatedOutlet";
 import { useAuth, type UserRole } from "@/contexts/AuthContext";
@@ -105,9 +105,23 @@ export const AppLayout = ({ requiredRole }: AppLayoutProps) => {
           </div>
         )}
 
-        {/* Content */}
+        {/* Content — local Suspense keeps header+sidebar mounted while next page chunk loads */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <AnimatedOutlet />
+          <Suspense
+            fallback={
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className="h-9 w-56 rounded-md bg-white/[0.04]" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-24 rounded-xl bg-white/[0.03] border border-white/[0.04]" />
+                  ))}
+                </div>
+                <div className="h-64 rounded-xl bg-white/[0.03] border border-white/[0.04]" />
+              </div>
+            }
+          >
+            <AnimatedOutlet />
+          </Suspense>
         </main>
       </div>
     </div>

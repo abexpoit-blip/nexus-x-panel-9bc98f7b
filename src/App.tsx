@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationPanel } from "@/components/NotificationPanel";
 import { AppLayout } from "@/layouts/AppLayout";
+import { Pages } from "@/lib/lazyPages";
 
 // Eager-load auth pages (small + first paint)
 import Login from "@/pages/Login";
@@ -16,32 +17,31 @@ import Register from "@/pages/Register";
 import AdminLogin from "@/pages/AdminLogin";
 import NotFound from "@/pages/NotFound";
 
-// Lazy-load all dashboard pages — major perf win, smaller initial bundle
-const AgentDashboard = lazy(() => import("@/pages/agent/Dashboard"));
-const AgentGetNumber = lazy(() => import("@/pages/agent/GetNumber"));
-const AgentConsole = lazy(() => import("@/pages/agent/Console"));
-const AgentMyNumbers = lazy(() => import("@/pages/agent/MyNumbers"));
-const AgentSummary = lazy(() => import("@/pages/agent/Summary"));
-const AgentPayments = lazy(() => import("@/pages/agent/Payments"));
-const AgentProfile = lazy(() => import("@/pages/agent/Profile"));
-const AgentLeaderboard = lazy(() => import("@/pages/agent/Leaderboard"));
-const AgentInbox = lazy(() => import("@/pages/agent/Inbox"));
-const AgentHistory = lazy(() => import("@/pages/agent/History"));
+const AgentDashboard = Pages["/agent/dashboard"].L;
+const AgentGetNumber = Pages["/agent/get-number"].L;
+const AgentConsole = Pages["/agent/console"].L;
+const AgentMyNumbers = Pages["/agent/my-numbers"].L;
+const AgentSummary = Pages["/agent/summary"].L;
+const AgentPayments = Pages["/agent/payments"].L;
+const AgentProfile = Pages["/agent/profile"].L;
+const AgentLeaderboard = Pages["/agent/leaderboard"].L;
+const AgentInbox = Pages["/agent/inbox"].L;
+const AgentHistory = Pages["/agent/history"].L;
 
-const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
-const AdminProviders = lazy(() => import("@/pages/admin/Providers"));
-const AdminAgents = lazy(() => import("@/pages/admin/Agents"));
-const AdminRateCard = lazy(() => import("@/pages/admin/RateCard"));
-const AdminAllocation = lazy(() => import("@/pages/admin/Allocation"));
-const AdminCDR = lazy(() => import("@/pages/admin/CDR"));
-const AdminNotifications = lazy(() => import("@/pages/admin/Notifications"));
-const AdminPayments = lazy(() => import("@/pages/admin/Payments"));
-const AdminSecurity = lazy(() => import("@/pages/admin/Security"));
-const AdminImsStatus = lazy(() => import("@/pages/admin/ImsStatus"));
-const AdminMsiStatus = lazy(() => import("@/pages/admin/MsiStatus"));
-const AdminProviderSettings = lazy(() => import("@/pages/admin/ProviderSettings"));
-const AdminWithdrawals = lazy(() => import("@/pages/admin/Withdrawals"));
-const AdminTgBot = lazy(() => import("@/pages/admin/TgBot"));
+const AdminDashboard = Pages["/admin/dashboard"].L;
+const AdminProviders = Pages["/admin/providers"].L;
+const AdminAgents = Pages["/admin/agents"].L;
+const AdminRateCard = Pages["/admin/rates"].L;
+const AdminAllocation = Pages["/admin/allocation"].L;
+const AdminCDR = Pages["/admin/cdr"].L;
+const AdminNotifications = Pages["/admin/notifications"].L;
+const AdminPayments = Pages["/admin/payments"].L;
+const AdminSecurity = Pages["/admin/security"].L;
+const AdminImsStatus = Pages["/admin/ims-status"].L;
+const AdminMsiStatus = Pages["/admin/msi-status"].L;
+const AdminProviderSettings = Pages["/admin/provider-settings"].L;
+const AdminWithdrawals = Pages["/admin/withdrawals"].L;
+const AdminTgBot = Pages["/admin/tg-bot"].L;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,8 +54,14 @@ const queryClient = new QueryClient({
 });
 
 const PageFallback = () => (
-  <div className="flex items-center justify-center min-h-[60vh]">
-    <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+  <div className="space-y-4 animate-in fade-in duration-150">
+    <div className="h-9 w-56 rounded-md bg-white/[0.04]" />
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="h-24 rounded-xl bg-white/[0.03] border border-white/[0.04]" />
+      ))}
+    </div>
+    <div className="h-64 rounded-xl bg-white/[0.03] border border-white/[0.04]" />
   </div>
 );
 

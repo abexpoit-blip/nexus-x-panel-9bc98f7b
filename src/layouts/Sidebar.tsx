@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { NexusLogo, APP_VERSION } from "@/components/NexusLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { prefetchPage } from "@/lib/lazyPages";
 import {
   LayoutDashboard, Hash, MessageSquare, List, BarChart3, Bell, Inbox,
   Users, Server, DollarSign, FileText, LogOut, X, Layers,
@@ -88,6 +89,9 @@ export const AppSidebar = ({ open, onClose }: SidebarProps) => {
                 key={item.path}
                 to={item.path}
                 onClick={onClose}
+                onMouseEnter={() => prefetchPage(item.path)}
+                onFocus={() => prefetchPage(item.path)}
+                onTouchStart={() => prefetchPage(item.path)}
                 className={cn(
                   "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-300",
                   active
