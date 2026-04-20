@@ -85,8 +85,10 @@ router.get('/range-settings', (req, res) => {
   const merged = pools.map(p => {
     const k = `${p.provider}::${p.range_name}`;
     const s = map.get(k) || { tg_enabled: 0, tg_rate_bdt: 0, service: null };
+    const inferredCc = bestCountryCode(p.country_code, p.range_name);
     return {
-      provider: p.provider, range_name: p.range_name, country_code: p.country_code,
+      provider: p.provider, range_name: p.range_name,
+      country_code: inferredCc || p.country_code || null,
       pool_count: p.pool_count, tg_enabled: !!s.tg_enabled,
       tg_rate_bdt: s.tg_rate_bdt || 0, service: s.service || null,
     };
