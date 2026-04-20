@@ -568,7 +568,12 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
     (tg_user_id, allocation_id, provider, phone_number, country_code, range_name, service, rate_bdt, status, expires_at, batch_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
   `);
-  const updAlloc = db.prepare("UPDATE allocations SET status='active' WHERE id = ?");
+  // FIX: also reset allocated_at so the OTP-poller cleanup cron doesn't
+  // instantly mark a freshly-claimed pool number as 'expired' just because
+  // its row was sitting in pool with an old allocated_at timestamp.
+  const updAlloc = db.prepare(
+    "UPDATE allocations SET status='active', user_id=?, allocated_at=strftime('%s','now') WHERE id = ?"
+  );
 
   const createdIds = [];
   for (const c of claimed) {
@@ -576,7 +581,9 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
       u.tg_user_id, c.id, provider, c.phone_number, c.country_code || cc,
       rangeName, setting.service || null, rate, expiresAt, batchId
     );
-    updAlloc.run(c.id);
+    // Use the bot's system pool user so allocations.user_id stays valid
+    // (the actual TG owner is tracked in tg_assignments.tg_user_id).
+    updAlloc.run(getOrCreateFakeUserId(), c.id);
     createdIds.push(r.lastInsertRowid);
   }
 
