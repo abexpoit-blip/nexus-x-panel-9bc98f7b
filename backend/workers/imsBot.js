@@ -809,7 +809,10 @@ async function scrapeOtps() {
         new Promise((_, rej) => setTimeout(() => rej(new Error('diag timeout 5s — page frozen')), 5000)),
       ]);
       console.log('[ims-bot][scrape][diag] not populated →', JSON.stringify(diag));
-      logEvent('warn', `Scrape diag: tables=${diag.tables} tbody-rows=${diag.rowsTbody} url=${diag.url.slice(-40)}`);
+      // Only WARN when the table is actually empty. If rows exist, the
+      // `populated` flag was just slow to flip — downgrade to INFO.
+      const lvl = diag.rowsTbody > 0 ? 'info' : 'warn';
+      logEvent(lvl, `Scrape diag: tables=${diag.tables} tbody-rows=${diag.rowsTbody} url=${diag.url.slice(-40)}`);
     } catch (e) {
       console.warn('[ims-bot][scrape][diag] failed:', e.message);
       // Page is frozen — recycle on next tick
