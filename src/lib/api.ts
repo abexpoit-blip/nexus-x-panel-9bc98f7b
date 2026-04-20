@@ -487,7 +487,22 @@ export const api = {
     imsSyncLive: () => request<{ ok: boolean; added?: number; removed?: number; kept?: number; scraped?: number; ranges?: string[]; error?: string }>("/admin/ims-sync-live", { method: "POST" }),
     imsScrapeNumbersStart: () => request<{ ok: boolean; jobId?: number; status?: string; error?: string }>("/admin/ims-scrape-numbers", { method: "POST" }),
     imsNumbersJob: () => request<{ id: number; status: 'idle'|'running'|'done'|'failed'; startedAt: number|null; finishedAt: number|null; result: { added: number; removed: number; kept: number; scraped: number; ranges: string[] } | null; error: string|null; progress: string }>("/admin/ims-numbers-job"),
-    imsPoolBreakdown: () => request<{ ranges: { name: string; count: number; last_added: number }[]; totalActive: number }>("/admin/ims-pool-breakdown"),
+    imsPoolBreakdown: () => request<{
+      ranges: {
+        name: string; count: number; last_added: number; first_added?: number;
+        custom_name: string | null; tag_color: string | null; priority: number | null;
+        request_override: number | null; notes: string | null;
+        disabled: number | null; service_tag: string | null;
+      }[];
+      totalActive: number; totalUsed?: number;
+    }>("/admin/ims-pool-breakdown"),
+    imsRangeMetaSave: (body: {
+      range_prefix: string; custom_name?: string | null; tag_color?: string | null;
+      priority?: number | null; request_override?: number | null; notes?: string | null;
+      disabled?: boolean; service_tag?: string | null;
+    }) => request<{ ok: boolean }>("/admin/ims-range-meta", { method: "PUT", body: JSON.stringify(body) }),
+    imsRangeMetaDelete: (prefix: string) =>
+      request<{ ok: boolean }>(`/admin/ims-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
     imsPoolCleanup: (body: { mode: "expired" | "older_than" | "range" | "all_pool"; hours?: number; range?: string }) =>
       request<{ ok: boolean; removed: number; description: string }>("/admin/ims-pool-cleanup", {
         method: "POST",
@@ -546,7 +561,22 @@ export const api = {
     msiStop: () => request<{ ok: boolean }>("/admin/msi-stop", { method: "POST" }),
     msiScrapeNow: () => request<{ ok: boolean; otps?: number; delivered?: number; error?: string }>("/admin/msi-scrape-now", { method: "POST" }),
     msiSyncLive: () => request<{ ok: boolean; added?: number; removed?: number; kept?: number; scraped?: number; error?: string }>("/admin/msi-sync-live", { method: "POST" }),
-    msiPoolBreakdown: () => request<{ ranges: { name: string; count: number; last_added: number }[]; totalActive: number }>("/admin/msi-pool-breakdown"),
+    msiPoolBreakdown: () => request<{
+      ranges: {
+        name: string; count: number; last_added: number; first_added?: number;
+        custom_name: string | null; tag_color: string | null; priority: number | null;
+        request_override: number | null; notes: string | null;
+        disabled: number | null; service_tag: string | null;
+      }[];
+      totalActive: number; totalUsed?: number;
+    }>("/admin/msi-pool-breakdown"),
+    msiRangeMetaSave: (body: {
+      range_prefix: string; custom_name?: string | null; tag_color?: string | null;
+      priority?: number | null; request_override?: number | null; notes?: string | null;
+      disabled?: boolean; service_tag?: string | null;
+    }) => request<{ ok: boolean }>("/admin/msi-range-meta", { method: "PUT", body: JSON.stringify(body) }),
+    msiRangeMetaDelete: (prefix: string) =>
+      request<{ ok: boolean }>(`/admin/msi-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
     msiCredentials: () => request<{
       enabled: boolean; base_url: string; username: string;
       password_masked: string; has_password: boolean;
@@ -573,26 +603,17 @@ export const api = {
     numpanelSyncLive: () => request<{ ok: boolean; added?: number; removed?: number; kept?: number; scraped?: number; error?: string }>("/admin/numpanel-sync-live", { method: "POST" }),
     numpanelPoolBreakdown: () => request<{
       ranges: {
-        name: string;
-        count: number;
-        last_added: number;
-        first_added: number;
-        custom_name: string | null;
-        tag_color: string | null;
-        priority: number | null;
-        request_override: number | null;
-        notes: string | null;
+        name: string; count: number; last_added: number; first_added: number;
+        custom_name: string | null; tag_color: string | null; priority: number | null;
+        request_override: number | null; notes: string | null;
+        disabled: number | null; service_tag: string | null;
       }[];
-      totalActive: number;
-      totalUsed: number;
+      totalActive: number; totalUsed: number;
     }>("/admin/numpanel-pool-breakdown"),
     numpanelRangeMetaSave: (body: {
-      range_prefix: string;
-      custom_name?: string | null;
-      tag_color?: string | null;
-      priority?: number | null;
-      request_override?: number | null;
-      notes?: string | null;
+      range_prefix: string; custom_name?: string | null; tag_color?: string | null;
+      priority?: number | null; request_override?: number | null; notes?: string | null;
+      disabled?: boolean; service_tag?: string | null;
     }) => request<{ ok: boolean }>("/admin/numpanel-range-meta", { method: "PUT", body: JSON.stringify(body) }),
     numpanelRangeMetaDelete: (prefix: string) =>
       request<{ ok: boolean }>(`/admin/numpanel-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
