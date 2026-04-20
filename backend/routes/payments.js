@@ -48,8 +48,42 @@ router.post('/topup', authRequired, adminOnly, (req, res) => {
 // =========== WITHDRAWALS ===========
 
 // GET /api/withdrawals/policy — public to authed users
+// Returns dynamic config so agent UI shows only admin-enabled methods.
 router.get('/withdrawals/policy', authRequired, (_req, res) => {
-  res.json({ min_amount: WD_MIN, fee_percent: WD_FEE_PERCENT, sla_hours: WD_SLA_HOURS });
+  const cfg = getPaymentConfig();
+  res.json({
+    min_amount: cfg.min_amount,
+    fee_percent: cfg.fee_percent,
+    sla_hours: cfg.sla_hours,
+    methods: cfg.methods,
+    methods_enabled: cfg.methods_enabled,
+  });
+});
+
+// GET /api/admin/payment-config — admin reads full config
+router.get('/admin/payment-config', authRequired, adminOnly, (_req, res) => {
+  res.json(getPaymentConfig());
+});
+
+// PUT /api/admin/payment-config — admin updates
+router.put('/admin/payment-config', authRequired, adminOnly, (req, res) => {
+  const { min_amount, fee_percent, sla_hours, methods } = req.body || {};
+  if (methods && typeof methods === 'object') {
+    const anyOn = ALL_METHODS.some((m) => !!methods[m]);
+    if (!anyOn) return res.status(400).json({ error: 'At least one payment method must be enabled' });
+  }
+  if (min_amount !== undefined && (!Number.isFinite(+min_amount) || +min_amount < 1)) {
+    return res.status(400).json({ error: 'min_amount must be a positive number' });
+  }
+  if (fee_percent !== undefined && (!Number.isFinite(+fee_percent) || +fee_percent < 0 || +fee_percent > 50)) {
+    return res.status(400).json({ error: 'fee_percent must be 0-50' });
+  }
+  if (sla_hours !== undefined && (!Number.isFinite(+sla_hours) || +sla_hours < 1 || +sla_hours > 168)) {
+    return res.status(400).json({ error: 'sla_hours must be 1-168' });
+  }
+  const updated = savePaymentConfig({ min_amount, fee_percent, sla_hours, methods });
+  logFromReq(req, 'payment_config_update', { meta: { min_amount, fee_percent, sla_hours, methods } });
+  res.json(updated);
 });
 
 // GET /api/withdrawals — admin sees all (filterable)
@@ -83,13 +117,13 @@ router.get('/withdrawals/mine', authRequired, (req, res) => {
 router.post('/withdrawals/request', authRequired, (req, res) => {
   const { amount_bdt, method, account_name, account_number, note } = req.body || {};
   const amt = Number(amount_bdt);
+  const cfg = getPaymentConfig();
 
-  if (!Number.isFinite(amt) || amt < WD_MIN || amt > 1_000_000) {
-    return res.status(400).json({ error: `Amount must be between ৳${WD_MIN} and ৳1,000,000` });
+  if (!Number.isFinite(amt) || amt < cfg.min_amount || amt > 1_000_000) {
+    return res.status(400).json({ error: `Amount must be between ৳${cfg.min_amount} and ৳1,000,000` });
   }
-  const allowedMethods = ['bkash', 'nagad', 'rocket', 'bank', 'crypto'];
-  if (!allowedMethods.includes(method)) {
-    return res.status(400).json({ error: 'Invalid payment method' });
+  if (!cfg.methods_enabled.includes(method)) {
+    return res.status(400).json({ error: 'Selected payment method is not currently accepted' });
   }
   if (typeof account_number !== 'string' || account_number.trim().length < 3 || account_number.length > 100) {
     return res.status(400).json({ error: 'Account number must be 3-100 chars' });
@@ -101,16 +135,14 @@ router.post('/withdrawals/request', authRequired, (req, res) => {
     return res.status(400).json({ error: 'Note too long (max 500 chars)' });
   }
 
-  // Re-read fresh balance (req.user may be stale)
   const u = db.prepare('SELECT balance FROM users WHERE id = ?').get(req.user.id);
   if (!u || amt > u.balance) return res.status(400).json({ error: 'Insufficient balance' });
 
-  // Block multiple pending requests
   const existing = db.prepare("SELECT id FROM withdrawals WHERE user_id = ? AND status = 'pending'").get(req.user.id);
   if (existing) return res.status(400).json({ error: 'You already have a pending withdrawal. Wait for admin to process it.' });
 
-  const fee = +(amt * WD_FEE_PERCENT / 100).toFixed(2);
-  const noteWithFee = `${note ? note + ' | ' : ''}Fee ${WD_FEE_PERCENT}% = ৳${fee.toFixed(2)} | Net ৳${(amt - fee).toFixed(2)}`;
+  const fee = +(amt * cfg.fee_percent / 100).toFixed(2);
+  const noteWithFee = `${note ? note + ' | ' : ''}Fee ${cfg.fee_percent}% = ৳${fee.toFixed(2)} | Net ৳${(amt - fee).toFixed(2)}`;
 
   const tx = db.transaction(() => {
     const r = db.prepare(`
