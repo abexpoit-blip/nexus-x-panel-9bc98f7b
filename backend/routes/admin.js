@@ -788,4 +788,119 @@ router.put('/otp-expiry', (req, res) => {
   }
 });
 
+// ============================================================
+// MSI Bot — mirrors IMS endpoints (status/start/stop/restart/scrape/sync/credentials)
+// ============================================================
+
+router.get('/msi-status', (req, res) => {
+  try {
+    const { getStatus } = require('../workers/msiBot');
+    res.json({ status: getStatus() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/msi-restart', async (req, res) => {
+  try {
+    const { restart } = require('../workers/msiBot');
+    await restart();
+    logFromReq(req, 'msi_bot_restart');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/msi-start', async (req, res) => {
+  try {
+    const bot = require('../workers/msiBot');
+    bot.start();
+    bot.logEvent && bot.logEvent('success', 'Bot started by admin');
+    logFromReq(req, 'msi_bot_start');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/msi-stop', async (req, res) => {
+  try {
+    const bot = require('../workers/msiBot');
+    await bot.stop();
+    bot.logEvent && bot.logEvent('warn', 'Bot stopped by admin');
+    logFromReq(req, 'msi_bot_stop');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/msi-scrape-now', async (req, res) => {
+  try {
+    const { scrapeNow } = require('../workers/msiBot');
+    const result = await scrapeNow();
+    logFromReq(req, 'msi_scrape_now', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/msi-sync-live', async (req, res) => {
+  try {
+    const { syncLive } = require('../workers/msiBot');
+    const result = await syncLive();
+    logFromReq(req, 'msi_sync_live', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/msi-pool-breakdown', (req, res) => {
+  const ranges = db.prepare(`
+    SELECT
+      COALESCE(operator, 'Unknown') AS name,
+      COUNT(*) AS count,
+      MAX(allocated_at) AS last_added
+    FROM allocations
+    WHERE provider = 'msi' AND status = 'pool'
+    GROUP BY COALESCE(operator, 'Unknown')
+    ORDER BY count DESC
+  `).all();
+  const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='msi' AND status='active'`).get().c;
+  res.json({ ranges, totalActive });
+});
+
+router.get('/msi-credentials', (req, res) => {
+  const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
+  const username = get('msi_username') || process.env.MSI_USERNAME || '';
+  const password = get('msi_password') || process.env.MSI_PASSWORD || '';
+  const base_url = get('msi_base_url') || process.env.MSI_BASE_URL || 'http://145.239.130.45';
+  const enabled = (get('msi_enabled') || process.env.MSI_ENABLED || 'false').toString().toLowerCase() === 'true';
+  const mask = (s) => s ? (s.length <= 4 ? '****' : s.slice(0,2) + '****' + s.slice(-2)) : '';
+  res.json({
+    enabled,
+    base_url,
+    username,
+    password_masked: mask(password),
+    has_password: !!password,
+    source: {
+      username: get('msi_username') ? 'database' : (process.env.MSI_USERNAME ? 'env' : 'none'),
+      password: get('msi_password') ? 'database' : (process.env.MSI_PASSWORD ? 'env' : 'none'),
+    },
+  });
+});
+
+router.put('/msi-credentials', async (req, res) => {
+  try {
+    const { username, password, base_url, enabled } = req.body || {};
+    const upsert = db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `);
+    if (typeof username === 'string' && username.length) upsert.run('msi_username', username.trim());
+    if (typeof password === 'string' && password.length) upsert.run('msi_password', password);
+    if (typeof base_url === 'string' && base_url.length) upsert.run('msi_base_url', base_url.trim().replace(/\/$/, ''));
+    if (typeof enabled === 'boolean') upsert.run('msi_enabled', enabled ? 'true' : 'false');
+    logFromReq(req, 'msi_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
+    try {
+      const bot = require('../workers/msiBot');
+      await bot.restart();
+      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
+    } catch (e) { console.warn('msi-credentials: restart failed:', e.message); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
+

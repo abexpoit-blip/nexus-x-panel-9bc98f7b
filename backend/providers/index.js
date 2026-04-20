@@ -1,10 +1,12 @@
 // Provider registry — add new providers here
 const acchub = require('./acchub');
 const ims = require('./ims');
+const msi = require('./msi');
 
 const providers = {
   acchub,
   ims,
+  msi,
 };
 
 function get(id) {

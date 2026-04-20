@@ -35,6 +35,7 @@ import AdminNotifications from "@/pages/admin/Notifications";
 import AdminPayments from "@/pages/admin/Payments";
 import AdminSecurity from "@/pages/admin/Security";
 import AdminImsStatus from "@/pages/admin/ImsStatus";
+import AdminMsiStatus from "@/pages/admin/MsiStatus";
 import AdminWithdrawals from "@/pages/admin/Withdrawals";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,7 @@ const AppRoutes = () => {
           <Route path="/admin/security" element={<AdminSecurity />} />
           <Route path="/admin/cdr" element={<AdminCDR />} />
           <Route path="/admin/ims-status" element={<AdminImsStatus />} />
+          <Route path="/admin/msi-status" element={<AdminMsiStatus />} />
           <Route path="/admin/notifications" element={<AdminNotifications />} />
         </Route>
 

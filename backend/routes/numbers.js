@@ -46,6 +46,15 @@ router.get('/ims/ranges', authRequired, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/numbers/msi/ranges — same shape, MSI provider
+router.get('/msi/ranges', authRequired, async (req, res) => {
+  try {
+    const provider = providers.get('msi');
+    const ranges = await provider.listRanges();
+    res.json({ ranges });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/numbers/get — agent allocates a fresh number
 router.post('/get', authRequired, async (req, res) => {
   try {

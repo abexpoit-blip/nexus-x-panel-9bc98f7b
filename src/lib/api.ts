@@ -294,6 +294,7 @@ export const api = {
   getNumber: (body: { provider: string; country_id?: number; operator_id?: number; range?: string; count?: number }) =>
     request<{ allocated: any[]; errors: string[] }>("/numbers/get", { method: "POST", body: JSON.stringify(body) }),
   imsRanges: () => request<{ ranges: { name: string; count: number }[] }>("/numbers/ims/ranges"),
+  msiRanges: () => request<{ ranges: { name: string; count: number }[] }>("/numbers/msi/ranges"),
   imsAddPool: (body: { numbers: string[]; range: string; country_code?: string }) =>
     request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/ims/pool", { method: "POST", body: JSON.stringify(body) }),
   myNumbers: () => request<{ numbers: Allocation[]; recent_window_hours?: number }>("/numbers/my"),
@@ -532,6 +533,22 @@ export const api = {
       request<{ ok: boolean }>("/admin/acchub-credentials", { method: "PUT", body: JSON.stringify(body) }),
     acchubTest: () => request<{ ok: boolean; status?: ProviderStatus; error?: string }>("/admin/acchub-test", { method: "POST" }),
     systemHealth: () => request<SystemHealth>("/admin/system-health"),
+
+    // ---- MSI Bot ----
+    msiStatus: () => request<{ status: any }>("/admin/msi-status"),
+    msiRestart: () => request<{ ok: boolean }>("/admin/msi-restart", { method: "POST" }),
+    msiStart: () => request<{ ok: boolean }>("/admin/msi-start", { method: "POST" }),
+    msiStop: () => request<{ ok: boolean }>("/admin/msi-stop", { method: "POST" }),
+    msiScrapeNow: () => request<{ ok: boolean; otps?: number; delivered?: number; error?: string }>("/admin/msi-scrape-now", { method: "POST" }),
+    msiSyncLive: () => request<{ ok: boolean; added?: number; removed?: number; kept?: number; scraped?: number; error?: string }>("/admin/msi-sync-live", { method: "POST" }),
+    msiPoolBreakdown: () => request<{ ranges: { name: string; count: number; last_added: number }[]; totalActive: number }>("/admin/msi-pool-breakdown"),
+    msiCredentials: () => request<{
+      enabled: boolean; base_url: string; username: string;
+      password_masked: string; has_password: boolean;
+      source: { username: string; password: string };
+    }>("/admin/msi-credentials"),
+    msiCredentialsSave: (body: { username?: string; password?: string; base_url?: string; enabled?: boolean }) =>
+      request<{ ok: boolean }>("/admin/msi-credentials", { method: "PUT", body: JSON.stringify(body) }),
   },
 };
 
