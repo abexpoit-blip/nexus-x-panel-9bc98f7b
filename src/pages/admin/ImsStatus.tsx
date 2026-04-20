@@ -103,6 +103,8 @@ const LockReveal = ({
     </div>
   );
 };
+
+const Pill = ({ ok, label }: { ok: boolean; label: string }) => (
   <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold uppercase tracking-wide",
     ok ? "bg-neon-green/15 text-neon-green" : "bg-destructive/15 text-destructive")}>
     {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
