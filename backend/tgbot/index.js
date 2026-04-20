@@ -38,24 +38,10 @@ const fmtAgo = (sec) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
-// Country code → flag emoji
-function flagOf(cc) {
-  if (!cc || cc.length !== 2) return '🌐';
-  const A = 0x1F1E6;
-  const a = 'A'.charCodeAt(0);
-  return String.fromCodePoint(A + (cc.charCodeAt(0) - a)) +
-         String.fromCodePoint(A + (cc.charCodeAt(1) - a));
-}
-
-const COUNTRY_NAMES = {
-  AF: 'Afghanistan', BD: 'Bangladesh', ET: 'Ethiopia', IN: 'India', ID: 'Indonesia',
-  MM: 'Myanmar', PK: 'Pakistan', PH: 'Philippines', VN: 'Vietnam', NG: 'Nigeria',
-  US: 'United States', UK: 'United Kingdom', VE: 'Venezuela', BR: 'Brazil',
-  CN: 'China', RU: 'Russia', TH: 'Thailand', KH: 'Cambodia', LA: 'Laos',
-  MY: 'Malaysia', SG: 'Singapore', JP: 'Japan', KR: 'South Korea',
-  TR: 'Turkey', SA: 'Saudi Arabia', AE: 'UAE', EG: 'Egypt',
-};
-const countryName = (cc) => COUNTRY_NAMES[cc] || cc || 'Unknown';
+// Country code → flag emoji (delegated to shared helper)
+const flagOf = ccFlag;
+const COUNTRY_NAMES = CC_NAMES;
+const countryName = ccName;
 
 // Service icon
 function serviceIcon(svc) {
