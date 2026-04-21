@@ -566,6 +566,9 @@ export default function IprnStatus() {
         </div>
       )}
 
+      {/* Live Numbers Pool — actual rows from /admin/iprn-numbers */}
+      <NumbersPoolTable />
+
       {/* Recent events */}
       {s.events && s.events.length > 0 && (
         <div className="glass-card border border-white/[0.06] rounded-xl p-5">
