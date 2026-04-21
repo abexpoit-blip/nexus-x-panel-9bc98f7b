@@ -528,6 +528,26 @@ export const api = {
       request<{ ok: boolean; interval_sec: number }>("/admin/ims-otp-interval", {
         method: "PUT", body: JSON.stringify({ interval_sec }),
       }),
+    // ----- XISORA -----
+    xisoraStatus: () => request<{ status: any }>("/admin/xisora-status"),
+    xisoraStart: () => request<{ ok: boolean }>("/admin/xisora-start", { method: "POST" }),
+    xisoraStop: () => request<{ ok: boolean }>("/admin/xisora-stop", { method: "POST" }),
+    xisoraRestart: () => request<{ ok: boolean }>("/admin/xisora-restart", { method: "POST" }),
+    xisoraScrapeNow: () => request<{ ok: boolean; otps?: number; error?: string }>("/admin/xisora-scrape-now", { method: "POST" }),
+    xisoraSyncLive: () => request<{ ok: boolean; added?: number; removed?: number; kept?: number; scraped?: number; error?: string }>("/admin/xisora-sync-live", { method: "POST" }),
+    xisoraPoolBreakdown: () => request<{
+      ranges: {
+        name: string; count: number; last_added: number; first_added?: number;
+        custom_name: string | null; tag_color: string | null; priority: number | null;
+        request_override: number | null; notes: string | null;
+        disabled: number | null; service_tag: string | null;
+      }[];
+      totalActive: number; totalUsed?: number;
+    }>("/admin/xisora-pool-breakdown"),
+    xisoraPoolCleanup: (body: { range?: string }) =>
+      request<{ ok: boolean; removed: number }>("/admin/xisora-pool-cleanup", {
+        method: "POST", body: JSON.stringify(body),
+      }),
     otpExpiry: () => request<{
       expiry_sec: number; expiry_min: number; source: string;
       min: number; max: number; options_min: number[];
