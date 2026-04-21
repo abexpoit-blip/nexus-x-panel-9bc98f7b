@@ -56,6 +56,10 @@ const AgentGetNumber = () => {
   const [availableServers, setAvailableServers] = useState<{ id: ServerId; label: string }[]>([
     { id: "acchub", label: SERVER_LABELS.acchub },
   ]);
+  // True once /numbers/providers has resolved at least once. Lets us
+  // distinguish "still loading" from "backend returned zero enabled
+  // providers" so the empty-state banner only shows in the latter case.
+  const [providersLoaded, setProvidersLoaded] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
   const [countryId, setCountryId] = useState<number | "">("");
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -175,12 +179,12 @@ const AgentGetNumber = () => {
         const list = (providers || [])
           .map((p) => ({ id: p.id as ServerId, label: SERVER_LABELS[p.id] || p.name || p.id }))
           .filter((s) => SERVER_LABELS[s.id]);
-        if (list.length === 0) return;
         setAvailableServers(list);
         // If the currently selected provider is no longer enabled, fall back to first available.
-        if (!list.some((s) => s.id === provider)) setProvider(list[0].id);
+        if (list.length > 0 && !list.some((s) => s.id === provider)) setProvider(list[0].id);
       })
-      .catch(() => {/* keep default Server A */});
+      .catch(() => {/* keep default Server A */})
+      .finally(() => setProvidersLoaded(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
