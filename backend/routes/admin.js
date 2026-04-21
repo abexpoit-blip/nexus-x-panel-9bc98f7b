@@ -1522,5 +1522,30 @@ router.put('/xisora-autorestart', (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/admin/xisora-enabled — read enabled flag + DB path for diagnostics
+router.get('/xisora-enabled', (req, res) => {
+  const row = db.prepare(`SELECT value FROM settings WHERE key = 'xisora_enabled'`).get();
+  const enabled = row?.value === '1' || row?.value === 'true';
+  let dbPath = null;
+  try { dbPath = db.name || null; } catch (_) {}
+  res.json({ enabled, db_path: dbPath });
+});
+
+// PUT /api/admin/xisora-enabled — flip enabled flag in the active DB
+router.put('/xisora-enabled', (req, res) => {
+  const { enabled } = req.body || {};
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled must be boolean' });
+  }
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at) VALUES ('xisora_enabled', ?, strftime('%s','now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(enabled ? '1' : '0');
+  logFromReq(req, 'xisora_enabled_toggle', { meta: { enabled } });
+  let dbPath = null;
+  try { dbPath = db.name || null; } catch (_) {}
+  res.json({ ok: true, enabled, db_path: dbPath });
+});
+
 module.exports = router;
 
