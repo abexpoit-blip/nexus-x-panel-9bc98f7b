@@ -1481,6 +1481,49 @@ router.get('/iprn-pool-breakdown', (req, res) => {
   res.json({ ranges, totalActive, totalUsed });
 });
 
+// GET /api/admin/iprn-numbers — paginated raw allocation rows for the IPRN provider.
+// Mirrors what the upstream /numbers/index page shows so admins can verify the
+// scrape captured the same inventory the panel displays. Filterable by status
+// and free-text search across phone / range / country.
+router.get('/iprn-numbers', (req, res) => {
+  try {
+    const status = String(req.query.status || 'all');         // pool | claiming | active | received | used | released | all
+    const q      = String(req.query.q || '').trim();
+    const limit  = Math.min(500, Math.max(1, +req.query.limit || 100));
+    const offset = Math.max(0, +req.query.offset || 0);
+
+    const where = [`a.provider = 'iprn'`];
+    const params = [];
+    if (status !== 'all') { where.push(`a.status = ?`); params.push(status); }
+    if (q) {
+      where.push(`(a.phone_number LIKE ? OR COALESCE(a.operator,'') LIKE ? OR COALESCE(a.country_code,'') LIKE ?)`);
+      const like = `%${q}%`;
+      params.push(like, like, like);
+    }
+    const whereSql = where.join(' AND ');
+
+    const total = db.prepare(`SELECT COUNT(*) c FROM allocations a WHERE ${whereSql}`).get(...params).c;
+    const rows = db.prepare(`
+      SELECT a.id, a.phone_number, a.operator AS range_name, a.country_code,
+             a.status, a.allocated_at, a.user_id, a.otp,
+             u.username
+      FROM allocations a
+      LEFT JOIN users u ON u.id = a.user_id
+      WHERE ${whereSql}
+      ORDER BY a.allocated_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    // Status counts (cheap aggregate so the UI can render filter chips with counts).
+    const counts = db.prepare(`
+      SELECT status, COUNT(*) c FROM allocations
+      WHERE provider='iprn' GROUP BY status
+    `).all().reduce((acc, r) => { acc[r.status] = r.c; return acc; }, {});
+
+    res.json({ rows, total, limit, offset, counts });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/iprn-credentials', (req, res) => {
   const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
   const username = get('iprn_username') || process.env.IPRN_USERNAME || '';

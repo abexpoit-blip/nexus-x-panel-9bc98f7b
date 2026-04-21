@@ -696,6 +696,24 @@ export const api = {
       request<{ has_cookies: boolean; count: number; saved_at: number | null; names?: string[] }>("/admin/iprn-cookies"),
     cookiesClear: () =>
       request<{ ok: boolean }>("/admin/iprn-cookies", { method: "DELETE" }),
+    numbers: (params: { status?: string; q?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set("status", params.status);
+      if (params.q) qs.set("q", params.q);
+      if (params.limit != null) qs.set("limit", String(params.limit));
+      if (params.offset != null) qs.set("offset", String(params.offset));
+      const tail = qs.toString();
+      return request<{
+        rows: Array<{
+          id: number; phone_number: string; range_name: string | null;
+          country_code: string | null; status: string;
+          allocated_at: number; user_id: number; otp: string | null;
+          username: string | null;
+        }>;
+        total: number; limit: number; offset: number;
+        counts: Record<string, number>;
+      }>(`/admin/iprn-numbers${tail ? `?${tail}` : ""}`);
+    },
   },
 
   // ===== Telegram Bot admin =====

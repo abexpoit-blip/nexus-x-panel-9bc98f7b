@@ -5,7 +5,7 @@ import { GradientMesh, PageHeader } from "@/components/premium";
 import {
   Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText,
   RefreshCw, Power, Play, Square, Save, Eye, EyeOff, Zap, Layers,
-  Clock, AlertTriangle, Sparkles, Cookie, Trash2,
+  Clock, AlertTriangle, Sparkles, Cookie, Trash2, Search, Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -73,6 +73,150 @@ const Row = ({ label, value, mono, accent }: { label: string; value: string; mon
     <span className={cn("text-sm", mono && "font-mono", accent || "text-foreground")}>{value}</span>
   </div>
 );
+
+// Live Numbers Pool — mirrors what /numbers/index shows on the upstream IPRN
+// panel. Lets the admin verify the scrape captured the same inventory the
+// vendor panel displays. Search + status filter + paging.
+const NumbersPoolTable = () => {
+  const [status, setStatus] = useState<string>("pool");
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [offset, setOffset] = useState(0);
+  const limit = 50;
+
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedQ(q); setOffset(0); }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["iprn-numbers", status, debouncedQ, offset],
+    queryFn: () => api.iprn.numbers({ status, q: debouncedQ, limit, offset }),
+    refetchInterval: 15_000,
+  });
+
+  const counts = data?.counts || {};
+  const total = data?.total ?? 0;
+  const rows = data?.rows ?? [];
+
+  const STATUSES: Array<{ key: string; label: string; color: string }> = [
+    { key: "all",      label: "All",       color: "text-foreground" },
+    { key: "pool",     label: "Pool",      color: "text-neon-cyan" },
+    { key: "claiming", label: "Claiming",  color: "text-neon-yellow" },
+    { key: "active",   label: "Active",    color: "text-neon-magenta" },
+    { key: "received", label: "Received",  color: "text-neon-green" },
+    { key: "used",     label: "Used",      color: "text-muted-foreground" },
+    { key: "released", label: "Released",  color: "text-muted-foreground" },
+  ];
+
+  return (
+    <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <Phone className="w-3.5 h-3.5 text-neon-cyan" /> Numbers Pool
+          <span className="text-[10px] font-normal text-muted-foreground/70 normal-case">
+            (live — mirrors upstream /numbers/index)
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <input
+              value={q} onChange={e => setQ(e.target.value)}
+              placeholder="phone / range / country"
+              className="w-56 bg-white/[0.04] border border-white/[0.08] rounded-md pl-7 pr-2 py-1.5 text-xs font-mono"
+            />
+          </div>
+          <button onClick={() => refetch()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08]">
+            <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />
+          </button>
+        </div>
+      </div>
+
+      {/* Status chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {STATUSES.map(s => {
+          const c = s.key === "all"
+            ? Object.values(counts).reduce((a, b) => a + b, 0)
+            : (counts[s.key] || 0);
+          const active = status === s.key;
+          return (
+            <button key={s.key} onClick={() => { setStatus(s.key); setOffset(0); }}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wider transition",
+                active
+                  ? "bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan"
+                  : "bg-white/[0.04] border border-white/[0.08] text-muted-foreground hover:bg-white/[0.08]"
+              )}>
+              {s.label} <span className="font-mono opacity-70 ml-1">{c}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto rounded-md border border-white/[0.06]">
+        <table className="w-full text-xs">
+          <thead className="bg-white/[0.03] text-[10px] uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="text-left px-3 py-2">Phone</th>
+              <th className="text-left px-3 py-2">Range</th>
+              <th className="text-left px-3 py-2">Country</th>
+              <th className="text-left px-3 py-2">Status</th>
+              <th className="text-left px-3 py-2">Assigned To</th>
+              <th className="text-left px-3 py-2">OTP</th>
+              <th className="text-right px-3 py-2">Allocated</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {isLoading && (
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Loading…</td></tr>
+            )}
+            {!isLoading && rows.length === 0 && (
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                No numbers match this filter. {status === "pool" && "If the upstream panel shows numbers but pool is empty, click 'Scrape Now' above."}
+              </td></tr>
+            )}
+            {rows.map(r => (
+              <tr key={r.id} className="border-t border-white/[0.04] hover:bg-white/[0.02]">
+                <td className="px-3 py-2 text-foreground">{r.phone_number}</td>
+                <td className="px-3 py-2 text-muted-foreground">{r.range_name || "—"}</td>
+                <td className="px-3 py-2 text-muted-foreground">{r.country_code || "—"}</td>
+                <td className="px-3 py-2">
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] uppercase",
+                    r.status === "pool"     && "bg-neon-cyan/10 text-neon-cyan",
+                    r.status === "claiming" && "bg-neon-yellow/10 text-neon-yellow",
+                    r.status === "active"   && "bg-neon-magenta/10 text-neon-magenta",
+                    r.status === "received" && "bg-neon-green/10 text-neon-green",
+                    (r.status === "used" || r.status === "released") && "bg-white/[0.05] text-muted-foreground",
+                  )}>{r.status}</span>
+                </td>
+                <td className="px-3 py-2 text-muted-foreground">{r.username || (r.user_id ? `#${r.user_id}` : "—")}</td>
+                <td className="px-3 py-2 text-neon-green">{r.otp || "—"}</td>
+                <td className="px-3 py-2 text-right text-muted-foreground">{fmtAgo(r.allocated_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pager */}
+      {total > limit && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Showing {offset + 1}–{Math.min(offset + limit, total)} of {total}</span>
+          <div className="flex gap-2">
+            <button onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={offset === 0}
+              className="px-2 py-1 rounded bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] disabled:opacity-40">Prev</button>
+            <button onClick={() => setOffset(o => o + limit)} disabled={offset + limit >= total}
+              className="px-2 py-1 rounded bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
   const [creds, setCreds] = useState({
@@ -421,6 +565,9 @@ export default function IprnStatus() {
           </div>
         </div>
       )}
+
+      {/* Live Numbers Pool — actual rows from /admin/iprn-numbers */}
+      <NumbersPoolTable />
 
       {/* Recent events */}
       {s.events && s.events.length > 0 && (
