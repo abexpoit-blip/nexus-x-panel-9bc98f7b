@@ -572,6 +572,11 @@ export const api = {
     // ---- Global provider settings ----
     systemHealth: () => request<SystemHealth>("/admin/system-health"),
     providerStatus: () => request<{ providers: ProviderStatus[] }>("/admin/provider-status"),
+    providerToggle: (id: string, enabled: boolean) =>
+      request<{ ok: boolean; id: string; enabled: boolean; message: string }>("/admin/provider-toggle", {
+        method: "PUT",
+        body: JSON.stringify({ id, enabled }),
+      }),
     otpExpiry: () => request<{ expiry_min: number; source: string; options_min: number[] }>("/admin/otp-expiry"),
     otpExpirySave: (expiry_min: number) =>
       request<{ ok: boolean; expiry_min: number }>("/admin/otp-expiry", {
@@ -790,6 +795,8 @@ export interface ProviderStatus {
   currency?: string;
   lastError?: string | null;
   otpHistoryCount?: number;
+  enabled?: boolean;
+  togglable?: boolean;
 }
 
 export interface WaitStat {
