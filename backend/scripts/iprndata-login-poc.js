@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * iprndata HTTP login Proof-of-Concept
+ * (sync trigger v2)
  * ---------------------------------------------------------------
  * Goal: confirm we can login + scrape WITHOUT puppeteer (axios only).
  * If this works → iprnBot will be 5x lighter than imsBot/msiBot.
