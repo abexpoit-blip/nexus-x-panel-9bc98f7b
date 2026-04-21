@@ -1335,5 +1335,134 @@ router.post('/fake-otp/purge', (req, res) => {
   res.json({ ok: true, removed: r.changes });
 });
 
+// =====================================================================
+// XISORA SMS bot — admin endpoints (mirror of IMS)
+// =====================================================================
+
+// GET /api/admin/xisora-status — live XISORA bot status
+router.get('/xisora-status', (req, res) => {
+  try {
+    const { getStatus } = require('../workers/xisoraBot');
+    res.json({ status: getStatus() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/xisora-restart
+router.post('/xisora-restart', async (req, res) => {
+  try {
+    const { restart } = require('../workers/xisoraBot');
+    await restart();
+    logFromReq(req, 'xisora_bot_restart');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/xisora-start
+router.post('/xisora-start', async (req, res) => {
+  try {
+    const bot = require('../workers/xisoraBot');
+    bot.start();
+    bot.logEvent && bot.logEvent('success', 'Bot started by admin');
+    logFromReq(req, 'xisora_bot_start');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/xisora-stop
+router.post('/xisora-stop', async (req, res) => {
+  try {
+    const bot = require('../workers/xisoraBot');
+    await bot.stop();
+    bot.logEvent && bot.logEvent('warn', 'Bot stopped by admin');
+    logFromReq(req, 'xisora_bot_stop');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/xisora-scrape-now — immediate OTP poll
+router.post('/xisora-scrape-now', async (req, res) => {
+  try {
+    const { scrapeNow } = require('../workers/xisoraBot');
+    const result = await scrapeNow();
+    logFromReq(req, 'xisora_scrape_now', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/xisora-sync-live — reconcile pool with panel
+router.post('/xisora-sync-live', async (req, res) => {
+  try {
+    const { syncLive } = require('../workers/xisoraBot');
+    const result = await syncLive();
+    logFromReq(req, 'xisora_sync_live', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/admin/xisora-pool-breakdown — pool grouped by range (operator)
+router.get('/xisora-pool-breakdown', (req, res) => {
+  const ranges = db.prepare(`
+    SELECT
+      COALESCE(a.operator, 'Unknown') AS name,
+      COUNT(*) AS count,
+      MAX(a.allocated_at) AS last_added,
+      MIN(a.allocated_at) AS first_added,
+      m.custom_name, m.tag_color, m.priority,
+      m.request_override, m.notes, m.disabled, m.service_tag
+    FROM allocations a
+    LEFT JOIN xisora_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+    WHERE a.provider = 'xisora' AND a.status = 'pool'
+    GROUP BY COALESCE(a.operator, 'Unknown')
+    ORDER BY COALESCE(m.priority, 0) DESC, count DESC
+  `).all();
+  const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='xisora' AND status='active'`).get().c;
+  const totalUsed = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='xisora' AND status='used'`).get().c;
+  res.json({ ranges, totalActive, totalUsed });
+});
+
+// PATCH /api/admin/xisora-range-meta/:prefix — customize a range
+router.patch('/xisora-range-meta/:prefix', (req, res) => {
+  const prefix = String(req.params.prefix || '').trim();
+  if (!prefix) return res.status(400).json({ error: 'prefix required' });
+  const { custom_name, tag_color, priority, request_override, notes, disabled, service_tag } = req.body || {};
+  db.prepare(`
+    INSERT INTO xisora_range_meta (range_prefix, custom_name, tag_color, priority, request_override, notes, disabled, service_tag, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+    ON CONFLICT(range_prefix) DO UPDATE SET
+      custom_name = COALESCE(excluded.custom_name, custom_name),
+      tag_color = COALESCE(excluded.tag_color, tag_color),
+      priority = COALESCE(excluded.priority, priority),
+      request_override = COALESCE(excluded.request_override, request_override),
+      notes = COALESCE(excluded.notes, notes),
+      disabled = COALESCE(excluded.disabled, disabled),
+      service_tag = COALESCE(excluded.service_tag, service_tag),
+      updated_at = strftime('%s','now')
+  `).run(
+    prefix,
+    custom_name ?? null,
+    tag_color ?? null,
+    priority ?? null,
+    request_override ?? null,
+    notes ?? null,
+    disabled ?? null,
+    service_tag ?? null,
+  );
+  logFromReq(req, 'xisora_range_meta_update', { meta: { prefix, ...req.body } });
+  res.json({ ok: true });
+});
+
+// POST /api/admin/xisora-pool-cleanup — purge pool entries by range
+router.post('/xisora-pool-cleanup', (req, res) => {
+  const { range } = req.body || {};
+  let r;
+  if (range) {
+    r = db.prepare(`DELETE FROM allocations WHERE provider='xisora' AND status='pool' AND COALESCE(operator,'Unknown') = ?`).run(range);
+  } else {
+    r = db.prepare(`DELETE FROM allocations WHERE provider='xisora' AND status='pool'`).run();
+  }
+  logFromReq(req, 'xisora_pool_cleanup', { meta: { range: range || 'ALL', removed: r.changes } });
+  res.json({ ok: true, removed: r.changes });
+});
+
 module.exports = router;
 
