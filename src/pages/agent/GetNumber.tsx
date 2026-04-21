@@ -735,6 +735,7 @@ const AgentGetNumber = () => {
           </div>
         </div>
       </GlassCard>
+      )}
 
       {numbers.length > 0 && (() => {
         const totalPages = Math.max(1, Math.ceil(numbers.length / PAGE_SIZE));
