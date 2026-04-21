@@ -396,15 +396,16 @@ async function scrapeNumbers() {
     WHERE provider='iprn' AND status IN ('pool','claiming','active')
   `).all().reduce((s, r) => s.add(r.phone_number), new Set());
 
+  const sysUser = ensurePoolUser();
   const ins = db.prepare(`
-    INSERT INTO allocations (provider, phone_number, operator, country_code, status, allocated_at, user_id)
-    VALUES ('iprn', ?, ?, ?, 'pool', strftime('%s','now'), 0)
+    INSERT INTO allocations (user_id, provider, phone_number, operator, country_code, status, allocated_at)
+    VALUES (?, 'iprn', ?, ?, ?, 'pool', strftime('%s','now'))
   `);
   let added = 0;
   const tx = db.transaction(() => {
     for (const r of rows) {
       if (existing.has(r.phone)) continue;
-      ins.run(r.phone, r.range, r.country);
+      ins.run(sysUser.id, r.phone, r.range, r.country);
       added++;
     }
   });
