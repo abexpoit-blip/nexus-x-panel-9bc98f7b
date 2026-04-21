@@ -9,17 +9,17 @@
  *   cd /opt/nexus/nexus-x-panel/backend
  *   node scripts/iprndata-login-poc.js
  *
- * Required env (or hard-coded for POC):
- *   IPRN_USERNAME=MAMUN25
- *   IPRN_PASSWORD=mamun@11aa
+ * Required env:
+ *   IPRN_USERNAME=your_username
+ *   IPRN_PASSWORD=your_password
  */
 
 const axios = require('axios');
 
 // ---- config ----------------------------------------------------
 const BASE = 'https://iprndata.com';
-const USERNAME = process.env.IPRN_USERNAME || 'MAMUN25';
-const PASSWORD = process.env.IPRN_PASSWORD || 'mamun@11aa';
+const USERNAME = process.env.IPRN_USERNAME;
+const PASSWORD = process.env.IPRN_PASSWORD;
 
 const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -105,6 +105,10 @@ function extractFormFieldName(html) {
 // ---- main ------------------------------------------------------
 (async function main() {
   console.log('━━━ iprndata HTTP login POC ━━━');
+  if (!USERNAME || !PASSWORD) {
+    console.error('✗ Missing env: set IPRN_USERNAME and IPRN_PASSWORD before running this script.');
+    process.exit(1);
+  }
   console.log(`User: ${USERNAME}`);
 
   // 1. GET login page → cookies + csrf
