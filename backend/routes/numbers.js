@@ -115,6 +115,11 @@ router.post('/get', authRequired, async (req, res) => {
     // disabled bot can never allocate numbers (and we don't waste a poll).
     if (!isProviderEnabled(providerId)) {
       return res.status(403).json({
+        // Machine-readable code so the UI can switch on it directly
+        // instead of fragile regex on the human-readable `error` string.
+        code: 'PROVIDER_DISABLED',
+        provider: providerId,
+        provider_name: provider.name || providerId,
         error: `${provider.name || providerId} is currently disabled by admin. Please pick another source.`,
         allocated: [], errors: [],
       });

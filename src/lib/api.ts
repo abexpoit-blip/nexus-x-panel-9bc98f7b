@@ -17,6 +17,23 @@ export const demoMode = {
   disable: () => localStorage.removeItem(DEMO_KEY),
 };
 
+// Typed API error — carries HTTP status + machine-readable `code` from the
+// backend (e.g. 'PROVIDER_DISABLED') so callers can switch on intent
+// instead of regex-matching the human-readable message.
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  data: unknown;
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
+    const c = (data as { code?: unknown })?.code;
+    if (typeof c === "string") this.code = c;
+  }
+}
+
 // In-memory IMS bot state for demo mode (preview without backend)
 const demoImsState = (() => {
   let running = true;
@@ -100,7 +117,10 @@ async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T
     },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as any).error || `Request failed: ${res.status}`);
+  if (!res.ok) {
+    const msg = (data as { error?: string }).error || `Request failed: ${res.status}`;
+    throw new ApiError(msg, res.status, data);
+  }
   return data as T;
 }
 
