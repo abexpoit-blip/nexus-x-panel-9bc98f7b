@@ -3,12 +3,14 @@ const acchub = require('./acchub');
 const ims = require('./ims');
 const msi = require('./msi');
 const numpanel = require('./numpanel');
+const iprn = require('./iprn');
 
 const providers = {
   acchub,
   ims,
   msi,
   numpanel,
+  iprn,
 };
 
 function get(id) {

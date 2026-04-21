@@ -128,4 +128,8 @@ app.listen(PORT, () => {
   // Start NumPanel bot (no-op if NUMPANEL_ENABLED=false)
   try { require('./workers/numpanelBot').start(); }
   catch (e) { console.warn('numpanel bot start error:', e.message); }
+
+  // Start IPRN bot (no-op if IPRN_ENABLED=false). HTTP-only — no browser needed.
+  try { require('./workers/iprnBot').start(); }
+  catch (e) { console.warn('iprn bot start error:', e.message); }
 });
