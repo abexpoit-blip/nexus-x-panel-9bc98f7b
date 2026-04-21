@@ -458,4 +458,32 @@ function stop() {
   if (numbersTimer) { clearInterval(numbersTimer); numbersTimer = null; }
 }
 
-module.exports = { start, stop, getStatus, getRecentOtpFor };
+async function restart() {
+  stop();
+  // Allow in-flight loops to settle before restarting
+  await new Promise(r => setTimeout(r, 250));
+  loggedIn = false;
+  cookies.clear();
+  start();
+}
+
+async function scrapeNow() {
+  ({ ENABLED, BASE_URL, USERNAME, PASSWORD } = resolveCreds());
+  if (!ENABLED) return { ok: false, error: 'IPRN bot disabled' };
+  if (!USERNAME || !PASSWORD) return { ok: false, error: 'Missing credentials' };
+  try {
+    const beforeAdded = status.numbersAddedTotal;
+    const beforeOtps = status.otpsDeliveredTotal;
+    await scrapeNumbers();
+    const otps = await scrapeOtps();
+    return {
+      ok: true,
+      added: status.numbersAddedTotal - beforeAdded,
+      otps: (status.otpsDeliveredTotal - beforeOtps) || otps || 0,
+    };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+module.exports = { start, stop, restart, scrapeNow, getStatus, getRecentOtpFor, logEvent };
