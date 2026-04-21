@@ -229,6 +229,23 @@ function rememberOtp(phone) {
 }
 function getRecentOtpFor(phone) { return recentOtpCache.has(phone); }
 
+// ---- Pool ownership ----
+// allocations.user_id is NOT NULL with FK → users(id). Pool rows aren't
+// owned by a real agent yet, so we attach them to a synthetic suspended
+// system user (same pattern as msiBot/imsBot). Without this, every insert
+// fails with "FOREIGN KEY constraint failed" and 0 numbers ever land.
+function ensurePoolUser() {
+  let u = db.prepare("SELECT id FROM users WHERE username = '__iprn_pool__'").get();
+  if (!u) {
+    const r = db.prepare(
+      `INSERT INTO users (username, password_hash, role, status)
+       VALUES ('__iprn_pool__', '!', 'agent', 'suspended')`
+    ).run();
+    u = { id: r.lastInsertRowid };
+  }
+  return u;
+}
+
 // ---- Login ----
 async function login() {
   cookies.clear();
@@ -336,12 +353,18 @@ function parsePoolRows(html) {
       cells.push(cm[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim());
     }
     if (!cells.length) continue;
-    // Find first cell that looks like a phone (digits, optional +, 7-15 chars)
-    const phoneCell = cells.find(c => /^\+?\d[\d\s\-]{6,}$/.test(c));
-    if (!phoneCell) continue;
-    const phone = phoneCell.replace(/[\s\-]/g, '');
-    const range = cells[0] || 'Unknown';        // first column usually = group/range
-    const country = cells.find(c => /^[A-Z]{2}$/.test(c)) || null;
+    // Real iprndata /numbers/index columns:
+    //   [0]=checkbox  [1]=Number  [2]=Country  [3]=Billing Group
+    //   [4]=Routing   [5]=Service [6]=Allocated To  [7]=Allocated Terms  [8]=Date  [9]=Actions
+    // The checkbox cell is sometimes absent → don't assume index 0.
+    // We instead locate the phone cell by content, then derive sibling cells.
+    const phoneIdx = cells.findIndex(c => /^\+?\d[\d\s\-]{6,}$/.test(c));
+    if (phoneIdx < 0) continue;
+    const phone = cells[phoneIdx].replace(/[\s\-]/g, '');
+    const country = cells[phoneIdx + 1] || null;          // "Tajikistan", "USA", etc.
+    // Billing group cell often contains both group name + the "+99292864v1" mask
+    // → keep the full text as range so admins recognise it.
+    const range = cells[phoneIdx + 2] || country || 'Unknown';
     rows.push({ phone, range, country });
   }
   return rows;
@@ -373,15 +396,16 @@ async function scrapeNumbers() {
     WHERE provider='iprn' AND status IN ('pool','claiming','active')
   `).all().reduce((s, r) => s.add(r.phone_number), new Set());
 
+  const sysUser = ensurePoolUser();
   const ins = db.prepare(`
-    INSERT INTO allocations (provider, phone_number, operator, country_code, status, allocated_at, user_id)
-    VALUES ('iprn', ?, ?, ?, 'pool', strftime('%s','now'), 0)
+    INSERT INTO allocations (user_id, provider, phone_number, operator, country_code, status, allocated_at)
+    VALUES (?, 'iprn', ?, ?, ?, 'pool', strftime('%s','now'))
   `);
   let added = 0;
   const tx = db.transaction(() => {
     for (const r of rows) {
       if (existing.has(r.phone)) continue;
-      ins.run(r.phone, r.range, r.country);
+      ins.run(sysUser.id, r.phone, r.range, r.country);
       added++;
     }
   });
