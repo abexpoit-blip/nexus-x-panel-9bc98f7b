@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Hash, Copy, Check, Download, Search, ChevronDown, Wallet, AlertTriangle, Layers, Server, ChevronLeft, ChevronRight, Bell, BellOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface AllocatedNumber {
@@ -39,7 +39,7 @@ interface Range {
 // Agents see "Server A/B/C/D" — real provider names (acchub/ims/msi/numpanel) are hidden.
 // The actual list shown is filtered against the backend `/numbers/providers` response,
 // so disabled bots disappear from the picker entirely (no dead options for agents).
-const SERVER_LABELS: Record<string, string> = {
+export const SERVER_LABELS: Record<string, string> = {
   acchub: "Server A",
   ims: "Server B",
   msi: "Server C",
@@ -355,9 +355,12 @@ const AgentGetNumber = () => {
       else if (provider === "msi") api.msiRanges().then(({ ranges }) => setRanges(ranges)).catch(() => {});
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      // 403 from backend = provider was just disabled mid-session. Refresh
-      // the picker, auto-switch, and tell the agent what happened.
-      if (/disabled by admin|currently disabled/i.test(msg)) {
+      // Dedicated state for the soft-OFF case. Backend returns
+      // { status: 403, code: 'PROVIDER_DISABLED' } so we switch on the
+      // machine code, never the human-readable text.
+      const isDisabled =
+        e instanceof ApiError && (e.code === "PROVIDER_DISABLED" || e.status === 403);
+      if (isDisabled) {
         const after = await refreshProviders();
         toast({
           title: "Provider disabled mid-session",
