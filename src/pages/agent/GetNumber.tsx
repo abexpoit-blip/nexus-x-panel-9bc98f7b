@@ -44,8 +44,9 @@ const SERVER_LABELS: Record<string, string> = {
   ims: "Server B",
   msi: "Server C",
   numpanel: "Server D",
+  iprn: "Server E",
 };
-type ServerId = "acchub" | "ims" | "msi" | "numpanel";
+type ServerId = "acchub" | "ims" | "msi" | "numpanel" | "iprn";
 
 const AgentGetNumber = () => {
   const { user, maintenanceMode, maintenanceMessage } = useAuth();
@@ -55,6 +56,10 @@ const AgentGetNumber = () => {
   const [availableServers, setAvailableServers] = useState<{ id: ServerId; label: string }[]>([
     { id: "acchub", label: SERVER_LABELS.acchub },
   ]);
+  // True once /numbers/providers has resolved at least once. Lets us
+  // distinguish "still loading" from "backend returned zero enabled
+  // providers" so the empty-state banner only shows in the latter case.
+  const [providersLoaded, setProvidersLoaded] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
   const [countryId, setCountryId] = useState<number | "">("");
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -174,12 +179,12 @@ const AgentGetNumber = () => {
         const list = (providers || [])
           .map((p) => ({ id: p.id as ServerId, label: SERVER_LABELS[p.id] || p.name || p.id }))
           .filter((s) => SERVER_LABELS[s.id]);
-        if (list.length === 0) return;
         setAvailableServers(list);
         // If the currently selected provider is no longer enabled, fall back to first available.
-        if (!list.some((s) => s.id === provider)) setProvider(list[0].id);
+        if (list.length > 0 && !list.some((s) => s.id === provider)) setProvider(list[0].id);
       })
-      .catch(() => {/* keep default Server A */});
+      .catch(() => {/* keep default Server A */})
+      .finally(() => setProvidersLoaded(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -458,6 +463,27 @@ const AgentGetNumber = () => {
         </GlassCard>
       )}
 
+      {/* All providers OFF — admin has soft-disabled every bot. We show
+          this banner so the agent knows WHY the Source picker is empty
+          (instead of silently rendering a useless form). */}
+      {providersLoaded && availableServers.length === 0 && !maintenanceMode && (
+        <GlassCard className="border-destructive/40 bg-destructive/[0.06]">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-display font-semibold text-destructive">All providers are temporarily disabled</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Admin has switched off every number source. New allocations are paused until at least one provider is re-enabled.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Existing numbers in your live list will continue to receive OTPs normally.
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {availableServers.length > 0 && (
       <GlassCard glow="cyan" className={cn("relative", (countryOpen || rangeOpen) ? "z-50" : "z-10")}>
         {/* Server selector — Server A = AccHub, Server B = IMS (real names hidden) */}
         <div className="flex items-center gap-2 mb-4 pb-4 border-b border-white/[0.06]">
@@ -709,6 +735,7 @@ const AgentGetNumber = () => {
           </div>
         </div>
       </GlassCard>
+      )}
 
       {numbers.length > 0 && (() => {
         const totalPages = Math.max(1, Math.ceil(numbers.length / PAGE_SIZE));

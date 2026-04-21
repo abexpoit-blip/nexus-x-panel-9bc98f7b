@@ -8,6 +8,19 @@ const { getOtpExpirySec, getRecentOtpHours } = require('../lib/settings');
 
 const router = express.Router();
 
+// Soft-OFF gate — single source of truth for "is this provider enabled?".
+// Mirrors the logic in /providers below so the agent UI list and the
+// number-allocation endpoint can NEVER drift apart. acchub is API-only
+// (no toggle); everything else is opt-in via settings table or env var.
+function isProviderEnabled(id) {
+  if (id === 'acchub') return true;
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(`${id}_enabled`);
+  const dbVal = row?.value;
+  const envVal = process.env[`${id.toUpperCase()}_ENABLED`];
+  const raw = dbVal ?? envVal ?? 'false';
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+}
+
 // GET /api/numbers/config — shared live-number timing config used by website
 // countdown + auto-release logic. We also return server_now so the frontend can
 // correct browser clock drift and avoid false "instant expired" states.
@@ -23,15 +36,7 @@ router.get('/config', authRequired, (req, res) => {
 // dead options (and we don't waste bandwidth listing empty pools).
 router.get('/providers', authRequired, (req, res) => {
   const all = providers.list();
-  const isEnabled = (id) => {
-    if (id === 'acchub') return true; // acchub is API-only, no toggle
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(`${id}_enabled`);
-    const dbVal = row?.value;
-    const envVal = process.env[`${id.toUpperCase()}_ENABLED`];
-    const raw = dbVal ?? envVal ?? 'false';
-    return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
-  };
-  res.json({ providers: all.filter((p) => isEnabled(p.id)) });
+  res.json({ providers: all.filter((p) => isProviderEnabled(p.id)) });
 });
 
 // GET /api/numbers/countries/:provider
@@ -104,6 +109,16 @@ router.post('/get', authRequired, async (req, res) => {
     let provider;
     try { provider = providers.get(providerId); }
     catch (e) { return res.status(400).json({ error: e.message }); }
+
+    // Soft-OFF guard — admin disabled this provider. Defense-in-depth: even
+    // if the agent UI somehow shows a stale option, we refuse here so a
+    // disabled bot can never allocate numbers (and we don't waste a poll).
+    if (!isProviderEnabled(providerId)) {
+      return res.status(403).json({
+        error: `${provider.name || providerId} is currently disabled by admin. Please pick another source.`,
+        allocated: [], errors: [],
+      });
+    }
 
     // Phase 1 — fetch numbers from provider in parallel (with concurrency cap
     // so we don't hammer the upstream / IMS pool with 100 simultaneous gets).
