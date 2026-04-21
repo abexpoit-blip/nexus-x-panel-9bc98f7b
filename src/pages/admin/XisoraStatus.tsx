@@ -212,6 +212,17 @@ const AdminXisoraStatus = () => {
         icon={<Bot className="w-5 h-5 text-neon-cyan" />}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={handleToggleEnabled} disabled={enToggling}
+              title={enData?.db_path ? `Active DB: ${enData.db_path}` : "Toggle xisora_enabled in active DB"}
+              className={cn(
+                "inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold uppercase tracking-wide border transition disabled:opacity-50",
+                (enData?.enabled ?? s?.enabled)
+                  ? "bg-neon-green/15 border-neon-green/40 text-neon-green hover:bg-neon-green/25"
+                  : "bg-destructive/15 border-destructive/40 text-destructive hover:bg-destructive/25"
+              )}>
+              <Power className={cn("w-3.5 h-3.5", enToggling && "animate-spin")} />
+              {(enData?.enabled ?? s?.enabled) ? "Bot Enabled" : "Enable Bot"}
+            </button>
             {s?.running ? (
               <button onClick={() => handleAction("stop")} disabled={busy}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 transition disabled:opacity-50">
