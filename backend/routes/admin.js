@@ -1558,6 +1558,27 @@ router.put('/iprn-otp-interval', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/admin/iprn-cookies — current cookie status (count + saved-at, no values).
+// Cookie values are sensitive (= live session token) so we never expose them.
+router.get('/iprn-cookies', (req, res) => {
+  try {
+    const bot = require('../workers/iprnBot');
+    res.json(bot.getCookieMeta ? bot.getCookieMeta() : { has_cookies: false, count: 0, saved_at: null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/admin/iprn-cookies — admin force-purges saved session.
+// Useful when the upstream session sticks but the bot is in a bad state.
+router.delete('/iprn-cookies', async (req, res) => {
+  try {
+    const bot = require('../workers/iprnBot');
+    if (bot.clearPersistedCookies) bot.clearPersistedCookies();
+    logFromReq(req, 'iprn_cookies_cleared');
+    try { await bot.restart(); } catch (_) {}
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 module.exports = router;
 

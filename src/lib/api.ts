@@ -692,6 +692,10 @@ export const api = {
     otpInterval: () => request<{ interval_sec: number; source: string; options: number[]; min: number; max: number }>("/admin/iprn-otp-interval"),
     otpIntervalSave: (interval_sec: number) =>
       request<{ ok: boolean; interval_sec: number }>("/admin/iprn-otp-interval", { method: "PUT", body: JSON.stringify({ interval_sec }) }),
+    cookies: () =>
+      request<{ has_cookies: boolean; count: number; saved_at: number | null; names?: string[] }>("/admin/iprn-cookies"),
+    cookiesClear: () =>
+      request<{ ok: boolean }>("/admin/iprn-cookies", { method: "DELETE" }),
   },
 
   // ===== Telegram Bot admin =====

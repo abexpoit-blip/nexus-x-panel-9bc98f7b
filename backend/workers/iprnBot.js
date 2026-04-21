@@ -33,6 +33,15 @@ function readSetting(key) {
   catch (_) { return null; }
 }
 
+function writeSetting(key, value) {
+  try {
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `).run(key, value);
+  } catch (e) { dwarn('[iprn-bot] writeSetting failed:', e.message); }
+}
+
 function resolveCreds() {
   const dbEnabled = readSetting('iprn_enabled');
   const dbUser    = readSetting('iprn_username');
@@ -78,6 +87,43 @@ function absorbSetCookie(headers) {
     if (eq < 0) continue;
     cookies.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
   }
+  // Persist whenever the upstream rotates them so we survive restarts.
+  persistCookies();
+}
+
+// ---- Cookie persistence (settings table — no extra schema needed) -------
+const COOKIE_KEY = 'iprn_cookies';
+const COOKIE_SAVED_AT_KEY = 'iprn_cookies_saved_at';
+function persistCookies() {
+  try {
+    if (cookies.size === 0) return;
+    writeSetting(COOKIE_KEY, JSON.stringify([...cookies.entries()]));
+    writeSetting(COOKIE_SAVED_AT_KEY, String(Math.floor(Date.now() / 1000)));
+  } catch (_) {}
+}
+function loadCookies() {
+  try {
+    const raw = readSetting(COOKIE_KEY);
+    if (!raw) return false;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length === 0) return false;
+    cookies.clear();
+    for (const [k, v] of arr) cookies.set(k, v);
+    dlog(`[iprn-bot] loaded ${cookies.size} persisted cookies`);
+    return true;
+  } catch (_) { return false; }
+}
+function clearPersistedCookies() {
+  cookies.clear();
+  try { db.prepare('DELETE FROM settings WHERE key IN (?, ?)').run(COOKIE_KEY, COOKIE_SAVED_AT_KEY); } catch (_) {}
+}
+function getCookieMeta() {
+  return {
+    has_cookies: cookies.size > 0,
+    count: cookies.size,
+    saved_at: +(readSetting(COOKIE_SAVED_AT_KEY) || 0) || null,
+    names: [...cookies.keys()],
+  };
 }
 
 function makeHttp() {
@@ -186,6 +232,7 @@ function getRecentOtpFor(phone) { return recentOtpCache.has(phone); }
 // ---- Login ----
 async function login() {
   cookies.clear();
+  clearPersistedCookies();
   http = makeHttp();
 
   dlog('[iprn-bot] GET /user-management/auth/login');
@@ -219,23 +266,60 @@ async function login() {
   res = await http.get('/dashboard');
   if ([301, 302, 303, 307, 308].includes(res.status)) res = await followRedirect(res);
 
+  // Verification: a successful login means we are NOT bounced back to /login.
+  // We used to require a hard-coded marker like "Dashboard" or "logout" but
+  // that broke whenever IPRN reskinned the panel. The robust signal is:
+  //   • final URL is not /login, AND
+  //   • the response body does NOT contain the LoginForm field again.
+  const finalUrl = res.request?.path || res.config?.url || '';
   const html = String(res.data || '');
-  const ok = html.includes(USERNAME) || /MARGIN TREND|Dashboard|logout/i.test(html);
-  if (!ok) throw new Error('Login verification failed (no dashboard markers)');
+  const bouncedToLogin = /\/login/i.test(finalUrl);
+  const stillOnLoginForm = /name="LoginForm\[username\]/i.test(html);
+  if (bouncedToLogin || stillOnLoginForm) {
+    throw new Error('Login verification failed — got bounced to /login (bad credentials?)');
+  }
 
   loggedIn = true;
   status.loggedIn = true;
   status.lastLoginAt = Math.floor(Date.now() / 1000);
+  persistCookies();
   console.log(`[iprn-bot] ✓ logged in as ${USERNAME}`);
   logEvent('success', `Logged in as ${USERNAME}`);
 }
 
+// Try the persisted cookie session first; fall back to a fresh login on
+// any sign of session expiry. This is the "auto-login when cookies fail"
+// flow the user asked for — works transparently across restarts.
+async function tryCookieSession() {
+  if (cookies.size === 0) return false;
+  try {
+    let res = await http.get('/dashboard');
+    if ([301, 302, 303, 307, 308].includes(res.status)) res = await followRedirect(res);
+    const html = String(res.data || '');
+    const finalUrl = res.request?.path || res.config?.url || '';
+    const looksLikeLogin = /\/login/i.test(finalUrl) || /name="LoginForm/i.test(html);
+    if (looksLikeLogin) return false;
+    loggedIn = true;
+    status.loggedIn = true;
+    status.lastLoginAt = Math.floor(Date.now() / 1000);
+    logEvent('success', 'Resumed session via saved cookies');
+    return true;
+  } catch (_) { return false; }
+}
+
 async function ensureLoggedIn() {
   if (loggedIn) return;
+  // 1) Try saved cookies (fast path — no captcha, no CSRF roundtrip)
+  if (await tryCookieSession()) return;
+  // 2) Fall back to a clean login
   await login();
 }
 
-// ---- Pool scrape: /billing-groups/index ----
+// ---- Pool scrape: /numbers/index ----
+// The IPRN panel (per actual UI: iprndata.com/numbers/index) shows the
+// real number inventory — what /billing-groups/index used to return was
+// a SUMMARY, not the actual rows. We now hit the real /numbers/index
+// table directly so the admin Pool view matches the upstream panel.
 // Yii2 GridView markup: <table>...<tbody><tr><td>...</td></tr></tbody></table>
 // Columns vary per account; we extract phone numbers (E.164 / digits ≥7) from each row.
 function parsePoolRows(html) {
@@ -265,7 +349,9 @@ function parsePoolRows(html) {
 
 async function scrapeNumbers() {
   await ensureLoggedIn();
-  let res = await http.get('/billing-groups/index');
+  // Pull a healthy first page of the inventory. Yii2 GridView paginates
+  // server-side so per-page=100 is the upper-safe value most installs allow.
+  let res = await http.get('/numbers/index?per-page=100');
   if ([301, 302, 303].includes(res.status)) res = await followRedirect(res);
   if (/\/login/i.test(res.request?.path || res.config?.url || '')) {
     loggedIn = false;
@@ -443,6 +529,12 @@ function start() {
   status.running = true;
   _stopped = false;
 
+  // Try to resume a saved session before the first scrape — avoids the
+  // 2-step CSRF login dance on every restart.
+  if (loadCookies()) {
+    dlog('[iprn-bot] attempting cookie-based resume on startup');
+  }
+
   // Kick off first pool sync immediately, then on interval
   runNumbersLoop().catch(() => {});
   numbersTimer = setInterval(runNumbersLoop, NUMBERS_INTERVAL * 1000);
@@ -487,3 +579,6 @@ async function scrapeNow() {
 }
 
 module.exports = { start, stop, restart, scrapeNow, getStatus, getRecentOtpFor, logEvent };
+module.exports.getCookieMeta = getCookieMeta;
+module.exports.clearPersistedCookies = clearPersistedCookies;
+module.exports.loadCookies = loadCookies;

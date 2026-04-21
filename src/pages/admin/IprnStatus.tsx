@@ -5,7 +5,7 @@ import { GradientMesh, PageHeader } from "@/components/premium";
 import {
   Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText,
   RefreshCw, Power, Play, Square, Save, Eye, EyeOff, Zap, Layers,
-  Clock, AlertTriangle, Sparkles,
+  Clock, AlertTriangle, Sparkles, Cookie, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -154,6 +154,62 @@ const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
       >
         <Save className={cn("w-3.5 h-3.5", saving && "animate-pulse")} /> {saving ? "Saving…" : "Save & Restart Bot"}
       </button>
+    </div>
+  );
+};
+
+// Cookie session status — shows whether the bot has a saved upstream
+// session and lets admin force-purge it. Cookie VALUES are never shown
+// (they're live session tokens). Only count + saved-at timestamp.
+const CookieSessionPanel = ({ onChanged }: { onChanged: () => void }) => {
+  const [busy, setBusy] = useState(false);
+  const { data, refetch } = useQuery({
+    queryKey: ["iprn-cookies"],
+    queryFn: () => api.iprn.cookies(),
+    refetchInterval: 10000,
+  });
+  const has = !!data?.has_cookies;
+
+  const clear = async () => {
+    if (!confirm("Clear saved IPRN session and force a fresh login?")) return;
+    setBusy(true);
+    try {
+      await api.iprn.cookiesClear();
+      toast.success("Saved cookies cleared — bot restarting & re-logging in");
+      await refetch();
+      onChanged();
+    } catch (e) { toast.error("Failed: " + (e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="glass-card border border-white/[0.06] rounded-xl p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            <Cookie className="w-3.5 h-3.5 text-neon-magenta" /> Session Cookies
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            {has ? (
+              <>
+                <span className="text-neon-green">Saved session active</span> · {data?.count} cookies
+                {data?.saved_at && <> · {fmtAgo(data.saved_at)}</>}
+                <div className="text-[10px] text-muted-foreground/70 mt-0.5">
+                  Bot resumes via cookies on restart — no CSRF re-login needed. If they expire, fresh login runs automatically.
+                </div>
+              </>
+            ) : (
+              <>No saved session — bot will perform a fresh login on next start.</>
+            )}
+          </div>
+        </div>
+        {has && (
+          <button onClick={clear} disabled={busy}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 transition disabled:opacity-50">
+            <Trash2 className="w-3.5 h-3.5" /> {busy ? "Clearing…" : "Clear & Re-login"}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -332,6 +388,7 @@ export default function IprnStatus() {
 
         <div className="space-y-3">
           <OtpIntervalSetting onSaved={() => refetch()} />
+          <CookieSessionPanel onChanged={() => refetch()} />
           <CredentialsEditor onSaved={() => refetch()} />
         </div>
       </div>
