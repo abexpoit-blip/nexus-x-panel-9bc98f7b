@@ -24,7 +24,17 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          if (id.includes("react-dom") || id.includes("react-router-dom") || id.includes("@remix-run") || id.includes("scheduler")) return "react-router";
+          // CRITICAL: react, react-dom, jsx-runtime, scheduler MUST stay in one chunk
+          // (and load before anything that uses them). Splitting them causes
+          // "__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED" undefined errors.
+          if (
+            /[\\/]node_modules[\\/](react|react-dom|scheduler|use-sync-external-store)[\\/]/.test(id) ||
+            id.includes("react/jsx-runtime") ||
+            id.includes("react/jsx-dev-runtime")
+          ) {
+            return "react-core";
+          }
+          if (id.includes("react-router") || id.includes("@remix-run")) return "react-router";
           if (id.includes("@tanstack")) return "query";
           if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-vendor")) return "charts-vendor";
           if (id.includes("framer-motion")) return "motion";
