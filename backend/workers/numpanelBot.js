@@ -974,6 +974,7 @@ function start() {
 
   // Initial: login + first pool sync
   setTimeout(async () => {
+    if (_stopped || !ENABLED) return;
     try {
       await ensureBrowser();
       if (!loggedIn) await login();
@@ -985,38 +986,8 @@ function start() {
       } catch (_) {}
     } catch (e) {
       console.error('[numpanel-bot] initial login failed:', e.message);
-      status.lastError = e.message;
-      status.lastErrorAt = Math.floor(Date.now() / 1000);
       logEvent('error', 'Initial login failed: ' + e.message);
-      // ---- Circuit breaker: auto-disable after 3 consecutive initial-login failures ----
-      // Stops the Puppeteer-leak loop that crashes the backend with OOM.
-      try {
-        const cur = +(db.prepare(`SELECT value FROM settings WHERE key = 'numpanel_login_fail_count'`).get()?.value || 0);
-        const next = cur + 1;
-        db.prepare(`
-          INSERT INTO settings (key, value, updated_at) VALUES ('numpanel_login_fail_count', ?, strftime('%s','now'))
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        `).run(String(next));
-        console.warn(`[numpanel-bot] consecutive login failures: ${next}/3`);
-        if (next >= 3) {
-          db.prepare(`
-            INSERT INTO settings (key, value, updated_at) VALUES ('numpanel_enabled', '0', strftime('%s','now'))
-            ON CONFLICT(key) DO UPDATE SET value = '0', updated_at = strftime('%s','now')
-          `).run();
-          db.prepare(`DELETE FROM settings WHERE key = 'numpanel_login_fail_count'`).run();
-          console.error('[numpanel-bot] ✗ AUTO-DISABLED after 3 consecutive login failures — re-enable from admin panel after fixing selectors');
-          logEvent('error', 'Auto-disabled after 3 consecutive login failures (circuit breaker tripped)');
-          // Tear down browser to free memory
-          _stopped = true;
-          status.running = false;
-          status.enabled = false;
-          ENABLED = false;
-          try { await browser?.close(); } catch (_) {}
-          browser = null; page = null;
-        }
-      } catch (be) {
-        console.warn('[numpanel-bot] circuit breaker error:', be.message);
-      }
+      await disableAfterLoginFailure(e.message).catch(be => console.warn('[numpanel-bot] circuit breaker error:', be.message));
     }
   }, 2000);
 
@@ -1031,10 +1002,9 @@ function start() {
         if (!loggedIn) {
           try { await login(); _cdrReady = false; }
           catch (e) {
-            status.lastError = 'Re-login: ' + e.message;
-            status.lastErrorAt = Math.floor(Date.now() / 1000);
             status.consecFail++;
-            busy = false; scheduleOtp(); return;
+            await disableAfterLoginFailure('Re-login: ' + e.message).catch(be => console.warn('[numpanel-bot] circuit breaker error:', be.message));
+            busy = false; return;
           }
         }
         const t0 = Date.now();
