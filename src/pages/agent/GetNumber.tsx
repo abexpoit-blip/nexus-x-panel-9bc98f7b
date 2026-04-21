@@ -44,8 +44,9 @@ const SERVER_LABELS: Record<string, string> = {
   ims: "Server B",
   msi: "Server C",
   numpanel: "Server D",
+  iprn: "Server E",
 };
-type ServerId = "acchub" | "ims" | "msi" | "numpanel";
+type ServerId = "acchub" | "ims" | "msi" | "numpanel" | "iprn";
 
 const AgentGetNumber = () => {
   const { user, maintenanceMode, maintenanceMessage } = useAuth();
