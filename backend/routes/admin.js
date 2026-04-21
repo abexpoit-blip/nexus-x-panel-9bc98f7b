@@ -1156,7 +1156,8 @@ router.get('/numpanel-credentials', (req, res) => {
   const username = get('numpanel_username') || process.env.NUMPANEL_USERNAME || '';
   const password = get('numpanel_password') || process.env.NUMPANEL_PASSWORD || '';
   const base_url = get('numpanel_base_url') || process.env.NUMPANEL_BASE_URL || 'http://51.89.99.105';
-  const enabled = (get('numpanel_enabled') || process.env.NUMPANEL_ENABLED || 'false').toString().toLowerCase() === 'true';
+  const enabledRaw = (get('numpanel_enabled') || process.env.NUMPANEL_ENABLED || 'false').toString().toLowerCase();
+  const enabled = ['1', 'true', 'yes', 'on'].includes(enabledRaw);
   const mask = (s) => s ? (s.length <= 4 ? '****' : s.slice(0,2) + '****' + s.slice(-2)) : '';
   res.json({
     enabled, base_url, username,
