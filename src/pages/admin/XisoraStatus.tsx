@@ -200,6 +200,55 @@ const AdminXisoraStatus = () => {
             <Pill ok={s.running} label={s.running ? "Running" : "Stopped"} />
             <Pill ok={s.loggedIn} label={s.loggedIn ? "Logged in" : "Not logged in"} />
             <Pill ok={s.lastScrapeOk} label={s.lastScrapeOk ? "Last scrape OK" : "Last scrape failed"} />
+            {s.staleSession && <Pill ok={false} label="Stale session" />}
+          </div>
+
+          {/* Worker health panel */}
+          <div className={cn(
+            "glass-card rounded-xl p-4 border",
+            s.staleSession ? "border-destructive/40 bg-destructive/5" : "border-white/[0.06]"
+          )}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-semibold flex items-center gap-2">
+                <Heart className={cn("w-4 h-4",
+                  s.staleSession ? "text-destructive animate-pulse" :
+                  (s.heartbeatAgeSec ?? 999) < (s.otpIntervalSec * 2) ? "text-neon-green animate-pulse" :
+                  "text-neon-amber"
+                )} />
+                Worker health
+              </div>
+              {s.staleSession && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-destructive">
+                  <AlertOctagon className="w-3.5 h-3.5" /> No success in {s.sinceLastSuccessSec}s — restart recommended
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Last heartbeat</div>
+                <div className={cn("font-mono text-base font-bold",
+                  (s.heartbeatAgeSec ?? 999) < (s.otpIntervalSec * 2) ? "text-neon-green" : "text-neon-amber")}>
+                  {s.heartbeatAgeSec === null ? "never" : `${s.heartbeatAgeSec}s ago`}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Last successful poll</div>
+                <div className={cn("font-mono text-base font-bold",
+                  s.staleSession ? "text-destructive" : "text-neon-green")}>
+                  {s.lastSuccessAt ? `${s.sinceLastSuccessSec}s ago` : "never"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Queue depth</div>
+                <div className="font-mono text-base font-bold text-neon-cyan">
+                  {s.queueDepth} <span className="text-xs text-muted-foreground font-normal">awaiting OTP</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Stale threshold</div>
+                <div className="font-mono text-base font-bold text-muted-foreground">{s.staleThresholdSec}s</div>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -250,21 +299,105 @@ const AdminXisoraStatus = () => {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {poolData.ranges.map(r => (
-                  <div key={r.name} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/[0.03] border border-white/[0.05]">
-                    <div className="min-w-0">
-                      <div className="text-sm font-mono truncate">{r.custom_name || r.name}</div>
-                      <div className="text-[10px] text-muted-foreground">last +{fmtAgo(r.last_added)}</div>
+                {poolData.ranges.map(r => {
+                  const isDisabled = !!r.disabled;
+                  return (
+                    <div key={r.name} className={cn(
+                      "flex items-center justify-between gap-2 px-3 py-2 rounded-md border transition",
+                      isDisabled
+                        ? "bg-white/[0.01] border-white/[0.04] opacity-60"
+                        : "bg-white/[0.03] border-white/[0.05]"
+                    )}>
+                      <div className="min-w-0">
+                        <div className="text-sm font-mono truncate flex items-center gap-2">
+                          {r.custom_name || r.name}
+                          {isDisabled && <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-bold">Paused</span>}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">last +{fmtAgo(r.last_added)}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-sm font-bold font-mono text-neon-cyan">{r.count}</span>
+                        <button onClick={() => handleToggleRange(r.name, isDisabled)}
+                          title={isDisabled ? "Resume scraping this range" : "Pause scraping this range (numbers stay in pool)"}
+                          className={cn("p-1 rounded transition",
+                            isDisabled
+                              ? "hover:bg-neon-green/15 text-muted-foreground hover:text-neon-green"
+                              : "hover:bg-neon-amber/15 text-muted-foreground hover:text-neon-amber"
+                          )}>
+                          {isDisabled ? <PlayCircle className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                        </button>
+                        <button onClick={() => handleCleanupRange(r.name)} title="Purge this range from pool"
+                          className="p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-sm font-bold font-mono text-neon-cyan">{r.count}</span>
-                      <button onClick={() => handleCleanupRange(r.name)} title="Purge this range from pool"
-                        className="p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Run history */}
+          {runsData && runsData.runs.length > 0 && (
+            <div className="glass-card border border-white/[0.06] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-semibold flex items-center gap-2">
+                  <HistoryIcon className="w-4 h-4 text-neon-purple" />
+                  Run history ({runsData.runs.length})
+                </div>
+                <button onClick={() => refetchRuns()}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] uppercase tracking-wider bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition">
+                  <RefreshCw className="w-3 h-3" /> Refresh
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground border-b border-white/[0.06]">
+                      <th className="py-2 pr-3">Kind</th>
+                      <th className="py-2 pr-3">Started</th>
+                      <th className="py-2 pr-3">Duration</th>
+                      <th className="py-2 pr-3">Result</th>
+                      <th className="py-2 pr-3">By</th>
+                      <th className="py-2 pr-0">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runsData.runs.map(run => (
+                      <tr key={run.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                        <td className="py-2 pr-3">
+                          <span className={cn("inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                            run.kind === "scrape-now" && "bg-neon-cyan/15 text-neon-cyan",
+                            run.kind === "sync-live" && "bg-neon-amber/15 text-neon-amber",
+                            run.kind.startsWith("auto") && "bg-white/[0.05] text-muted-foreground",
+                          )}>{run.kind}</span>
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-muted-foreground whitespace-nowrap">{fmtAgo(run.started_at)}</td>
+                        <td className="py-2 pr-3 font-mono">{run.duration_ms != null ? `${run.duration_ms}ms` : "—"}</td>
+                        <td className="py-2 pr-3">
+                          {run.ok ? (
+                            <span className="inline-flex items-center gap-1 text-neon-green font-bold">
+                              <CheckCircle2 className="w-3 h-3" /> OK
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-destructive font-bold">
+                              <XCircle className="w-3 h-3" /> FAIL
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-muted-foreground">{run.triggered_by}</td>
+                        <td className="py-2 pr-0 font-mono text-muted-foreground max-w-md">
+                          {run.error
+                            ? <span className="text-destructive break-all" title={run.error}>{run.error}</span>
+                            : run.kind === "scrape-now"
+                              ? <span>OTPs: <span className="text-neon-green font-bold">{run.otps}</span></span>
+                              : <span>+{run.added} / -{run.removed} / kept {run.kept} / scraped {run.scraped}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
