@@ -5,6 +5,7 @@ import { GradientMesh, PageHeader } from "@/components/premium";
 import {
   Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText,
   RefreshCw, Power, Play, Square, Zap, Sparkles, Layers, Clock, Trash2,
+  Heart, AlertOctagon, History as HistoryIcon, Pause, PlayCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,6 +20,10 @@ type XisoraStatus = {
   baseUrl: string; otpIntervalSec: number; numbersIntervalSec: number;
   poolSize: number; claimingSize: number; activeAssigned: number; otpReceived: number;
   otpCacheSize: number; emptyStreak: number;
+  heartbeatAt: number | null; heartbeatAgeSec: number | null;
+  queueDepth: number;
+  lastSuccessAt: number | null; sinceLastSuccessSec: number | null;
+  staleSession: boolean; staleThresholdSec: number;
   events?: { ts: number; level: string; message: string; meta: unknown }[];
 };
 
@@ -68,6 +73,11 @@ const AdminXisoraStatus = () => {
     queryFn: () => api.admin.xisoraPoolBreakdown(),
     refetchInterval: 10000,
   });
+  const { data: runsData, refetch: refetchRuns } = useQuery({
+    queryKey: ["xisora-runs"],
+    queryFn: () => api.admin.xisoraRuns(50),
+    refetchInterval: 8000,
+  });
   const s = data?.status as XisoraStatus | undefined;
 
   const handleAction = async (action: "restart" | "start" | "stop") => {
@@ -95,7 +105,7 @@ const AdminXisoraStatus = () => {
       refetch(); refetchPool();
     } catch (e) {
       toast.error("Scrape failed: " + (e as Error).message);
-    } finally { setScraping(false); }
+    } finally { setScraping(false); refetchRuns(); }
   };
 
   const handleSyncLive = async () => {
@@ -116,7 +126,7 @@ const AdminXisoraStatus = () => {
       refetch(); refetchPool();
     } catch (e) {
       toast.error("Live sync failed: " + (e as Error).message);
-    } finally { setSyncing(false); }
+    } finally { setSyncing(false); refetchRuns(); }
   };
 
   const handleCleanupRange = async (range: string) => {
@@ -126,6 +136,14 @@ const AdminXisoraStatus = () => {
       toast.success(`Removed ${r.removed} numbers from "${range}"`);
       refetch(); refetchPool();
     } catch (e) { toast.error("Cleanup failed: " + (e as Error).message); }
+  };
+
+  const handleToggleRange = async (range: string, currentlyDisabled: boolean) => {
+    try {
+      const r = await api.admin.xisoraRangeToggle(range, !currentlyDisabled);
+      toast.success(`Range "${range}" ${r.disabled ? "disabled" : "enabled"}`);
+      refetchPool();
+    } catch (e) { toast.error("Toggle failed: " + (e as Error).message); }
   };
 
   return (
