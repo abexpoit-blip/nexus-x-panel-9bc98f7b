@@ -266,9 +266,18 @@ async function login() {
   res = await http.get('/dashboard');
   if ([301, 302, 303, 307, 308].includes(res.status)) res = await followRedirect(res);
 
+  // Verification: a successful login means we are NOT bounced back to /login.
+  // We used to require a hard-coded marker like "Dashboard" or "logout" but
+  // that broke whenever IPRN reskinned the panel. The robust signal is:
+  //   • final URL is not /login, AND
+  //   • the response body does NOT contain the LoginForm field again.
+  const finalUrl = res.request?.path || res.config?.url || '';
   const html = String(res.data || '');
-  const ok = html.includes(USERNAME) || /MARGIN TREND|Dashboard|logout/i.test(html);
-  if (!ok) throw new Error('Login verification failed (no dashboard markers)');
+  const bouncedToLogin = /\/login/i.test(finalUrl);
+  const stillOnLoginForm = /name="LoginForm\[username\]/i.test(html);
+  if (bouncedToLogin || stillOnLoginForm) {
+    throw new Error('Login verification failed — got bounced to /login (bad credentials?)');
+  }
 
   loggedIn = true;
   status.loggedIn = true;
@@ -564,3 +573,6 @@ async function scrapeNow() {
 }
 
 module.exports = { start, stop, restart, scrapeNow, getStatus, getRecentOtpFor, logEvent };
+module.exports.getCookieMeta = getCookieMeta;
+module.exports.clearPersistedCookies = clearPersistedCookies;
+module.exports.loadCookies = loadCookies;
