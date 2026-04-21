@@ -463,6 +463,26 @@ const AgentGetNumber = () => {
         </GlassCard>
       )}
 
+      {/* All providers OFF — admin has soft-disabled every bot. We show
+          this banner so the agent knows WHY the Source picker is empty
+          (instead of silently rendering a useless form). */}
+      {providersLoaded && availableServers.length === 0 && !maintenanceMode && (
+        <GlassCard className="border-destructive/40 bg-destructive/[0.06]">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-display font-semibold text-destructive">All providers are temporarily disabled</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Admin has switched off every number source. New allocations are paused until at least one provider is re-enabled.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Existing numbers in your live list will continue to receive OTPs normally.
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
       <GlassCard glow="cyan" className={cn("relative", (countryOpen || rangeOpen) ? "z-50" : "z-10")}>
         {/* Server selector — Server A = AccHub, Server B = IMS (real names hidden) */}
         <div className="flex items-center gap-2 mb-4 pb-4 border-b border-white/[0.06]">
