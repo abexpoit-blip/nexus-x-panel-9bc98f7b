@@ -275,14 +275,52 @@ async function loginOnce() {
 
   await page.goto(`${BASE_URL}/NumberPanel/agent/login`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-  // Wait for password field — try multiple selectors
-  await page.waitForSelector('input[type="password"], input[name="password"]', { timeout: 30000 });
+  // Flexible password-field probe — scans main frame + every iframe with multiple
+  // selector strategies, retries up to ~30s. Handles cases where the form is lazy-
+  // loaded, lives inside an iframe, or uses non-standard attributes.
+  const PASS_SELECTORS = [
+    'input[type="password"]',
+    'input[name="password"]',
+    'input[name="pwd"]',
+    'input[name="pass"]',
+    'input[id*="pass" i]',
+    'input[placeholder*="pass" i]',
+    'input[autocomplete="current-password"]',
+  ];
+  async function findLoginFrame(maxMs = 30000) {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      // Try main frame first, then every child iframe.
+      const frames = [page.mainFrame(), ...page.frames().filter(f => f !== page.mainFrame())];
+      for (const f of frames) {
+        try {
+          const hit = await f.evaluate((sels) => {
+            for (const s of sels) {
+              const el = document.querySelector(s);
+              if (el && el.offsetParent !== null) return true;
+            }
+            return false;
+          }, PASS_SELECTORS).catch(() => false);
+          if (hit) return f;
+        } catch (_) { /* frame may have detached — skip */ }
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return null;
+  }
+  const loginFrame = await findLoginFrame(30000);
+  if (!loginFrame) throw new Error('Login form not found in main frame or any iframe within 30s');
 
-  // Resolve username/password fields (NUMPANEL uses unnamed inputs inside a form)
-  const fields = await page.evaluate(() => {
+  // Resolve username/password/captcha fields inside the located frame
+  const fields = await loginFrame.evaluate((PASS_SELS) => {
     const inputs = Array.from(document.querySelectorAll('input'));
     const visible = inputs.filter(i => i.offsetParent !== null && i.type !== 'hidden');
-    const pass = visible.find(i => i.type === 'password');
+    let pass = null;
+    for (const s of PASS_SELS) {
+      const el = document.querySelector(s);
+      if (el && visible.includes(el)) { pass = el; break; }
+    }
+    if (!pass) pass = visible.find(i => i.type === 'password') || null;
     const user = visible.find(i => i !== pass && (i.type === 'text' || !i.type || i.type === 'email'));
     // captcha: input nearest to the math text
     const allText = document.body.innerText || '';
@@ -299,28 +337,29 @@ async function loginOnce() {
       return `input:nth-of-type(${all.indexOf(el) + 1})`;
     };
     return { userSel: sel(user), passSel: sel(pass), captchaSel: sel(captcha), captchaText };
-  });
+  }, PASS_SELECTORS);
 
   if (!fields.userSel || !fields.passSel) throw new Error('Could not locate login fields');
 
-  await page.click(fields.userSel, { clickCount: 3 }).catch(() => {});
-  await page.type(fields.userSel, USERNAME, { delay: 25 });
-  await page.click(fields.passSel, { clickCount: 3 }).catch(() => {});
-  await page.type(fields.passSel, PASSWORD, { delay: 25 });
+  // Use the located frame for typing — works for both main frame and iframes.
+  await loginFrame.click(fields.userSel, { clickCount: 3 }).catch(() => {});
+  await loginFrame.type(fields.userSel, USERNAME, { delay: 25 });
+  await loginFrame.click(fields.passSel, { clickCount: 3 }).catch(() => {});
+  await loginFrame.type(fields.passSel, PASSWORD, { delay: 25 });
 
   if (fields.captchaText && fields.captchaSel) {
     const answer = solveCaptchaText(fields.captchaText);
     if (answer) {
       dlog(`[numpanel-bot] captcha "${fields.captchaText.trim()}" → ${answer}`);
-      await page.click(fields.captchaSel, { clickCount: 3 }).catch(() => {});
-      await page.type(fields.captchaSel, answer, { delay: 25 });
+      await loginFrame.click(fields.captchaSel, { clickCount: 3 }).catch(() => {});
+      await loginFrame.type(fields.captchaSel, answer, { delay: 25 });
     } else {
       dwarn('[numpanel-bot] captcha detected but could not solve:', fields.captchaText);
     }
   }
 
   await Promise.all([
-    page.evaluate(() => {
+    loginFrame.evaluate(() => {
       const btn = document.querySelector('button.login100-form-btn, button[type="submit"], input[type="submit"]') ||
                   Array.from(document.querySelectorAll('button')).find(b => /login|sign in/i.test(b.innerText || ''));
       if (btn) btn.click();
