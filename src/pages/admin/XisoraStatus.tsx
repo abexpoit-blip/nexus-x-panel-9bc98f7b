@@ -257,6 +257,11 @@ const AdminXisoraStatus = () => {
           </div>
         }
       />
+      {enData?.db_path && (
+        <div className="text-[11px] font-mono text-muted-foreground -mt-3 px-1">
+          Active DB: <span className="text-foreground/80">{enData.db_path}</span>
+        </div>
+      )}
 
       {isLoading && <p className="text-center text-muted-foreground text-sm">Loading…</p>}
 
