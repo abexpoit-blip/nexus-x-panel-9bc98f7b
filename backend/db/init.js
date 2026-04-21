@@ -89,43 +89,6 @@ db.exec(`
 addColIfMissing('msi_range_meta', 'disabled', 'INTEGER DEFAULT 0');
 addColIfMissing('msi_range_meta', 'service_tag', 'TEXT');
 
-// XISORA range metadata (mirror of ims/msi)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS xisora_range_meta (
-    range_prefix TEXT PRIMARY KEY,
-    custom_name TEXT,
-    tag_color TEXT,
-    priority INTEGER DEFAULT 0,
-    request_override INTEGER,
-    notes TEXT,
-    disabled INTEGER DEFAULT 0,
-    service_tag TEXT,
-    updated_at INTEGER DEFAULT (strftime('%s','now'))
-  );
-`);
-addColIfMissing('xisora_range_meta', 'disabled', 'INTEGER DEFAULT 0');
-addColIfMissing('xisora_range_meta', 'service_tag', 'TEXT');
-
-// XISORA run history (scrape-now / sync-live audit log)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS xisora_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL,                 -- 'scrape-now' | 'sync-live' | 'auto-otp' | 'auto-sync'
-    started_at INTEGER NOT NULL,
-    finished_at INTEGER,
-    duration_ms INTEGER,
-    ok INTEGER NOT NULL DEFAULT 0,
-    otps INTEGER DEFAULT 0,
-    added INTEGER DEFAULT 0,
-    removed INTEGER DEFAULT 0,
-    kept INTEGER DEFAULT 0,
-    scraped INTEGER DEFAULT 0,
-    error TEXT,
-    triggered_by TEXT                    -- 'admin' | 'auto'
-  );
-  CREATE INDEX IF NOT EXISTS idx_xisora_runs_started ON xisora_runs(started_at DESC);
-`);
-
 // Apply Telegram bot schema (additive) AFTER column migrations
 const tgSchemaPath = path.join(__dirname, 'tg_schema.sql');
 if (fs.existsSync(tgSchemaPath)) {
