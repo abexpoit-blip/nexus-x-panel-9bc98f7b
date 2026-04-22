@@ -364,8 +364,7 @@ const AgentGetNumber = () => {
     // provider and ask them to confirm before billing kicks in. Skipped
     // when the agent ticks "don't ask again" (persisted in localStorage).
     if (provider === "all" && rangeName) {
-      const skip = localStorage.getItem("nx_skip_all_confirm") === "1";
-      if (!skip) {
+      if (!skipAllConfirm) {
         const meta = allRanges.find((x) => x.key === rangeName);
         const target = meta
           ? `${meta.name} — ${meta.count} available`
