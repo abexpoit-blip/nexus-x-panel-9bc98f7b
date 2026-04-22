@@ -204,6 +204,117 @@ const AgentOtpAudit = () => {
         })}
       </div>
 
+      {/* Scraper debug panel — last request URL + params per provider */}
+      {scrapeDebug.length > 0 && (
+        <GlassCard>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Wifi className="w-4 h-4 text-neon-cyan" />
+              <h2 className="text-sm font-display font-bold text-foreground">Scraper Debug — Last Request</h2>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              per provider
+            </span>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {scrapeDebug.map(({ row, path, params }) => {
+              const ok = row.event === "scrape_ok";
+              return (
+                <div
+                  key={`${row.provider}-${row.id}`}
+                  className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-foreground font-mono uppercase font-bold">
+                        {row.provider}
+                      </span>
+                      <span className={cn(
+                        "text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md border",
+                        ok
+                          ? "text-neon-green bg-neon-green/10 border-neon-green/30"
+                          : "text-destructive bg-destructive/10 border-destructive/30"
+                      )}>
+                        {ok ? "OK" : "FAIL"}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">{ago(row.ts)}</span>
+                  </div>
+
+                  <div className="flex items-start gap-1.5 text-[11px] font-mono text-muted-foreground break-all">
+                    <Link2 className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground/60" />
+                    <span className="text-foreground/90">{path || "—"}</span>
+                  </div>
+
+                  {params.length > 0 && (
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      {params.map(([k, v]) => (
+                        <div key={k} className="text-[10px] font-mono bg-white/[0.03] border border-white/[0.06] rounded px-1.5 py-1">
+                          <span className="text-muted-foreground/70">{k}=</span>
+                          <span className="text-foreground">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex items-center gap-3 text-[11px] font-mono">
+                    <span className="text-muted-foreground">
+                      rows_seen: <span className="text-foreground font-bold">{row.rows_seen ?? 0}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      matched: <span className="text-neon-amber font-bold">{row.matches_found ?? 0}</span>
+                    </span>
+                    {row.currency && (
+                      <span className="text-muted-foreground">
+                        currency: <span className="text-neon-amber font-bold">{row.currency}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {row.detail && (
+                    <div className="mt-1.5 text-[11px] text-muted-foreground/80">{row.detail}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Last 8 credited OTPs — quick scan */}
+      {lastCredited.length > 0 && (
+        <GlassCard>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-neon-green" />
+              <h2 className="text-sm font-display font-bold text-foreground">Last 8 Credited OTPs</h2>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              freshest first
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {lastCredited.map((r) => (
+              <div
+                key={r.id}
+                className="rounded-lg border border-neon-green/15 bg-neon-green/[0.04] p-2.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono uppercase text-muted-foreground">{r.provider}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">{ago(r.ts)}</span>
+                </div>
+                <div className="mt-1 font-mono text-base font-bold text-neon-green tracking-wider">
+                  {r.otp_code || "—"}
+                </div>
+                {r.phone_number && (
+                  <div className="mt-0.5 font-mono text-[11px] text-foreground/80 truncate">{r.phone_number}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
       {/* Filters */}
       <GlassCard>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 mb-4">
