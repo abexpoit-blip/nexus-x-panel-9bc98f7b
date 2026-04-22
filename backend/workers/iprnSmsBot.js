@@ -218,6 +218,14 @@ function getStatus() {
 // OTP cache (currently no live OTP feed for this account — kept for parity)
 const recentOtpCache = new Map();
 function getRecentOtpFor(phone) { return recentOtpCache.has(phone); }
+function rememberOtp(phone) {
+  recentOtpCache.set(String(phone), Date.now());
+  // Cap at 2000 entries — drop oldest
+  if (recentOtpCache.size > 2000) {
+    const cutoff = Date.now() - 6 * 60 * 60 * 1000; // 6h
+    for (const [k, t] of recentOtpCache) if (t < cutoff) recentOtpCache.delete(k);
+  }
+}
 
 // ---- Pool ownership (FK requires real user_id) ----
 function ensurePoolUser() {
