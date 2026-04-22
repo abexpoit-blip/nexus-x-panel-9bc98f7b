@@ -253,7 +253,7 @@ router.post('/get', authRequired, async (req, res) => {
           upPool.run(userId, r.__pool_id);
           id = r.__pool_id;
         } else {
-          const result = insAlloc.run(userId, providerId, r.provider_ref || null, r.phone_number, r.operator || null, r.country_code || null);
+          const result = insAlloc.run(userId, effectiveProviderId, r.provider_ref || null, r.phone_number, r.operator || null, r.country_code || null);
           id = result.lastInsertRowid;
         }
         allocated.push({ id, phone_number: r.phone_number, operator: r.operator, otp: null, status: 'active' });
@@ -261,7 +261,7 @@ router.post('/get', authRequired, async (req, res) => {
     });
     writeAll();
 
-    logFromReq(req, 'allocation', { meta: { provider: providerId, count: allocated.length, errors: errors.length, errorDetails: errors.slice(0, 3) } });
+    logFromReq(req, 'allocation', { meta: { provider: effectiveProviderId, requested_via: providerId, count: allocated.length, errors: errors.length, errorDetails: errors.slice(0, 3) } });
     res.json({ allocated, errors });
   } catch (fatal) {
     // Final safety net — don't let ANY exception bubble up as 500
