@@ -189,6 +189,7 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
   const [creds, setCreds] = useState<any>(null);
   const [form, setForm] = useState({ username: "", password: "", base_url: "", sms_type: "sms", enabled: false });
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ username?: string; password?: string; base_url?: string }>({});
 
   useEffect(() => {
     api.iprnSms.credentials().then((c) => {
@@ -204,16 +205,51 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
   }, []);
 
   const save = async () => {
+    // Client-side validation — block the network call if anything is off.
+    const next: { username?: string; password?: string; base_url?: string } = {};
+    const username = form.username.trim();
+    const baseUrl = form.base_url.trim();
+
+    if (!username) next.username = "Username is required";
+    else if (username.length < 3) next.username = "Username must be at least 3 characters";
+
+    // Password: required on first save; optional later (blank = keep existing).
+    if (!creds?.password_set && !form.password) {
+      next.password = "Password is required";
+    } else if (form.password && form.password.length < 1) {
+      next.password = "Password cannot be empty";
+    }
+
+    if (!baseUrl) {
+      next.base_url = "Base URL is required";
+    } else {
+      try {
+        const u = new URL(baseUrl);
+        if (u.protocol !== "https:" && u.protocol !== "http:") {
+          next.base_url = "URL must start with http:// or https://";
+        }
+      } catch {
+        next.base_url = "Invalid URL format";
+      }
+    }
+
+    setErrors(next);
+    if (Object.keys(next).length > 0) {
+      toast({ title: "Fix the highlighted fields", description: Object.values(next)[0], variant: "destructive" });
+      return;
+    }
+
     setSaving(true);
     try {
       await api.iprnSms.credentialsSave({
-        username: form.username || undefined,
+        username: username || undefined,
         password: form.password || undefined,
-        base_url: form.base_url || undefined,
+        base_url: baseUrl || undefined,
         sms_type: form.sms_type,
         enabled: form.enabled,
       });
       toast({ title: "Credentials saved", description: "Bot restarted with new credentials" });
+      setForm((f) => ({ ...f, password: "" }));
       onSaved();
     } catch (e: any) {
       toast({ title: "Save failed", description: e?.message || "Unknown", variant: "destructive" });
@@ -232,17 +268,40 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
       <CardContent className="space-y-3">
         <div>
           <Label className="text-xs">Base URL</Label>
-          <Input value={form.base_url} onChange={(e) => setForm({ ...form, base_url: e.target.value })} placeholder="https://panel.iprn-sms.com" />
+          <Input
+            value={form.base_url}
+            onChange={(e) => { setForm({ ...form, base_url: e.target.value }); if (errors.base_url) setErrors({ ...errors, base_url: undefined }); }}
+            placeholder="https://panel.iprn-sms.com"
+            aria-invalid={!!errors.base_url}
+            className={errors.base_url ? "border-destructive focus-visible:ring-destructive" : ""}
+          />
+          {errors.base_url && <div className="text-[11px] text-destructive mt-1">{errors.base_url}</div>}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label className="text-xs">Username</Label>
-            <Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="shahriyaar" />
+            <Input
+              value={form.username}
+              onChange={(e) => { setForm({ ...form, username: e.target.value }); if (errors.username) setErrors({ ...errors, username: undefined }); }}
+              placeholder="shahriyaar"
+              aria-invalid={!!errors.username}
+              className={errors.username ? "border-destructive focus-visible:ring-destructive" : ""}
+            />
+            {errors.username && <div className="text-[11px] text-destructive mt-1">{errors.username}</div>}
             <div className="text-[10px] text-muted-foreground mt-1">source: {creds?.sources?.username || "—"}</div>
           </div>
           <div>
             <Label className="text-xs">Password</Label>
-            <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={creds?.password_set ? "••••••• (set)" : "••••••••"} />
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(e) => { setForm({ ...form, password: e.target.value }); if (errors.password) setErrors({ ...errors, password: undefined }); }}
+              placeholder={creds?.password_set ? "••••••• (leave blank to keep)" : "••••••••"}
+              aria-invalid={!!errors.password}
+              className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
+              autoComplete="new-password"
+            />
+            {errors.password && <div className="text-[11px] text-destructive mt-1">{errors.password}</div>}
             <div className="text-[10px] text-muted-foreground mt-1">source: {creds?.sources?.password || "—"}</div>
           </div>
         </div>
