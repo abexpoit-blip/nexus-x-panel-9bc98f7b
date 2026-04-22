@@ -64,10 +64,13 @@ const NUMBERS_INTERVAL = Math.max(60, +(process.env.IPRN_SMS_NUMBERS_INTERVAL ||
 // OTP scrape interval — far shorter than pool sync since this is the
 // agent-facing latency. Min 3s to avoid hammering panel.iprn-sms.com.
 const OTP_INTERVAL = Math.max(3, +(process.env.IPRN_SMS_OTP_INTERVAL || 5));
-// The stats endpoint is currency-filtered. Per the user's manual check,
-// OTPs are only visible when currency=USD is selected. Configurable in case
-// the account ever changes payout currency.
-const OTP_CURRENCY = (process.env.IPRN_SMS_OTP_CURRENCY || 'USD').toUpperCase();
+// The stats endpoint is currency-filtered. Verified by live DevTools capture:
+// the panel uses NUMERIC currency_id (NOT a currency string):
+//   currency_id=1 → EUR (default, returns no rows for our account)
+//   currency_id=2 → USD (the one with all the OTPs — matches user's screenshots)
+// We send 2 by default; admins can override with IPRN_SMS_CURRENCY_ID=N.
+const OTP_CURRENCY_ID = String(+(process.env.IPRN_SMS_CURRENCY_ID || 2));
+const OTP_CURRENCY = 'USD'; // human-readable label used in audit log only
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
@@ -488,19 +491,32 @@ function todayStr() {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 }
 
+// Verified by live DevTools capture on panel.iprn-sms.com (2026-04-22):
+//   GET /api/helper/premium-number/stats/sms.json
+//       ?date_from=DD/MM/YYYY HH&date_to=DD/MM/YYYY HH
+//       &currency_id=2&draw=1&start=0&length=25
+//   → {recordsFiltered, recordsTotal, currencySymbol:"$", aaData:[{
+//        source:"FACEBOOK", name:"...", short_code:"00639...",
+//        phone_number:"Facebook" (CLI/source label, mislabeled by panel!),
+//        payout, message:"...code 123456...", notified, created
+//     }, ...]}
+// IMPORTANT: panel field naming is confusing —
+//   short_code   = the actual phone number we sold to the agent
+//   phone_number = the CLI/sender name (e.g., "Facebook")
 function buildOtpEndpointCandidates() {
   const t = todayStr();
-  const dr = `${t}+00+-+${t}+23`;
-  const qs = `draw=1&start=0&length=200&currency=${OTP_CURRENCY}&date_range=${encodeURIComponent(dr)}`;
+  const qs =
+    `date_from=${encodeURIComponent(t + ' 00')}` +
+    `&date_to=${encodeURIComponent(t + ' 23')}` +
+    `&currency_id=${OTP_CURRENCY_ID}` +
+    `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   return [
+    // Primary — confirmed working endpoint (note the .json suffix!)
+    `/api/helper/premium-number/stats/${TYPE}.json?${qs}`,
+    // Fallbacks kept in case panel changes / different account roles
     `/api/helper/premium-number/stats/${TYPE}?${qs}`,
-    `/api/helper/premium-number/stats-data/${TYPE}?${qs}`,
-    `/api/helper/premium-number/sms-stats/${TYPE}?${qs}`,
-    `/api/helper/premium-number/reports/${TYPE}?${qs}`,
-    `/premium_number/stats/${TYPE}?${qs}&_xhr=1`,
-    // Same set without date_range in case server uses session default
-    `/api/helper/premium-number/stats/${TYPE}?draw=1&start=0&length=200&currency=${OTP_CURRENCY}`,
-    `/api/helper/premium-number/stats-data/${TYPE}?draw=1&start=0&length=200&currency=${OTP_CURRENCY}`,
+    `/api/helper/premium-number/stats-data/${TYPE}.json?${qs}`,
+    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qs}`,
   ];
 }
 
@@ -520,10 +536,23 @@ function normalizeStatsRow(row) {
   if (!row) return null;
   // Object shape
   if (typeof row === 'object' && !Array.isArray(row)) {
-    const phone = row.number || row.phone || row.msisdn || row.dnis || null;
+    // ⚠ panel.iprn-sms.com uses CONFUSING field names:
+    //   short_code   → the real phone number (e.g., "00639279110294")
+    //   phone_number → the CLI / sender label (e.g., "Facebook")
+    // Try short_code FIRST, then fall back to other naming conventions
+    // used by other iKangoo installs.
+    const phone =
+      row.short_code || row.number || row.phone || row.msisdn || row.dnis || null;
     const message = row.message || row.text || row.body || row.sms || null;
-    const cli = row.cli || row.source || row.sender || null;
-    if (phone && message) return { phone: String(phone).replace(/\D/g, ''), message: String(message), cli: cli ? String(cli) : null };
+    const cli =
+      row.cli || row.source || row.sender || row.phone_number /* CLI label here */ || null;
+    if (phone && message) {
+      return {
+        phone: String(phone).replace(/\D/g, ''),
+        message: String(message),
+        cli: cli ? String(cli) : null,
+      };
+    }
     return null;
   }
   // Array shape: try to identify phone + longest text
