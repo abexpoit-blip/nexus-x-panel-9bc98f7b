@@ -822,7 +822,11 @@ async function scrapeNow() {
     if (!loggedIn) await login();
     const before = status.otpsDeliveredTotal;
     const delivered = await deliverOtps();
-    return { ok: true, otps: status.otpsDeliveredTotal - before, delivered };
+    // Also refill the number pool — admins expect "Scrape Now" to do BOTH
+    let pool = { added: 0, removed: 0, kept: 0, scraped: 0 };
+    try { pool = await syncPool(); }
+    catch (e) { logEvent('warn', `scrapeNow syncPool failed: ${e.message}`); }
+    return { ok: true, otps: status.otpsDeliveredTotal - before, delivered, pool };
   } catch (e) {
     return { ok: false, error: e.message };
   } finally { busy = false; }
