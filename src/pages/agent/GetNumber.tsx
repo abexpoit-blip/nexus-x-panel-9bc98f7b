@@ -631,6 +631,35 @@ const AgentGetNumber = () => {
           </div>
         </div>
 
+        {provider === "all" && (
+          /* Unified-pool warning + "don't ask again" toggle. We surface this
+             prominently because each range in this list belongs to ONE
+             specific underlying bot — the agent should know exactly which
+             before allocating (the dropdown labels show "Server X" too). */
+          <div className="mb-4 px-3 py-2.5 rounded-lg border border-neon-cyan/25 bg-neon-cyan/[0.05] flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-neon-cyan shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-foreground">
+                <span className="font-semibold">All Servers mode:</span>{" "}
+                <span className="text-muted-foreground">
+                  Each range belongs to one underlying bot (Server B/C/D/E/F).
+                  You'll be asked to confirm before every allocation so a wrong
+                  pick doesn't burn balance on the wrong server.
+                </span>
+              </p>
+              <label className="mt-1.5 inline-flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={skipAllConfirm}
+                  onChange={(e) => setSkipAllConfirm(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.04] accent-neon-cyan"
+                />
+                <span>Don't ask again on this device</span>
+              </label>
+            </div>
+          </div>
+        )}
+
         {provider === "ims" || provider === "msi" || provider === "all" ? (
           /* ============ Server B/C (range-based): single Range dropdown ============ */
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
