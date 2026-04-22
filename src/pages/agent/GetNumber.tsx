@@ -350,7 +350,6 @@ const AgentGetNumber = () => {
   }, [ranges, rangeSearch, provider, allRanges]);
 
   const selectedRange = ranges.find((r) => r.name === rangeName);
-  const isAdmin = user?.role === "admin";
   // Friendly label resolver. For the unified "All Servers" pool:
   //   • Admins see the full backend label, e.g. "TJ — Tajikistan 99293515XXXX (Server F)"
   //     so they can audit which underlying bot a range belongs to.
