@@ -59,12 +59,17 @@ interface AllRange {
   provider: string;
   provider_label: string;
   country_code: string | null;
+  country_name?: string | null;
   count: number;
 }
 
 const AgentGetNumber = () => {
   const { user, maintenanceMode, maintenanceMessage } = useAuth();
-  const [provider, setProvider] = useState<ServerId>("acchub");
+  // Agents use the unified pool exclusively (Country → Range, no Server tabs).
+  // Admins still see the legacy Server picker so they can use AccHub + audit
+  // which underlying bot a range belongs to.
+  const isAdmin = user?.role === "admin";
+  const [provider, setProvider] = useState<ServerId>(isAdmin ? "acchub" : "all");
   // Servers that the BACKEND currently has enabled (filtered by /numbers/providers).
   // Disabled bots simply disappear from the picker so agents never see dead options.
   const [availableServers, setAvailableServers] = useState<{ id: ServerId; label: string }[]>([
@@ -114,6 +119,26 @@ const AgentGetNumber = () => {
   useEffect(() => {
     localStorage.setItem("nx_skip_all_confirm", skipAllConfirm ? "1" : "0");
   }, [skipAllConfirm]);
+  // Persist the agent's chosen range key alongside the country so the
+  // selection sticks across reloads.
+  useEffect(() => {
+    if (provider === "all" && rangeName) localStorage.setItem("nx_all_range", rangeName);
+  }, [provider, rangeName]);
+  // Sticky Country + Range selection for agent unified-pool flow.
+  // We persist the country code (e.g. "TJ") and the full range KEY
+  // ("iprn_sms::99293515XXXX(1)") so the choice survives reloads — exactly
+  // what the user asked for: "stick country and ranges until they change".
+  const [allCountry, setAllCountry] = useState<string>(
+    () => localStorage.getItem("nx_all_country") || ""
+  );
+  useEffect(() => {
+    if (allCountry) localStorage.setItem("nx_all_country", allCountry);
+    else localStorage.removeItem("nx_all_country");
+  }, [allCountry]);
+  // Country combobox state (separate from the legacy AccHub country picker)
+  const [allCountryOpen, setAllCountryOpen] = useState(false);
+  const [allCountrySearch, setAllCountrySearch] = useState("");
+  const allCountryRef = useRef<HTMLDivElement>(null);
   // Browser desktop notification permission state
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(
     () => (typeof Notification !== "undefined" ? Notification.permission : "denied")
@@ -207,14 +232,24 @@ const AgentGetNumber = () => {
         .filter((s) => SERVER_LABELS[s.id]);
       setAvailableServers(list);
       // Auto-switch if the current selection just got disabled.
-      setProvider((cur) => (list.length > 0 && !list.some((s) => s.id === cur) ? list[0].id : cur));
+      // For non-admin agents, prefer 'all' when present; never auto-switch
+      // them to AccHub-only (admin tab).
+      setProvider((cur) => {
+        if (list.some((s) => s.id === cur)) return cur;
+        if (list.length === 0) return cur;
+        if (!isAdmin) {
+          const all = list.find((s) => s.id === "all");
+          if (all) return all.id;
+        }
+        return list[0].id;
+      });
       return list;
     } catch {
       return null;
     } finally {
       setProvidersLoaded(true);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     refreshProviders();
@@ -283,6 +318,14 @@ const AgentGetNumber = () => {
         // Also feed the shared `ranges` state (using key as name) so the
         // existing dropdown UI can render without branching everywhere.
         setRanges(ranges.map((r) => ({ name: r.key, count: r.count })));
+        // Restore last sticky selection if it's still valid.
+        const savedRange = localStorage.getItem("nx_all_range") || "";
+        if (savedRange && ranges.some((r) => r.key === savedRange)) {
+          setRangeName(savedRange);
+          // Make sure country matches the saved range so the cascade is consistent.
+          const m = ranges.find((r) => r.key === savedRange);
+          if (m?.country_code) setAllCountry(m.country_code);
+        }
       }).catch(() => { setAllRanges([]); setRanges([]); });
       setCountries([]);
     } else {
@@ -319,6 +362,7 @@ const AgentGetNumber = () => {
     const onClick = (e: MouseEvent) => {
       if (countryRef.current && !countryRef.current.contains(e.target as Node)) setCountryOpen(false);
       if (rangeRef.current && !rangeRef.current.contains(e.target as Node)) setRangeOpen(false);
+      if (allCountryRef.current && !allCountryRef.current.contains(e.target as Node)) setAllCountryOpen(false);
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -340,12 +384,46 @@ const AgentGetNumber = () => {
       const m = allRanges.find((x) => x.key === key);
       return m ? m.name : key;
     };
-    if (!q) return ranges;
-    return ranges.filter((r) => labelOf(r.name).toLowerCase().includes(q));
-  }, [ranges, rangeSearch, provider, allRanges]);
+    // For agents in unified-pool mode, also restrict to the chosen country.
+    let pool = ranges;
+    if (provider === "all" && allCountry) {
+      const allowedKeys = new Set(
+        allRanges.filter((r) => (r.country_code || "") === allCountry).map((r) => r.key)
+      );
+      pool = pool.filter((r) => allowedKeys.has(r.name));
+    }
+    if (!q) return pool;
+    return pool.filter((r) => labelOf(r.name).toLowerCase().includes(q));
+  }, [ranges, rangeSearch, provider, allRanges, allCountry]);
+
+  // Country list derived from the unified pool (for agent Country dropdown).
+  // Each entry shows the country name (or ISO code) + total ranges/numbers
+  // available across all underlying bots — gives the agent an at-a-glance
+  // sense of which countries actually have stock right now.
+  const allCountryList = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; ranges: number; count: number }>();
+    for (const r of allRanges) {
+      const code = r.country_code || "ZZ";
+      const name = r.country_name || code;
+      const ex = map.get(code) || { code, name, ranges: 0, count: 0 };
+      ex.ranges += 1;
+      ex.count += r.count;
+      map.set(code, ex);
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allRanges]);
+
+  const filteredAllCountries = useMemo(() => {
+    const q = allCountrySearch.trim().toLowerCase();
+    if (!q) return allCountryList;
+    return allCountryList.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+    );
+  }, [allCountryList, allCountrySearch]);
+
+  const selectedAllCountry = allCountryList.find((c) => c.code === allCountry);
 
   const selectedRange = ranges.find((r) => r.name === rangeName);
-  const isAdmin = user?.role === "admin";
   // Friendly label resolver. For the unified "All Servers" pool:
   //   • Admins see the full backend label, e.g. "TJ — Tajikistan 99293515XXXX (Server F)"
   //     so they can audit which underlying bot a range belongs to.
@@ -590,7 +668,11 @@ const AgentGetNumber = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-display font-bold text-foreground">Get Number</h1>
-        <p className="text-sm text-muted-foreground mt-1">Search a country, pick an operator, and request a fresh number</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isAdmin
+            ? "Search a country, pick an operator, and request a fresh number"
+            : "Pick a country and range — we'll grab the next available number from the pool"}
+        </p>
       </div>
 
       {maintenanceMode && (
@@ -627,8 +709,10 @@ const AgentGetNumber = () => {
       )}
 
       {availableServers.length > 0 && (
-      <GlassCard glow="cyan" className={cn("relative", (countryOpen || rangeOpen) ? "z-50" : "z-10")}>
-        {/* Server selector — Server A = AccHub, Server B = IMS (real names hidden) */}
+      <GlassCard glow="cyan" className={cn("relative", (countryOpen || rangeOpen || allCountryOpen) ? "z-50" : "z-10")}>
+        {/* Server selector — admins only. Agents always use the unified pool
+            (Country → Range) so the Source row would just be visual noise. */}
+        {isAdmin && (
         <div className="flex items-center gap-2 mb-4 pb-4 border-b border-white/[0.06]">
           <Server className="w-4 h-4 text-neon-cyan" />
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-2">Source</span>
@@ -650,8 +734,9 @@ const AgentGetNumber = () => {
             ))}
           </div>
         </div>
+        )}
 
-        {provider === "all" && (
+        {provider === "all" && isAdmin && (
           /* Unified-pool warning + "don't ask again" toggle. We surface this
              prominently because each range in this list belongs to ONE
              specific underlying bot — the agent should know exactly which
@@ -680,8 +765,173 @@ const AgentGetNumber = () => {
           </div>
         )}
 
-        {provider === "ims" || provider === "msi" || provider === "all" ? (
-          /* ============ Server B/C (range-based): single Range dropdown ============ */
+        {provider === "all" && !isAdmin ? (
+          /* ============ AGENT unified flow: Country → Range → Get ============ */
+          <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1.4fr_auto] gap-4 items-end">
+            {/* Country (sticky — persists in localStorage) */}
+            <div className="space-y-2 relative" ref={allCountryRef}>
+              <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                <span>Country</span>
+                <span className="text-[10px] text-muted-foreground/70 font-normal">
+                  {allCountryList.length} available
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setAllCountryOpen((v) => !v)}
+                className="w-full h-11 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2"
+              >
+                <span className={cn("truncate", !selectedAllCountry && "text-muted-foreground")}>
+                  {selectedAllCountry ? (
+                    <>
+                      {selectedAllCountry.name}
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
+                        {selectedAllCountry.count} avail
+                      </span>
+                    </>
+                  ) : allCountryList.length === 0 ? "No countries available" : "Select country..."}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", allCountryOpen && "rotate-180")} />
+              </button>
+              {allCountryOpen && (
+                <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        autoFocus
+                        value={allCountrySearch}
+                        onChange={(e) => setAllCountrySearch(e.target.value)}
+                        placeholder="Search country..."
+                        className="w-full h-9 pl-9 pr-3 rounded-md bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto scrollbar-none bg-[hsl(var(--card))]">
+                    {filteredAllCountries.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        No countries match "{allCountrySearch}"
+                      </div>
+                    ) : (
+                      filteredAllCountries.map((c) => (
+                        <button
+                          key={c.code}
+                          onClick={() => {
+                            setAllCountry(c.code);
+                            // Clear range only if it doesn't belong to the new country.
+                            const cur = allRanges.find((r) => r.key === rangeName);
+                            if (!cur || cur.country_code !== c.code) setRangeName("");
+                            setAllCountryOpen(false);
+                            setAllCountrySearch("");
+                          }}
+                          className={cn(
+                            "w-full px-3 py-2.5 text-left text-sm flex items-center justify-between gap-2 hover:bg-white/[0.06] transition-colors",
+                            allCountry === c.code && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          <span className="truncate">{c.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-mono font-semibold shrink-0">
+                            {c.count}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Range — filtered by selected country */}
+            <div className="space-y-2 relative" ref={rangeRef}>
+              <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                <span>Range</span>
+                <span className="text-[10px] text-muted-foreground/70 font-normal">
+                  {filteredRanges.length} ranges
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => allCountry && setRangeOpen((v) => !v)}
+                disabled={!allCountry}
+                className="w-full h-11 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className={cn("truncate", !selectedRange && "text-muted-foreground")}>
+                  {!allCountry
+                    ? "Pick a country first"
+                    : selectedRange ? (
+                      <>
+                        {labelForRange(selectedRange.name)}
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
+                          {selectedRange.count} avail
+                        </span>
+                      </>
+                    ) : filteredRanges.length === 0 ? "No ranges for this country" : "Select a range..."}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", rangeOpen && "rotate-180")} />
+              </button>
+              {rangeOpen && allCountry && (
+                <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        autoFocus
+                        value={rangeSearch}
+                        onChange={(e) => setRangeSearch(e.target.value)}
+                        placeholder="Search range..."
+                        className="w-full h-9 pl-9 pr-3 rounded-md bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto scrollbar-none bg-[hsl(var(--card))]">
+                    {filteredRanges.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        No ranges for {selectedAllCountry?.name || allCountry}
+                      </div>
+                    ) : (
+                      filteredRanges.map((r) => (
+                        <button
+                          key={r.name}
+                          onClick={() => { setRangeName(r.name); setRangeOpen(false); setRangeSearch(""); }}
+                          className={cn(
+                            "w-full px-3 py-2.5 text-left text-sm flex items-center justify-between gap-2 hover:bg-white/[0.06] transition-colors",
+                            rangeName === r.name && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          <span className="truncate">{labelForRange(r.name)}</span>
+                          <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold shrink-0",
+                            r.count > 50 ? "bg-neon-green/15 text-neon-green" :
+                            r.count > 10 ? "bg-neon-amber/15 text-neon-amber" :
+                            "bg-destructive/15 text-destructive"
+                          )}>
+                            {r.count} avail
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button
+              onClick={handleGetNumber}
+              disabled={loading || maintenanceMode || usedToday >= dailyLimit || !rangeName}
+              className="h-11 bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0 min-w-[180px]"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Hash className="w-4 h-4 mr-2" />
+                  Get {quantity > 1 ? `${quantity} Numbers` : "Number"}
+                </>
+              )}
+            </Button>
+          </div>
+        ) : provider === "ims" || provider === "msi" || provider === "all" ? (
+          /* ============ Admin range-based servers (B/C/All): single Range dropdown ============ */
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
             <div className="space-y-2 relative" ref={rangeRef}>
               <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">

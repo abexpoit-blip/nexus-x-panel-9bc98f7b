@@ -107,12 +107,23 @@ router.get('/all/ranges', authRequired, async (req, res) => {
         // Try to get a representative country for this range from the pool table.
         // Falls back to whatever the range name already contains.
         let country = null;
+        let countryName = null;
         try {
           const row = db.prepare(
             "SELECT country_code FROM allocations WHERE provider=? AND status='pool' AND COALESCE(operator,'Unknown')=? AND country_code IS NOT NULL LIMIT 1"
           ).get(pid, r.name);
           country = row?.country_code || null;
         } catch (_) {}
+        // Best-effort country name lookup from the rates table (every provider
+        // imports their country list there). Falls back to the ISO code.
+        if (country) {
+          try {
+            const cn = db.prepare(
+              "SELECT country_name FROM rates WHERE provider=? AND country_code=? AND country_name IS NOT NULL LIMIT 1"
+            ).get(pid, country);
+            countryName = cn?.country_name || null;
+          } catch (_) {}
+        }
         const label = country
           ? `${country} — ${r.name} (${POOL_LABELS[pid]})`
           : `${r.name} (${POOL_LABELS[pid]})`;
@@ -123,6 +134,7 @@ router.get('/all/ranges', authRequired, async (req, res) => {
           provider: pid,
           provider_label: POOL_LABELS[pid],
           country_code: country,
+          country_name: countryName,
           count: r.count,
         });
       }
