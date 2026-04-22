@@ -59,12 +59,17 @@ interface AllRange {
   provider: string;
   provider_label: string;
   country_code: string | null;
+  country_name?: string | null;
   count: number;
 }
 
 const AgentGetNumber = () => {
   const { user, maintenanceMode, maintenanceMessage } = useAuth();
-  const [provider, setProvider] = useState<ServerId>("acchub");
+  // Agents use the unified pool exclusively (Country → Range, no Server tabs).
+  // Admins still see the legacy Server picker so they can use AccHub + audit
+  // which underlying bot a range belongs to.
+  const isAdmin = user?.role === "admin";
+  const [provider, setProvider] = useState<ServerId>(isAdmin ? "acchub" : "all");
   // Servers that the BACKEND currently has enabled (filtered by /numbers/providers).
   // Disabled bots simply disappear from the picker so agents never see dead options.
   const [availableServers, setAvailableServers] = useState<{ id: ServerId; label: string }[]>([
