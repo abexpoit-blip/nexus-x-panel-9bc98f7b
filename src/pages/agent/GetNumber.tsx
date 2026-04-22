@@ -424,6 +424,13 @@ const AgentGetNumber = () => {
   const selectedAllCountry = allCountryList.find((c) => c.code === allCountry);
 
   const selectedRange = ranges.find((r) => r.name === rangeName);
+  // Hot-range lookup: backend marks ranges that received ≥3 allocations in
+  // the past hour. Helps agents discover which pool numbers are actually
+  // converting right now without admin guidance.
+  const isHotRange = (rangeKey: string) => {
+    if (provider !== "all") return false;
+    return !!allRanges.find((r) => r.key === rangeKey)?.hot;
+  };
   // Friendly label resolver. For the unified "All Servers" pool:
   //   • Admins see the full backend label, e.g. "TJ — Tajikistan 99293515XXXX (Server F)"
   //     so they can audit which underlying bot a range belongs to.
