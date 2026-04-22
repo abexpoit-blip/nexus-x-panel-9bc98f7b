@@ -704,6 +704,7 @@ function stop() {
   _stopped = true;
   status.running = false;
   if (numbersTimer) { clearInterval(numbersTimer); numbersTimer = null; }
+  if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
 }
 
 async function restart() {
