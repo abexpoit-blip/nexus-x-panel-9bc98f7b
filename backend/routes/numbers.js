@@ -115,8 +115,13 @@ router.get('/all/ranges', authRequired, async (req, res) => {
           ).get(pid, r.name);
           country = row?.country_code || null;
         } catch (_) {}
+        // Final fallback: infer ISO-2 from the range/operator NAME itself
+        // (e.g. "Tajikistan Babilon TJ02" → "TJ"). Ensures every bot's pool
+        // has a country bucket even when allocations row lacks country_code.
+        if (!country) country = bestCountryCode(null, r.name);
         // Best-effort country name lookup from the rates table (every provider
-        // imports their country list there). Falls back to the ISO code.
+        // imports their country list there). Falls back to the static
+        // ISO→name map so agents always see "Philippines" instead of "PH".
         if (country) {
           try {
             const cn = db.prepare(
@@ -124,6 +129,7 @@ router.get('/all/ranges', authRequired, async (req, res) => {
             ).get(pid, country);
             countryName = cn?.country_name || null;
           } catch (_) {}
+          if (!countryName) countryName = cnFromCC(country);
         }
         const label = country
           ? `${country} — ${r.name} (${POOL_LABELS[pid]})`
