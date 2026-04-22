@@ -468,35 +468,36 @@ const AgentGetNumber = () => {
   };
   const totalPoolSize = ranges.reduce((sum, r) => sum + r.count, 0);
 
+  // Build the confirmation summary for the unified-pool dialog
+  const confirmSummary = useMemo(() => {
+    if (provider !== "all" || !rangeName) return null;
+    const meta = allRanges.find((x) => x.key === rangeName);
+    const friendly = meta
+      ? (isAdmin ? meta.name : meta.name.replace(/\s*\(Server [A-Z]\)\s*$/i, "").trim())
+      : rangeName;
+    return {
+      friendly,
+      count: meta?.count ?? 0,
+      providerLabel: isAdmin ? meta?.provider_label || null : null,
+    };
+  }, [provider, rangeName, allRanges, isAdmin]);
+
   const handleGetNumber = async () => {
     if (maintenanceMode) {
       toast({ title: "Maintenance mode", description: maintenanceMessage, variant: "destructive" });
       return;
     }
-    // Confirmation prompt for the unified "All Servers" pool — agents
-    // sometimes pick it by accident thinking it's a single bot. We make it
-    // explicit that the chosen range belongs to a SPECIFIC underlying
-    // provider and ask them to confirm before billing kicks in. Skipped
-    // when the agent ticks "don't ask again" (persisted in localStorage).
-    if (provider === "all" && rangeName) {
-      if (!skipAllConfirm) {
-        const meta = allRanges.find((x) => x.key === rangeName);
-        // Same admin-vs-agent rule as the dropdown: only admins see "Server X".
-        const friendly = meta
-          ? (isAdmin ? meta.name : meta.name.replace(/\s*\(Server [A-Z]\)\s*$/i, "").trim())
-          : rangeName;
-        const target = meta ? `${friendly} — ${meta.count} available` : friendly;
-        const serverLine = isAdmin && meta?.provider_label
-          ? `\n\nThis range belongs to ${meta.provider_label}.`
-          : "";
-        const msg =
-          `You are about to allocate ${quantity} number${quantity > 1 ? "s" : ""} ` +
-          `from:\n\n${target}${serverLine}\n\n` +
-          `Continue?\n\n(Tip: tick OK to proceed. Cancel to pick a different range.)`;
-        const ok = window.confirm(msg);
-        if (!ok) return;
-      }
+    // Styled confirmation for the unified "All Servers" pool — opens a
+    // themed AlertDialog instead of the native browser confirm() which
+    // looked alien and got clipped on small viewports.
+    if (provider === "all" && rangeName && !skipAllConfirm) {
+      setConfirmOpen(true);
+      return;
     }
+    await runAllocation();
+  };
+
+  const runAllocation = async () => {
     // Re-check enabled providers RIGHT before allocating so the agent
     // never sends a request to a provider that just got disabled.
     const fresh = await refreshProviders();
