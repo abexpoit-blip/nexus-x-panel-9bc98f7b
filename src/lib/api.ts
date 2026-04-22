@@ -391,6 +391,24 @@ export const api = {
     };
   }>("/numbers/summary"),
   syncOtp: () => request<{ updated: number }>("/numbers/sync", { method: "POST" }),
+  // OTP delivery audit log — agent sees their own scrape→match→credit
+  // events; admin sees the global feed (incl. unmatched / failures).
+  otpAudit: (params: { limit?: number; provider?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.provider) qs.set("provider", params.provider);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{
+      rows: Array<{
+        id: number; ts: number; provider: string; event: string;
+        user_id: number | null; allocation_id: number | null;
+        phone_number: string | null; otp_code: string | null;
+        rows_seen: number | null; matches_found: number | null;
+        endpoint: string | null; currency: string | null; detail: string | null;
+      }>;
+      stats_24h: { scrapes: number; failures: number; matched: number; credited: number; unmatched: number };
+    }>(`/numbers/otp-audit${suffix}`);
+  },
   pricing: () => request<{ pricing: { id: number; name: string; code: string; flag: string; price_bdt: number; operator_count: number }[] }>("/numbers/pricing"),
 
   // Rates
