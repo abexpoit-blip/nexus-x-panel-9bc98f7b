@@ -249,7 +249,7 @@ const AgentGetNumber = () => {
     } finally {
       setProvidersLoaded(true);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     refreshProviders();
