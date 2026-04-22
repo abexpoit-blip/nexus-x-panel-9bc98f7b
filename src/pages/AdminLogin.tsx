@@ -22,7 +22,7 @@ const AdminLogin = () => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const loggedInUser = await login(username, password);
+    const loggedInUser = await login(username, password, "admin");
     setLoading(false);
     if (!loggedInUser) {
       setError("Invalid credentials");
