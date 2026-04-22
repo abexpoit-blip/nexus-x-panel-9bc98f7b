@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Rate } from "@/lib/api";
 import { DataTable } from "@/components/DataTable";
@@ -12,17 +12,61 @@ import { GradientMesh, PageHeader } from "@/components/premium";
 
 // Global default per provider — no country/operator. Backend commission lookup
 // will fall back to this row whenever a more specific match doesn't exist.
-const empty: Partial<Rate> & { agent_commission_percent?: number } = {
-  provider: "acchub", country_code: null as any, country_name: null as any,
+// Provider id is filled in from the live registry once it loads.
+const emptyTemplate: Partial<Rate> & { agent_commission_percent?: number } = {
+  provider: "", country_code: null as any, country_name: null as any,
   operator: null as any, price_bdt: 0, active: 1, agent_commission_percent: 60,
 };
+
+// Friendly "Server X" letters cycle A-Z then fall back to the raw id.
+const SERVER_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Token classes rotate so each new provider gets a distinct chip color
+// without hard-coding ids — keeps the UI auto-extending for new bots.
+const PROVIDER_CHIP_TOKENS = [
+  "bg-neon-cyan/15 text-neon-cyan",
+  "bg-neon-magenta/15 text-neon-magenta",
+  "bg-neon-green/15 text-neon-green",
+  "bg-neon-amber/15 text-neon-amber",
+  "bg-neon-purple/15 text-neon-purple",
+  "bg-primary/15 text-primary",
+];
 
 const AdminRateCard = () => {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Partial<Rate>>(empty);
+  const [form, setForm] = useState<Partial<Rate>>(emptyTemplate);
 
   const { data, isLoading } = useQuery({ queryKey: ["rates"], queryFn: () => api.rates.list() });
+  // Live provider registry — every backend bot auto-appears here.
+  const { data: provData } = useQuery({
+    queryKey: ["provider-status"],
+    queryFn: () => api.admin.providerStatus(),
+    staleTime: 30_000,
+  });
+
+  // Map provider id → { letter, label, chip } so chip + dropdown share one source.
+  const providerMeta = useMemo(() => {
+    const list = provData?.providers || [];
+    const map = new Map<string, { letter: string; label: string; chip: string; name: string }>();
+    list.forEach((p, i) => {
+      const letter = SERVER_LETTERS[i] || String(i + 1);
+      map.set(p.id, {
+        letter,
+        label: `Server ${letter}`,
+        name: p.name || p.id,
+        chip: PROVIDER_CHIP_TOKENS[i % PROVIDER_CHIP_TOKENS.length],
+      });
+    });
+    return map;
+  }, [provData]);
+  const providerList = provData?.providers || [];
+  const defaultProviderId = providerList[0]?.id || "";
+
+  const empty = useMemo<Partial<Rate> & { agent_commission_percent?: number }>(
+    () => ({ ...emptyTemplate, provider: defaultProviderId }),
+    [defaultProviderId],
+  );
 
   const save = useMutation({
     mutationFn: async (f: Partial<Rate>) => f.id ? api.rates.update(f.id, f) : api.rates.create(f),
@@ -60,14 +104,20 @@ const AdminRateCard = () => {
           {
             key: "provider",
             header: "Server",
-            render: (r) => (
-              <span className={cn(
-                "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase",
-                r.provider === "acchub" ? "bg-neon-cyan/15 text-neon-cyan" : "bg-neon-magenta/15 text-neon-magenta"
-              )}>
-                {r.provider === "acchub" ? "Server A" : r.provider === "ims" ? "Server B" : r.provider}
-              </span>
-            ),
+            render: (r) => {
+              const meta = providerMeta.get(r.provider);
+              return (
+                <span
+                  title={meta?.name || r.provider}
+                  className={cn(
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase",
+                    meta?.chip || "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {meta?.label || r.provider}
+                </span>
+              );
+            },
           },
           {
             key: "scope",
@@ -138,9 +188,20 @@ const AdminRateCard = () => {
           <DialogHeader><DialogTitle>{form.id ? "Edit Rate" : "New Rate"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <Field label="Provider">
-              <select value={form.provider || "acchub"} onChange={(e) => setForm({ ...form, provider: e.target.value })} className="w-full h-10 px-3 rounded-md bg-white/[0.04] border border-white/[0.08]">
-                <option value="acchub">Server A (AccHub)</option>
-                <option value="ims">Server B (IMS)</option>
+              <select
+                value={form.provider || defaultProviderId}
+                onChange={(e) => setForm({ ...form, provider: e.target.value })}
+                className="w-full h-10 px-3 rounded-md bg-white/[0.04] border border-white/[0.08]"
+              >
+                {providerList.length === 0 && <option value="">Loading providers…</option>}
+                {providerList.map((p, i) => {
+                  const letter = SERVER_LETTERS[i] || String(i + 1);
+                  return (
+                    <option key={p.id} value={p.id}>
+                      Server {letter} ({p.name || p.id})
+                    </option>
+                  );
+                })}
               </select>
             </Field>
             <div className="grid grid-cols-2 gap-3">
