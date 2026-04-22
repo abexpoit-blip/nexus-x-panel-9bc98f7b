@@ -603,7 +603,7 @@ const AgentGetNumber = () => {
           </div>
         </div>
 
-        {provider === "ims" || provider === "msi" ? (
+        {provider === "ims" || provider === "msi" || provider === "all" ? (
           /* ============ Server B/C (range-based): single Range dropdown ============ */
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
             <div className="space-y-2 relative" ref={rangeRef}>
@@ -621,7 +621,7 @@ const AgentGetNumber = () => {
                 <span className={cn("truncate", !selectedRange && "text-muted-foreground")}>
                   {selectedRange ? (
                     <>
-                      {selectedRange.name}
+                      {labelForRange(selectedRange.name)}
                       <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
                         {selectedRange.count} avail
                       </span>
@@ -660,7 +660,7 @@ const AgentGetNumber = () => {
                             rangeName === r.name && "bg-primary/10 text-primary"
                           )}
                         >
-                          <span className="truncate">{r.name}</span>
+                          <span className="truncate">{labelForRange(r.name)}</span>
                           <span className={cn(
                             "text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold shrink-0",
                             r.count > 50 ? "bg-neon-green/15 text-neon-green" :
