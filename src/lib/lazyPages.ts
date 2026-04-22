@@ -35,6 +35,7 @@ export const Pages = {
   "/admin/msi-status":        make(() => import("@/pages/admin/MsiStatus")),
   "/admin/numpanel-status":   make(() => import("@/pages/admin/NumPanelStatus")),
   "/admin/iprn-status":       make(() => import("@/pages/admin/IprnStatus")),
+  "/admin/iprn-sms-status":   make(() => import("@/pages/admin/IprnSmsStatus")),
   "/admin/provider-settings": make(() => import("@/pages/admin/ProviderSettings")),
   "/admin/tg-bot":            make(() => import("@/pages/admin/TgBot")),
   "/admin/notifications":     make(() => import("@/pages/admin/Notifications")),

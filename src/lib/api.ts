@@ -716,6 +716,48 @@ export const api = {
     },
   },
 
+  // ===== IPRN-SMS Bot admin (panel.iprn-sms.com — Symfony, JSON API + ZIP) =====
+  iprnSms: {
+    status: () => request<{ status: any }>("/admin/iprn-sms-status"),
+    restart: () => request<{ ok: boolean }>("/admin/iprn-sms-restart", { method: "POST" }),
+    start: () => request<{ ok: boolean }>("/admin/iprn-sms-start", { method: "POST" }),
+    stop: () => request<{ ok: boolean }>("/admin/iprn-sms-stop", { method: "POST" }),
+    scrapeNow: () => request<{ ok: boolean; added?: number; error?: string }>("/admin/iprn-sms-scrape-now", { method: "POST" }),
+    poolBreakdown: () => request<{
+      ranges: Array<{ range_name: string; count: number; disabled: number }>;
+      totalPool: number; totalActive: number; totalUsed: number;
+    }>("/admin/iprn-sms-pool-breakdown"),
+    credentials: () => request<{
+      username: string; password_set: boolean; base_url: string;
+      sms_type: string; enabled: boolean;
+      sources: { username: string; password: string };
+    }>("/admin/iprn-sms-credentials"),
+    credentialsSave: (body: { username?: string; password?: string; base_url?: string; sms_type?: string; enabled?: boolean }) =>
+      request<{ ok: boolean }>("/admin/iprn-sms-credentials", { method: "PUT", body: JSON.stringify(body) }),
+    cookies: () =>
+      request<{ has_cookies: boolean; count: number; saved_at: number | null; names?: string[] }>("/admin/iprn-sms-cookies"),
+    cookiesClear: () =>
+      request<{ ok: boolean }>("/admin/iprn-sms-cookies", { method: "DELETE" }),
+    numbers: (params: { status?: string; q?: string; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set("status", params.status);
+      if (params.q) qs.set("q", params.q);
+      if (params.limit != null) qs.set("limit", String(params.limit));
+      if (params.offset != null) qs.set("offset", String(params.offset));
+      const tail = qs.toString();
+      return request<{
+        rows: Array<{
+          id: number; phone_number: string; range_name: string | null;
+          country_code: string | null; status: string;
+          allocated_at: number; user_id: number; otp: string | null;
+          username: string | null;
+        }>;
+        total: number; limit: number; offset: number;
+        counts: Record<string, number>;
+      }>(`/admin/iprn-sms-numbers${tail ? `?${tail}` : ""}`);
+    },
+  },
+
   // ===== Telegram Bot admin =====
   tgbot: {
     status: () => request<{
