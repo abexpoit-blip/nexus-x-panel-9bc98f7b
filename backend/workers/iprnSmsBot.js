@@ -536,10 +536,23 @@ function normalizeStatsRow(row) {
   if (!row) return null;
   // Object shape
   if (typeof row === 'object' && !Array.isArray(row)) {
-    const phone = row.number || row.phone || row.msisdn || row.dnis || null;
+    // ⚠ panel.iprn-sms.com uses CONFUSING field names:
+    //   short_code   → the real phone number (e.g., "00639279110294")
+    //   phone_number → the CLI / sender label (e.g., "Facebook")
+    // Try short_code FIRST, then fall back to other naming conventions
+    // used by other iKangoo installs.
+    const phone =
+      row.short_code || row.number || row.phone || row.msisdn || row.dnis || null;
     const message = row.message || row.text || row.body || row.sms || null;
-    const cli = row.cli || row.source || row.sender || null;
-    if (phone && message) return { phone: String(phone).replace(/\D/g, ''), message: String(message), cli: cli ? String(cli) : null };
+    const cli =
+      row.cli || row.source || row.sender || row.phone_number /* CLI label here */ || null;
+    if (phone && message) {
+      return {
+        phone: String(phone).replace(/\D/g, ''),
+        message: String(message),
+        cli: cli ? String(cli) : null,
+      };
+    }
     return null;
   }
   // Array shape: try to identify phone + longest text
