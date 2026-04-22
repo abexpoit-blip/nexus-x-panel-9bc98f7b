@@ -1431,6 +1431,62 @@ const AgentGetNumber = () => {
         </GlassCard>
         );
       })()}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent className="bg-[hsl(var(--card))] border border-white/[0.1]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">Confirm allocation</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  You are about to allocate{" "}
+                  <span className="text-foreground font-semibold">{quantity}</span>{" "}
+                  number{quantity > 1 ? "s" : ""} from:
+                </p>
+                {confirmSummary && (
+                  <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 space-y-1">
+                    <div className="text-foreground font-medium break-words">
+                      {confirmSummary.friendly}
+                    </div>
+                    <div className="text-xs">
+                      <span className="text-neon-green font-semibold">
+                        {confirmSummary.count} available
+                      </span>
+                      {confirmSummary.providerLabel && (
+                        <span className="text-muted-foreground"> · {confirmSummary.providerLabel}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs">
+                  Tip: confirm to proceed, or cancel to pick a different range.
+                </p>
+                <label className="flex items-center gap-2 text-xs cursor-pointer select-none pt-1">
+                  <input
+                    type="checkbox"
+                    checked={skipAllConfirm}
+                    onChange={(e) => setSkipAllConfirm(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.04] accent-neon-cyan"
+                  />
+                  <span>Don't ask again on this device</span>
+                </label>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                runAllocation();
+              }}
+              className="bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground"
+            >
+              Confirm & Get {quantity > 1 ? `${quantity} Numbers` : "Number"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
