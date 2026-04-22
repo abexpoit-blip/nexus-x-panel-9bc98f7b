@@ -7,7 +7,8 @@ import { prefetchPage } from "@/lib/lazyPages";
 import {
   LayoutDashboard, Hash, MessageSquare, List, BarChart3, Bell, Inbox,
   Users, Server, DollarSign, FileText, LogOut, X, Layers,
-  Wallet, Shield, User, CreditCard, Trophy, Bot, ArrowDownToLine, History, Settings
+  Wallet, Shield, User, CreditCard, Trophy, Bot, ArrowDownToLine, History, Settings,
+  ScrollText
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -23,6 +24,7 @@ const agentNav: NavItem[] = [
   { label: "Console", path: "/agent/console", icon: MessageSquare },
   { label: "My Numbers", path: "/agent/my-numbers", icon: List },
   { label: "OTP History", path: "/agent/history", icon: History },
+  { label: "OTP Audit Log", path: "/agent/otp-audit", icon: ScrollText },
   { label: "Summary", path: "/agent/summary", icon: BarChart3 },
   { label: "Leaderboard", path: "/agent/leaderboard", icon: Trophy },
   { label: "Payments", path: "/agent/payments", icon: Wallet },

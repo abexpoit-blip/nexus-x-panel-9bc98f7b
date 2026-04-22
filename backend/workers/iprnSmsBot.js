@@ -24,6 +24,7 @@ const axios = require('axios');
 const AdmZip = require('adm-zip');
 const db = require('../lib/db');
 const { markOtpReceived } = require('../routes/numbers');
+const { logOtpEvent, trimIfDue } = require('../lib/otpAudit');
 
 const QUIET = process.env.NODE_ENV === 'production';
 const dlog = (...a) => { if (!QUIET) console.log(...a); };
@@ -611,18 +612,58 @@ async function scrapeOtps() {
       WHERE provider='iprn_sms' AND phone_number=? AND status='active' AND otp IS NULL
       ORDER BY allocated_at DESC LIMIT 1
     `).get(row.phone);
-    if (!a) continue;
+    if (!a) {
+      // Log unmatched OTPs too so admin can see "we saw an OTP but no agent
+      // had this number active" — useful when agents complain "OTP missing"
+      // because their allocation already expired.
+      logOtpEvent({
+        provider: 'iprn_sms',
+        event: 'no_match',
+        phone_number: row.phone,
+        otp_code: otp,
+        endpoint: workingUrl,
+        currency: OTP_CURRENCY,
+        detail: `Saw OTP for ${row.phone} but no active allocation`,
+      });
+      continue;
+    }
 
     try {
-      await markOtpReceived(a, otp, row.cli);
+      await markOtpReceived(a, otp, row.cli, { endpoint: workingUrl, currency: OTP_CURRENCY });
+      logOtpEvent({
+        provider: 'iprn_sms',
+        event: 'matched',
+        user_id: a.user_id,
+        allocation_id: a.id,
+        phone_number: row.phone,
+        otp_code: otp,
+        endpoint: workingUrl,
+        currency: OTP_CURRENCY,
+        detail: row.cli ? `Matched (${row.cli})` : 'Matched',
+      });
       delivered++;
       status.otpsDeliveredTotal++;
       console.log(`[iprn_sms-bot] ✓ OTP delivered: ${row.phone} → ${otp} (user_id=${a.user_id})`);
       logEvent('success', `OTP delivered: ${row.phone} → ${otp}`);
     } catch (e) {
       dwarn('[iprn_sms-bot] markOtpReceived failed:', e.message);
+      logOtpEvent({
+        provider: 'iprn_sms', event: 'scrape_fail',
+        phone_number: row.phone, otp_code: otp,
+        endpoint: workingUrl, currency: OTP_CURRENCY,
+        detail: `markOtpReceived error: ${e.message}`,
+      });
     }
   }
+  // One scrape_ok row per cycle so agents can SEE the bot is alive even
+  // when no OTPs land. Keeps audit page from looking dead between matches.
+  logOtpEvent({
+    provider: 'iprn_sms', event: 'scrape_ok',
+    rows_seen: result.rows.length, matches_found: delivered,
+    endpoint: workingUrl, currency: OTP_CURRENCY,
+    detail: `Polled ${result.rows.length} rows · ${delivered} matched`,
+  });
+  trimIfDue();
   return delivered;
 }
 
@@ -639,6 +680,11 @@ async function runOtpLoop() {
       dwarn(`[iprn_sms-bot] OTP scrape failed (${status.consecFail}): ${e.message}`);
       logEvent('error', `OTP scrape failed ${status.consecFail}x: ${e.message}`);
     }
+    logOtpEvent({
+      provider: 'iprn_sms', event: 'scrape_fail',
+      endpoint: status.otpEndpoint, currency: OTP_CURRENCY,
+      detail: e.message,
+    });
     if (/Session expired/.test(e.message)) loggedIn = false;
   }
 }

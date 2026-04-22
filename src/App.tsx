@@ -27,6 +27,7 @@ const AgentProfile = Pages["/agent/profile"].L;
 const AgentLeaderboard = Pages["/agent/leaderboard"].L;
 const AgentInbox = Pages["/agent/inbox"].L;
 const AgentHistory = Pages["/agent/history"].L;
+const AgentOtpAudit = Pages["/agent/otp-audit"].L;
 
 const AdminDashboard = Pages["/admin/dashboard"].L;
 const AdminProviders = Pages["/admin/providers"].L;
@@ -106,6 +107,7 @@ const AppRoutes = () => {
             <Route path="/agent/console" element={<AgentConsole />} />
             <Route path="/agent/my-numbers" element={<AgentMyNumbers />} />
             <Route path="/agent/history" element={<AgentHistory />} />
+            <Route path="/agent/otp-audit" element={<AgentOtpAudit />} />
             <Route path="/agent/summary" element={<AgentSummary />} />
             <Route path="/agent/payments" element={<AgentPayments />} />
             <Route path="/agent/profile" element={<AgentProfile />} />

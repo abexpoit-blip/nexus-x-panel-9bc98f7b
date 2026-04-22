@@ -106,6 +106,31 @@ db.exec(`
 addColIfMissing('iprn_range_meta', 'disabled', 'INTEGER DEFAULT 0');
 addColIfMissing('iprn_range_meta', 'service_tag', 'TEXT');
 
+// OTP delivery audit log — every OTP scrape cycle + every match logged here so
+// agents can SEE when their OTPs were scraped, matched, and credited (with the
+// upstream endpoint URL and currency filter used). Helps debugging "why didn't
+// I get my OTP" complaints — agents can see whether the bot is even polling.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS otp_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    provider TEXT NOT NULL,                  -- iprn_sms | iprn | ims | ...
+    event TEXT NOT NULL,                     -- 'scrape_ok' | 'scrape_fail' | 'matched' | 'no_match' | 'credited'
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    allocation_id INTEGER REFERENCES allocations(id) ON DELETE SET NULL,
+    phone_number TEXT,
+    otp_code TEXT,
+    rows_seen INTEGER,                       -- rows the scrape returned (for scrape_ok)
+    matches_found INTEGER,                   -- credited matches in this scrape
+    endpoint TEXT,                           -- upstream URL the bot hit
+    currency TEXT,                           -- filter applied (USD / EUR / GBP)
+    detail TEXT                              -- short human-readable note / error msg
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_otp_audit_ts ON otp_audit_log(ts DESC);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_otp_audit_user ON otp_audit_log(user_id, ts DESC);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_otp_audit_provider ON otp_audit_log(provider, ts DESC);`);
+
 // Apply Telegram bot schema (additive) AFTER column migrations
 const tgSchemaPath = path.join(__dirname, 'tg_schema.sql');
 if (fs.existsSync(tgSchemaPath)) {

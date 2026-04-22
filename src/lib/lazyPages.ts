@@ -16,6 +16,7 @@ export const Pages = {
   "/agent/console":     make(() => import("@/pages/agent/Console")),
   "/agent/my-numbers":  make(() => import("@/pages/agent/MyNumbers")),
   "/agent/history":     make(() => import("@/pages/agent/History")),
+  "/agent/otp-audit":   make(() => import("@/pages/agent/OtpAudit")),
   "/agent/summary":     make(() => import("@/pages/agent/Summary")),
   "/agent/payments":    make(() => import("@/pages/agent/Payments")),
   "/agent/profile":     make(() => import("@/pages/agent/Profile")),
