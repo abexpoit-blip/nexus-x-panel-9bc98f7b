@@ -382,13 +382,17 @@ const AgentGetNumber = () => {
     if (provider === "all" && rangeName) {
       if (!skipAllConfirm) {
         const meta = allRanges.find((x) => x.key === rangeName);
-        const target = meta
-          ? `${meta.name} — ${meta.count} available`
+        // Same admin-vs-agent rule as the dropdown: only admins see "Server X".
+        const friendly = meta
+          ? (isAdmin ? meta.name : meta.name.replace(/\s*\(Server [A-Z]\)\s*$/i, "").trim())
           : rangeName;
+        const target = meta ? `${friendly} — ${meta.count} available` : friendly;
+        const serverLine = isAdmin && meta?.provider_label
+          ? `\n\nThis range belongs to ${meta.provider_label}.`
+          : "";
         const msg =
           `You are about to allocate ${quantity} number${quantity > 1 ? "s" : ""} ` +
-          `from:\n\n${target}\n\n` +
-          `This range belongs to ${meta?.provider_label || "an underlying server"}. ` +
+          `from:\n\n${target}${serverLine}\n\n` +
           `Continue?\n\n(Tip: tick OK to proceed. Cancel to pick a different range.)`;
         const ok = window.confirm(msg);
         if (!ok) return;
