@@ -345,11 +345,27 @@ const AgentGetNumber = () => {
   }, [ranges, rangeSearch, provider, allRanges]);
 
   const selectedRange = ranges.find((r) => r.name === rangeName);
-  // Friendly label resolver — for 'all' we show "Country — Range (Server X)" instead of the raw key.
+  const isAdmin = user?.role === "admin";
+  // Friendly label resolver. For the unified "All Servers" pool:
+  //   • Admins see the full backend label, e.g. "TJ — Tajikistan 99293515XXXX (Server F)"
+  //     so they can audit which underlying bot a range belongs to.
+  //   • Agents see ONLY country + range, e.g. "TJ — Tajikistan 99293515XXXX",
+  //     because the underlying provider is internal info they don't need.
   const labelForRange = (key: string): string => {
     if (provider !== "all") return key;
     const m = allRanges.find((x) => x.key === key);
-    return m ? m.name : key;
+    if (!m) return key;
+    if (isAdmin) return m.name;
+    // Strip the trailing "(Server X)" tag for non-admins
+    return m.name.replace(/\s*\(Server [A-Z]\)\s*$/i, "").trim();
+  };
+  // Provider tag shown next to the count badge — admin-only, so the
+  // dropdown stays consistent: "<count> avail · Server X" for admins,
+  // just "<count> avail" for agents.
+  const providerTagForRange = (key: string): string | null => {
+    if (provider !== "all" || !isAdmin) return null;
+    const m = allRanges.find((x) => x.key === key);
+    return m?.provider_label || null;
   };
   const totalPoolSize = ranges.reduce((sum, r) => sum + r.count, 0);
 
