@@ -404,7 +404,7 @@ const AgentGetNumber = () => {
     const map = new Map<string, { code: string; name: string; ranges: number; count: number }>();
     for (const r of allRanges) {
       const code = r.country_code || "ZZ";
-      const name = r.country_name || code;
+      const name = r.country_name || (code === "ZZ" ? "Other" : code);
       const ex = map.get(code) || { code, name, ranges: 0, count: 0 };
       ex.ranges += 1;
       ex.count += r.count;
