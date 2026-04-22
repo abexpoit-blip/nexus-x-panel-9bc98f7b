@@ -328,7 +328,7 @@ export const api = {
   allRanges: () => request<{ ranges: {
     key: string; name: string; range: string; provider: string;
     provider_label: string; country_code: string | null;
-    country_name?: string | null; count: number;
+    country_name?: string | null; count: number; hot?: boolean;
   }[] }>("/numbers/all/ranges"),
   imsAddPool: (body: { numbers: string[]; range: string; country_code?: string }) =>
     request<{ added: number; skipped: number; invalid: number; range: string }>("/numbers/ims/pool", { method: "POST", body: JSON.stringify(body) }),
