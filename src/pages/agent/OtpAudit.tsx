@@ -138,10 +138,31 @@ const AgentOtpAudit = () => {
             OTP Audit Log
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Live trace of every OTP scrape, match, and credit. Refreshes every 8s.
+            Live trace of every OTP scrape, match, and credit. Refreshes every {intervalSec}s.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative hidden sm:block">
+            <select
+              value={intervalSec}
+              onChange={(e) => setIntervalSec(Number(e.target.value))}
+              className="appearance-none h-9 pl-3 pr-8 rounded-md bg-white/[0.04] border border-white/[0.1] text-xs text-foreground focus:outline-none focus:border-primary/50"
+              aria-label="Auto-refresh interval"
+            >
+              <option value={3} className="bg-[hsl(var(--card))]">Every 3s</option>
+              <option value={5} className="bg-[hsl(var(--card))]">Every 5s</option>
+              <option value={8} className="bg-[hsl(var(--card))]">Every 8s</option>
+              <option value={15} className="bg-[hsl(var(--card))]">Every 15s</option>
+              <option value={30} className="bg-[hsl(var(--card))]">Every 30s</option>
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </div>
+          {lastRefresh && (
+            <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
+              <Clock className="w-3 h-3" />
+              {ago(lastRefresh)}
+            </span>
+          )}
           <Button
             variant="outline"
             size="sm"
