@@ -294,8 +294,12 @@ export type Session = {
 
 export const api = {
   // Auth
-  login: (username: string, password: string) =>
-    request<{ token: string; user: any }>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  login: (username: string, password: string, surface: "agent" | "admin" = "agent") =>
+    request<{ token: string; user: any }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+      headers: { "X-Login-Surface": surface },
+    }),
   register: (body: { username: string; password: string; full_name?: string; phone?: string; telegram?: string }) =>
     request<{ pending?: boolean; message?: string; token?: string; user?: any }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   me: () => request<{ user: any; impersonator?: { id: number; username: string } | null }>("/auth/me"),
