@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Agent } from "@/lib/api";
 import { DataTable } from "@/components/DataTable";
@@ -6,18 +6,49 @@ import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Sliders, Pencil } from "lucide-react";
+import { Sliders, Pencil, ChevronDown, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { GradientMesh, PageHeader } from "@/components/premium";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 const AdminAllocation = () => {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Agent | null>(null);
   const [daily, setDaily] = useState(0);
   const [perReq, setPerReq] = useState(0);
+  const [tab, setTab] = useState<"limits" | "live" | "inspector">("limits");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
 
   const { data } = useQuery({ queryKey: ["agents"], queryFn: () => api.admin.agents() });
   const { data: alloc } = useQuery({ queryKey: ["all-allocations"], queryFn: () => api.admin.allocations(), refetchInterval: 15000 });
+  const { data: pool } = useQuery({
+    queryKey: ["pool-inspector"],
+    queryFn: () => api.admin.poolInspector(),
+    refetchInterval: 20000,
+    enabled: tab === "inspector",
+  });
+
+  const filteredCountries = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = pool?.countries || [];
+    if (!q) return list;
+    return list.filter(
+      (c) =>
+        c.country_name.toLowerCase().includes(q) ||
+        c.country_code.toLowerCase().includes(q) ||
+        c.ranges.some((r) => r.range.toLowerCase().includes(q))
+    );
+  }, [pool, search]);
+
+  const toggle = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const save = useMutation({
     mutationFn: () => api.admin.updateAgent(editing!.id, { daily_limit: daily, per_request_limit: perReq }),
