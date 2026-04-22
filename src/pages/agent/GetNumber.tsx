@@ -751,8 +751,173 @@ const AgentGetNumber = () => {
           </div>
         )}
 
-        {provider === "ims" || provider === "msi" || provider === "all" ? (
-          /* ============ Server B/C (range-based): single Range dropdown ============ */
+        {provider === "all" && !isAdmin ? (
+          /* ============ AGENT unified flow: Country → Range → Get ============ */
+          <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1.4fr_auto] gap-4 items-end">
+            {/* Country (sticky — persists in localStorage) */}
+            <div className="space-y-2 relative" ref={allCountryRef}>
+              <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                <span>Country</span>
+                <span className="text-[10px] text-muted-foreground/70 font-normal">
+                  {allCountryList.length} available
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setAllCountryOpen((v) => !v)}
+                className="w-full h-11 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2"
+              >
+                <span className={cn("truncate", !selectedAllCountry && "text-muted-foreground")}>
+                  {selectedAllCountry ? (
+                    <>
+                      {selectedAllCountry.name}
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
+                        {selectedAllCountry.count} avail
+                      </span>
+                    </>
+                  ) : allCountryList.length === 0 ? "No countries available" : "Select country..."}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", allCountryOpen && "rotate-180")} />
+              </button>
+              {allCountryOpen && (
+                <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        autoFocus
+                        value={allCountrySearch}
+                        onChange={(e) => setAllCountrySearch(e.target.value)}
+                        placeholder="Search country..."
+                        className="w-full h-9 pl-9 pr-3 rounded-md bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto scrollbar-none bg-[hsl(var(--card))]">
+                    {filteredAllCountries.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        No countries match "{allCountrySearch}"
+                      </div>
+                    ) : (
+                      filteredAllCountries.map((c) => (
+                        <button
+                          key={c.code}
+                          onClick={() => {
+                            setAllCountry(c.code);
+                            // Clear range only if it doesn't belong to the new country.
+                            const cur = allRanges.find((r) => r.key === rangeName);
+                            if (!cur || cur.country_code !== c.code) setRangeName("");
+                            setAllCountryOpen(false);
+                            setAllCountrySearch("");
+                          }}
+                          className={cn(
+                            "w-full px-3 py-2.5 text-left text-sm flex items-center justify-between gap-2 hover:bg-white/[0.06] transition-colors",
+                            allCountry === c.code && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          <span className="truncate">{c.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-mono font-semibold shrink-0">
+                            {c.count}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Range — filtered by selected country */}
+            <div className="space-y-2 relative" ref={rangeRef}>
+              <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                <span>Range</span>
+                <span className="text-[10px] text-muted-foreground/70 font-normal">
+                  {filteredRanges.length} ranges
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => allCountry && setRangeOpen((v) => !v)}
+                disabled={!allCountry}
+                className="w-full h-11 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className={cn("truncate", !selectedRange && "text-muted-foreground")}>
+                  {!allCountry
+                    ? "Pick a country first"
+                    : selectedRange ? (
+                      <>
+                        {labelForRange(selectedRange.name)}
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
+                          {selectedRange.count} avail
+                        </span>
+                      </>
+                    ) : filteredRanges.length === 0 ? "No ranges for this country" : "Select a range..."}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", rangeOpen && "rotate-180")} />
+              </button>
+              {rangeOpen && allCountry && (
+                <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
+                  <div className="p-2 border-b border-white/[0.06] sticky top-0 bg-[hsl(var(--card))]">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        autoFocus
+                        value={rangeSearch}
+                        onChange={(e) => setRangeSearch(e.target.value)}
+                        placeholder="Search range..."
+                        className="w-full h-9 pl-9 pr-3 rounded-md bg-white/[0.04] border border-white/[0.08] text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto scrollbar-none bg-[hsl(var(--card))]">
+                    {filteredRanges.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        No ranges for {selectedAllCountry?.name || allCountry}
+                      </div>
+                    ) : (
+                      filteredRanges.map((r) => (
+                        <button
+                          key={r.name}
+                          onClick={() => { setRangeName(r.name); setRangeOpen(false); setRangeSearch(""); }}
+                          className={cn(
+                            "w-full px-3 py-2.5 text-left text-sm flex items-center justify-between gap-2 hover:bg-white/[0.06] transition-colors",
+                            rangeName === r.name && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          <span className="truncate">{labelForRange(r.name)}</span>
+                          <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold shrink-0",
+                            r.count > 50 ? "bg-neon-green/15 text-neon-green" :
+                            r.count > 10 ? "bg-neon-amber/15 text-neon-amber" :
+                            "bg-destructive/15 text-destructive"
+                          )}>
+                            {r.count} avail
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button
+              onClick={handleGetNumber}
+              disabled={loading || maintenanceMode || usedToday >= dailyLimit || !rangeName}
+              className="h-11 bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0 min-w-[180px]"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Hash className="w-4 h-4 mr-2" />
+                  Get {quantity > 1 ? `${quantity} Numbers` : "Number"}
+                </>
+              )}
+            </Button>
+          </div>
+        ) : provider === "ims" || provider === "msi" || provider === "all" ? (
+          /* ============ Admin range-based servers (B/C/All): single Range dropdown ============ */
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
             <div className="space-y-2 relative" ref={rangeRef}>
               <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
