@@ -291,6 +291,85 @@ router.get('/allocations', (req, res) => {
   res.json({ allocations });
 });
 
+// GET /api/admin/pool-inspector — debug view of the unified-pool aggregation.
+// For each Country → Range bucket the agents see, list every bot contributing
+// to it (with its individual count) and the inferred country name. This is
+// the admin's "ground truth" for diagnosing odd allocations or missing
+// country labels.
+router.get('/pool-inspector', async (req, res) => {
+  try {
+    const providers = require('../providers');
+    const { bestCountryCode, countryName: cnFromCC } = require('../lib/countryInfer');
+    const POOL_LABELS = {
+      ims: 'Server B', msi: 'Server C', numpanel: 'Server D',
+      iprn: 'Server E', iprn_sms: 'Server F',
+    };
+    const isEnabled = (id) => {
+      const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(`${id}_enabled`);
+      const raw = row?.value ?? process.env[`${id.toUpperCase()}_ENABLED`] ?? 'false';
+      return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+    };
+    // country_code -> { country_code, country_name, total, ranges: Map<rangeName, {range, total, bots: [{provider,label,count}]}> }
+    const byCountry = new Map();
+    for (const pid of Object.keys(POOL_LABELS)) {
+      if (!isEnabled(pid)) continue;
+      let p; try { p = providers.get(pid); } catch (_) { continue; }
+      let ranges = []; try { ranges = await p.listRanges(); } catch (_) { continue; }
+      for (const r of ranges || []) {
+        if (!r || !r.name || !r.count) continue;
+        let cc = null;
+        try {
+          const row = db.prepare(
+            "SELECT country_code FROM allocations WHERE provider=? AND status='pool' AND COALESCE(operator,'Unknown')=? AND country_code IS NOT NULL LIMIT 1"
+          ).get(pid, r.name);
+          cc = row?.country_code || null;
+        } catch (_) {}
+        const inferred = !cc;
+        if (!cc) cc = bestCountryCode(null, r.name);
+        const ccKey = cc || 'ZZ';
+        let cn = null;
+        if (cc) {
+          try {
+            const row = db.prepare(
+              "SELECT country_name FROM rates WHERE provider=? AND country_code=? AND country_name IS NOT NULL LIMIT 1"
+            ).get(pid, cc);
+            cn = row?.country_name || null;
+          } catch (_) {}
+          if (!cn) cn = cnFromCC(cc);
+        }
+        if (!byCountry.has(ccKey)) {
+          byCountry.set(ccKey, {
+            country_code: ccKey,
+            country_name: cn || (ccKey === 'ZZ' ? 'Unknown' : ccKey),
+            inferred,
+            total: 0,
+            ranges: new Map(),
+          });
+        }
+        const cBucket = byCountry.get(ccKey);
+        if (cn && !cBucket.country_name_locked) cBucket.country_name = cn;
+        cBucket.total += r.count;
+        if (!cBucket.ranges.has(r.name)) {
+          cBucket.ranges.set(r.name, { range: r.name, total: 0, bots: [] });
+        }
+        const rBucket = cBucket.ranges.get(r.name);
+        rBucket.total += r.count;
+        rBucket.bots.push({ provider: pid, label: POOL_LABELS[pid], count: r.count });
+      }
+    }
+    const countries = Array.from(byCountry.values())
+      .map((c) => ({
+        country_code: c.country_code,
+        country_name: c.country_name,
+        inferred: c.inferred,
+        total: c.total,
+        ranges: Array.from(c.ranges.values()).sort((a, b) => b.total - a.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+    res.json({ countries });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/admin/commission-trend — daily commission credited to agents
 router.get('/commission-trend', (req, res) => {
   const days = Math.min(Math.max(+req.query.days || 14, 1), 60);
