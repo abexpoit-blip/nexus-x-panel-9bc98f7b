@@ -119,6 +119,21 @@ const AgentGetNumber = () => {
   useEffect(() => {
     localStorage.setItem("nx_skip_all_confirm", skipAllConfirm ? "1" : "0");
   }, [skipAllConfirm]);
+  // Sticky Country + Range selection for agent unified-pool flow.
+  // We persist the country code (e.g. "TJ") and the full range KEY
+  // ("iprn_sms::99293515XXXX(1)") so the choice survives reloads — exactly
+  // what the user asked for: "stick country and ranges until they change".
+  const [allCountry, setAllCountry] = useState<string>(
+    () => localStorage.getItem("nx_all_country") || ""
+  );
+  useEffect(() => {
+    if (allCountry) localStorage.setItem("nx_all_country", allCountry);
+    else localStorage.removeItem("nx_all_country");
+  }, [allCountry]);
+  // Country combobox state (separate from the legacy AccHub country picker)
+  const [allCountryOpen, setAllCountryOpen] = useState(false);
+  const [allCountrySearch, setAllCountrySearch] = useState("");
+  const allCountryRef = useRef<HTMLDivElement>(null);
   // Browser desktop notification permission state
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(
     () => (typeof Notification !== "undefined" ? Notification.permission : "denied")
