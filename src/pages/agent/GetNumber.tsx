@@ -906,7 +906,12 @@ const AgentGetNumber = () => {
                             rangeName === r.name && "bg-primary/10 text-primary"
                           )}
                         >
-                          <span className="truncate">{labelForRange(r.name)}</span>
+                          <span className="truncate flex items-center gap-1.5">
+                            {isHotRange(r.name) && (
+                              <span title="Hot — high allocation rate in the last hour" className="shrink-0">🔥</span>
+                            )}
+                            {labelForRange(r.name)}
+                          </span>
                           <span className={cn(
                             "text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold shrink-0",
                             r.count > 50 ? "bg-neon-green/15 text-neon-green" :
