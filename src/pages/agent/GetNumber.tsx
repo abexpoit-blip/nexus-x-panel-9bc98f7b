@@ -662,9 +662,9 @@ const AgentGetNumber = () => {
               <p className="text-xs text-foreground">
                 <span className="font-semibold">All Servers mode:</span>{" "}
                 <span className="text-muted-foreground">
-                  Each range belongs to one underlying bot (Server B/C/D/E/F).
-                  You'll be asked to confirm before every allocation so a wrong
-                  pick doesn't burn balance on the wrong server.
+                  Pick a country and range — we'll fetch a fresh number from the
+                  matching pool. You'll be asked to confirm before every
+                  allocation so a wrong pick doesn't burn balance.
                 </span>
               </p>
               <label className="mt-1.5 inline-flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
