@@ -684,5 +684,65 @@ async function markOtpReceived(allocation, otpCode, cli = null, auditMeta = null
   } catch (_) { /* never break delivery */ }
 }
 
+// ============================================================
+// GET /api/numbers/otp-audit — agent-visible OTP delivery log
+// ============================================================
+// Shows the full lifecycle for the caller's OTPs: every scrape cycle the bot
+// ran, every match it found for one of YOUR numbers, and every credit that
+// was applied. Admins see ALL events (including unmatched / scrape failures)
+// so they can debug "why didn't I get my OTP" reports without SSH.
+router.get('/otp-audit', authRequired, (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const limit = Math.min(500, Math.max(1, +(req.query.limit) || 200));
+  const provider = req.query.provider ? String(req.query.provider) : null;
+
+  const where = [];
+  const params = [];
+  if (!isAdmin) {
+    // Agents see ONLY events tied to them: their own matched/credited rows,
+    // plus scrape_ok cycles (so they can see the bot is alive). Other agents'
+    // matched rows and unmatched-OTP rows stay private.
+    where.push(`(user_id = ? OR event = 'scrape_ok')`);
+    params.push(req.user.id);
+  }
+  if (provider) {
+    where.push(`provider = ?`);
+    params.push(provider);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = db.prepare(`
+    SELECT id, ts, provider, event, user_id, allocation_id,
+           phone_number, otp_code, rows_seen, matches_found,
+           endpoint, currency, detail
+    FROM otp_audit_log
+    ${whereSql}
+    ORDER BY ts DESC, id DESC
+    LIMIT ?
+  `).all(...params, limit);
+
+  // Stats over the last 24h (audit-page header)
+  const since = Math.floor(Date.now() / 1000) - 86400;
+  const stat = (event) => {
+    const sql = `SELECT COUNT(*) c FROM otp_audit_log WHERE ts >= ? AND event = ?${
+      isAdmin ? '' : ` AND (user_id = ? OR event = 'scrape_ok')`
+    }${provider ? ' AND provider = ?' : ''}`;
+    const args = [since, event];
+    if (!isAdmin) args.push(req.user.id);
+    if (provider) args.push(provider);
+    return db.prepare(sql).get(...args).c;
+  };
+
+  res.json({
+    rows,
+    stats_24h: {
+      scrapes:   stat('scrape_ok'),
+      failures:  stat('scrape_fail'),
+      matched:   stat('matched'),
+      credited:  stat('credited'),
+      unmatched: stat('no_match'),
+    },
+  });
+});
+
 module.exports = router;
 module.exports.markOtpReceived = markOtpReceived;
