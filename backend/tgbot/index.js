@@ -581,6 +581,10 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
     'SELECT tg_rate_bdt, service FROM range_tg_settings WHERE provider = ? AND range_name = ? AND tg_enabled = 1'
   ).get(provider, rangeName);
   if (!setting) return ctx.reply('❌ This range is no longer available.');
+  // Honor admin "Hide from agents" toggle from the new RangePoolGrid.
+  if (getDisabledRangeKeys().has(`${provider}::${rangeName}`)) {
+    return ctx.reply('🚫 This range was just disabled by admin. Please pick another.');
+  }
   const rate = setting.tg_rate_bdt || 0;
 
   // We reserve = 1 OTP success worth × batch (refunded if no OTP).
