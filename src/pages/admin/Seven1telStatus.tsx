@@ -233,13 +233,13 @@ const CredentialsEditor = ({ onSaved }: { onSaved: () => void }) => {
 };
 
 // ---- Seven1Tel Session Cookies (mirrors IMS cookie bypass) ----
-const MsiCookiesEditor = ({ onSaved, cookieFailStreak = 0 }: { onSaved: () => void; cookieFailStreak?: number }) => {
+const Seven1telCookiesEditor = ({ onSaved, cookieFailStreak = 0 }: { onSaved: () => void; cookieFailStreak?: number }) => {
   const [open, setOpen] = useState(false);
   const [raw, setRaw] = useState("");
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
   const { data, refetch } = useQuery({
-    queryKey: ["msi-cookies-status"],
+    queryKey: ["seven1tel-cookies-status"],
     queryFn: () => api.admin.seven1telCookiesStatus(),
     refetchInterval: 15000,
   });
@@ -375,10 +375,10 @@ const MsiCookiesEditor = ({ onSaved, cookieFailStreak = 0 }: { onSaved: () => vo
 };
 
 // ---- OTP poll interval setting ----
-const MsiOtpIntervalSetting = ({ onSaved }: { onSaved: () => void }) => {
+const Seven1telOtpIntervalSetting = ({ onSaved }: { onSaved: () => void }) => {
   const [saving, setSaving] = useState(false);
   const { data, refetch, isLoading } = useQuery({
-    queryKey: ["msi-otp-interval"],
+    queryKey: ["seven1tel-otp-interval"],
     queryFn: () => api.admin.seven1telOtpInterval(),
   });
   const current = data?.interval_sec ?? 5;
@@ -432,7 +432,7 @@ const MsiOtpIntervalSetting = ({ onSaved }: { onSaved: () => void }) => {
 };
 
 // ---- Manual paste-numbers (mirror IMS) ----
-const MsiManualPaste = ({ existingRanges, onAdded }: { existingRanges: string[]; onAdded: () => void }) => {
+const Seven1telManualPaste = ({ existingRanges, onAdded }: { existingRanges: string[]; onAdded: () => void }) => {
   const [open, setOpen] = useState(false);
   const [rangeMode, setRangeMode] = useState<"existing" | "new">("existing");
   const [selectedRange, setSelectedRange] = useState("");
@@ -453,7 +453,7 @@ const MsiManualPaste = ({ existingRanges, onAdded }: { existingRanges: string[];
     if (!parsed.length) { toast.error("Paste at least one valid number"); return; }
     setSubmitting(true);
     try {
-      const r = await api.msiAddPool({
+      const r = await api.seven1telAddPool({
         numbers: Array.from(new Set(parsed)),
         range,
         country_code: countryCode.trim() || undefined,
@@ -556,12 +556,12 @@ const AdminSeven1telStatus = () => {
   const [syncing, setSyncing] = useState(false);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["msi-status"],
+    queryKey: ["seven1tel-status"],
     queryFn: () => api.admin.seven1telStatus(),
     refetchInterval: 5000,
   });
   const { data: poolData, refetch: refetchPool } = useQuery({
-    queryKey: ["msi-pool-breakdown"],
+    queryKey: ["seven1tel-pool-breakdown"],
     queryFn: () => api.admin.seven1telPoolBreakdown(),
     refetchInterval: 10000,
   });
@@ -683,12 +683,12 @@ const AdminSeven1telStatus = () => {
             accent="neon-purple"
             icon={<ClipboardPaste className="w-4 h-4 text-neon-purple" />}
           >
-            <MsiCookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
+            <Seven1telCookiesEditor onSaved={() => refetch()} cookieFailStreak={s.cookieFailStreak || 0} />
           </LockReveal>
 
-          <MsiOtpIntervalSetting onSaved={() => refetch()} />
+          <Seven1telOtpIntervalSetting onSaved={() => refetch()} />
 
-          <MsiManualPaste
+          <Seven1telManualPaste
             existingRanges={poolData?.ranges?.map(r => r.name) ?? []}
             onAdded={() => { refetch(); refetchPool(); }}
           />
@@ -713,7 +713,7 @@ const AdminSeven1telStatus = () => {
                 />
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Bot will auto-stop if {s.emptyLimit} consecutive scrapes return zero numbers (set MSI_EMPTY_LIMIT env to enable; 0 = disabled).
+                Bot will auto-stop if {s.emptyLimit} consecutive scrapes return zero numbers (set SEVEN1TEL_EMPTY_LIMIT env to enable; 0 = disabled).
               </p>
             </div>
           )}
