@@ -252,18 +252,47 @@ function newBatchId() {
 
 // ---------- Country list (only TG-enabled ranges with pool > 0) ----------
 // Country code is inferred from range_name when allocations.country_code is missing
+// Per-provider range_meta tables (from admin RangePoolGrid) — used to honor
+// the new "disabled" toggle so admin-hidden ranges are skipped here too.
+const RANGE_META_TABLES = {
+  numpanel: 'numpanel_range_meta',
+  ims: 'ims_range_meta',
+  msi: 'msi_range_meta',
+  iprn: 'iprn_range_meta',
+  iprn_sms: 'iprn_sms_range_meta',
+};
+
+// Returns Set of "provider::range_name" that admin has disabled.
+function getDisabledRangeKeys() {
+  const disabled = new Set();
+  for (const [provider, table] of Object.entries(RANGE_META_TABLES)) {
+    try {
+      const rows = db.prepare(
+        `SELECT range_prefix FROM ${table} WHERE COALESCE(disabled, 0) = 1`
+      ).all();
+      for (const r of rows) disabled.add(`${provider}::${r.range_prefix}`);
+    } catch {
+      // Table may not exist yet for a provider that hasn't booted — ignore.
+    }
+  }
+  return disabled;
+}
+
 function listCountries() {
   const rows = db.prepare(`
     SELECT a.country_code AS raw_cc, COALESCE(a.operator,'Unknown') AS range_name, COUNT(*) AS cnt
+         , a.provider AS provider
     FROM allocations a
     JOIN range_tg_settings r
       ON r.provider = a.provider
      AND r.range_name = COALESCE(a.operator, 'Unknown')
     WHERE a.status = 'pool' AND r.tg_enabled = 1
-    GROUP BY a.country_code, range_name
+    GROUP BY a.provider, a.country_code, range_name
   `).all();
+  const disabled = getDisabledRangeKeys();
   const agg = new Map();
   for (const r of rows) {
+    if (disabled.has(`${r.provider}::${r.range_name}`)) continue;
     const cc = bestCountryCode(r.raw_cc, r.range_name) || 'XX';
     agg.set(cc, (agg.get(cc) || 0) + r.cnt);
   }
@@ -284,7 +313,9 @@ function listRangesForCountry(cc) {
     WHERE a.status = 'pool' AND r.tg_enabled = 1
     GROUP BY a.provider, range_name, a.country_code, r.service, r.tg_rate_bdt
   `).all();
+  const disabled = getDisabledRangeKeys();
   return rows
+    .filter(r => !disabled.has(`${r.provider}::${r.range_name}`))
     .filter(r => (bestCountryCode(r.raw_cc, r.range_name) || 'XX') === cc && r.cnt > 0)
     .sort((a, b) => b.cnt - a.cnt || a.range_name.localeCompare(b.range_name));
 }
