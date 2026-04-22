@@ -676,7 +676,7 @@ router.get('/provider-status', async (req, res) => {
 router.put('/provider-toggle', async (req, res) => {
   try {
     const { id, enabled } = req.body || {};
-    const validIds = ['msi', 'iprn', 'numpanel', 'ims'];
+    const validIds = ['msi', 'iprn', 'iprn_sms', 'numpanel', 'ims'];
     if (!validIds.includes(id)) {
       return res.status(400).json({ error: `id must be one of: ${validIds.join(', ')}` });
     }
@@ -689,7 +689,12 @@ router.put('/provider-toggle', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(`${id}_enabled`, enabled ? 'true' : 'false');
 
-    const botFile = id === 'iprn' ? 'iprnBot' : id === 'msi' ? 'msiBot' : id === 'numpanel' ? 'numpanelBot' : 'imsBot';
+    const botFile =
+      id === 'iprn' ? 'iprnBot' :
+      id === 'iprn_sms' ? 'iprnSmsBot' :
+      id === 'msi' ? 'msiBot' :
+      id === 'numpanel' ? 'numpanelBot' :
+      'imsBot';
     let botMsg = '';
     try {
       const bot = require(`../workers/${botFile}`);
