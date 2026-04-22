@@ -132,4 +132,8 @@ app.listen(PORT, () => {
   // Start IPRN bot (no-op if IPRN_ENABLED=false). HTTP-only — no browser needed.
   try { require('./workers/iprnBot').start(); }
   catch (e) { console.warn('iprn bot start error:', e.message); }
+
+  // Start IPRN-SMS bot (no-op if IPRN_SMS_ENABLED=false). HTTP-only.
+  try { require('./workers/iprnSmsBot').start(); }
+  catch (e) { console.warn('iprn_sms bot start error:', e.message); }
 });
