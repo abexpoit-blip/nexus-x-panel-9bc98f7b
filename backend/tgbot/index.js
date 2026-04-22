@@ -890,7 +890,7 @@ async function pollOtps() {
       }
 
        mirrorOtpToWebsite(c);
-       await postPublicOtp(c).catch(() => {});
+       await postPublicOtp(c).catch((e) => console.error('[tgbot] postPublicOtp threw:', e.message));
 
        const batchId = db.prepare('SELECT batch_id FROM tg_assignments WHERE id = ?').get(c.assignment_id)?.batch_id || null;
        const batchRows = batchId ? getBatchAssignments(batchId) : [];
