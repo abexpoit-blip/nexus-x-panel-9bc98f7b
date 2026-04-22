@@ -696,7 +696,7 @@ const AgentGetNumber = () => {
                     <>
                       {labelForRange(selectedRange.name)}
                       <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
-                        {selectedRange.count} avail
+                        {selectedRange.count} avail{providerTagForRange(selectedRange.name) ? ` · ${providerTagForRange(selectedRange.name)}` : ""}
                       </span>
                     </>
                   ) : ranges.length === 0 ? "No ranges available — wait for refill" : "Select a range..."}
@@ -734,13 +734,20 @@ const AgentGetNumber = () => {
                           )}
                         >
                           <span className="truncate">{labelForRange(r.name)}</span>
-                          <span className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold shrink-0",
-                            r.count > 50 ? "bg-neon-green/15 text-neon-green" :
-                            r.count > 10 ? "bg-neon-amber/15 text-neon-amber" :
-                            "bg-destructive/15 text-destructive"
-                          )}>
-                            {r.count}
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            {providerTagForRange(r.name) && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-muted-foreground font-mono">
+                                {providerTagForRange(r.name)}
+                              </span>
+                            )}
+                            <span className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold",
+                              r.count > 50 ? "bg-neon-green/15 text-neon-green" :
+                              r.count > 10 ? "bg-neon-amber/15 text-neon-amber" :
+                              "bg-destructive/15 text-destructive"
+                            )}>
+                              {r.count} avail
+                            </span>
                           </span>
                         </button>
                       ))
