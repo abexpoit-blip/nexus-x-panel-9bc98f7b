@@ -635,10 +635,12 @@ const AdminSeven1telStatus = () => {
               <Zap className={cn("w-3.5 h-3.5", scraping && "animate-pulse")} />
               {scraping ? "Scraping…" : "Scrape Now"}
             </button>
-            <button onClick={handleSyncLive} disabled={syncing || !s?.running}
+            <button
+              onClick={handleSyncLive} disabled={syncing || !s?.running}
+              title="Pool-only resync — scrape MySMSNumbers and refill pool. Does NOT trigger OTP delivery."
               className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-amber/10 border border-neon-amber/30 text-neon-amber hover:bg-neon-amber/20 transition disabled:opacity-50">
               <Sparkles className={cn("w-3.5 h-3.5", syncing && "animate-pulse")} />
-              {syncing ? "Syncing…" : "Sync Live"}
+              {syncing ? "Refilling pool…" : "Refill Pool (no OTP)"}
             </button>
             <button onClick={() => handleAction("restart")} disabled={restarting}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold bg-neon-magenta/10 border border-neon-magenta/30 text-neon-magenta hover:bg-neon-magenta/20 transition disabled:opacity-50">
