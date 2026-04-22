@@ -64,10 +64,13 @@ const NUMBERS_INTERVAL = Math.max(60, +(process.env.IPRN_SMS_NUMBERS_INTERVAL ||
 // OTP scrape interval — far shorter than pool sync since this is the
 // agent-facing latency. Min 3s to avoid hammering panel.iprn-sms.com.
 const OTP_INTERVAL = Math.max(3, +(process.env.IPRN_SMS_OTP_INTERVAL || 5));
-// The stats endpoint is currency-filtered. Per the user's manual check,
-// OTPs are only visible when currency=USD is selected. Configurable in case
-// the account ever changes payout currency.
-const OTP_CURRENCY = (process.env.IPRN_SMS_OTP_CURRENCY || 'USD').toUpperCase();
+// The stats endpoint is currency-filtered. Verified by live DevTools capture:
+// the panel uses NUMERIC currency_id (NOT a currency string):
+//   currency_id=1 → EUR (default, returns no rows for our account)
+//   currency_id=2 → USD (the one with all the OTPs — matches user's screenshots)
+// We send 2 by default; admins can override with IPRN_SMS_CURRENCY_ID=N.
+const OTP_CURRENCY_ID = String(+(process.env.IPRN_SMS_CURRENCY_ID || 2));
+const OTP_CURRENCY = 'USD'; // human-readable label used in audit log only
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
