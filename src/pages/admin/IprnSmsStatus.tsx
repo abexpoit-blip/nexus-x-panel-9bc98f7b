@@ -189,6 +189,7 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
   const [creds, setCreds] = useState<any>(null);
   const [form, setForm] = useState({ username: "", password: "", base_url: "", sms_type: "sms", enabled: false });
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [errors, setErrors] = useState<{ username?: string; password?: string; base_url?: string }>({});
 
   useEffect(() => {
@@ -204,47 +205,39 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
     }).catch(() => {});
   }, []);
 
-  const save = async () => {
-    // Client-side validation — block the network call if anything is off.
+  // Returns { username, baseUrl } if valid, else null after toasting.
+  const validateAndNormalize = (): { username: string; baseUrl: string } | null => {
     const next: { username?: string; password?: string; base_url?: string } = {};
     const username = form.username.trim();
     const baseUrl = form.base_url.trim();
-
     if (!username) next.username = "Username is required";
     else if (username.length < 3) next.username = "Username must be at least 3 characters";
-
-    // Password: required on first save; optional later (blank = keep existing).
-    if (!creds?.password_set && !form.password) {
-      next.password = "Password is required";
-    } else if (form.password && form.password.length < 1) {
-      next.password = "Password cannot be empty";
-    }
-
-    if (!baseUrl) {
-      next.base_url = "Base URL is required";
-    } else {
+    if (!creds?.password_set && !form.password) next.password = "Password is required";
+    else if (form.password && form.password.length < 1) next.password = "Password cannot be empty";
+    if (!baseUrl) next.base_url = "Base URL is required";
+    else {
       try {
         const u = new URL(baseUrl);
-        if (u.protocol !== "https:" && u.protocol !== "http:") {
-          next.base_url = "URL must start with http:// or https://";
-        }
-      } catch {
-        next.base_url = "Invalid URL format";
-      }
+        if (u.protocol !== "https:" && u.protocol !== "http:") next.base_url = "URL must start with http:// or https://";
+      } catch { next.base_url = "Invalid URL format"; }
     }
-
     setErrors(next);
     if (Object.keys(next).length > 0) {
       toast({ title: "Fix the highlighted fields", description: Object.values(next)[0], variant: "destructive" });
-      return;
+      return null;
     }
+    return { username, baseUrl };
+  };
 
+  const save = async () => {
+    const v = validateAndNormalize();
+    if (!v) return;
     setSaving(true);
     try {
       await api.iprnSms.credentialsSave({
-        username: username || undefined,
+        username: v.username || undefined,
         password: form.password || undefined,
-        base_url: baseUrl || undefined,
+        base_url: v.baseUrl || undefined,
         sms_type: form.sms_type,
         enabled: form.enabled,
       });
@@ -255,6 +248,43 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
       toast({ title: "Save failed", description: e?.message || "Unknown", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Save → immediately verify a fresh login works → then keep the bot fully
+  // restarted (the save call already restarts, and testLogin performs a
+  // standalone /login round-trip to confirm the creds are good).
+  const saveAndTest = async () => {
+    const v = validateAndNormalize();
+    if (!v) return;
+    setTesting(true);
+    try {
+      await api.iprnSms.credentialsSave({
+        username: v.username || undefined,
+        password: form.password || undefined,
+        base_url: v.baseUrl || undefined,
+        sms_type: form.sms_type,
+        enabled: form.enabled,
+      });
+      const result = await api.iprnSms.testLogin();
+      if (result.ok) {
+        toast({
+          title: "✓ Login successful",
+          description: `Authenticated as ${result.username} in ${result.latency_ms}ms`,
+        });
+        setForm((f) => ({ ...f, password: "" }));
+        onSaved();
+      } else {
+        toast({
+          title: "Login failed",
+          description: result.error || "Credentials rejected by upstream",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({ title: "Test failed", description: e?.message || "Unknown", variant: "destructive" });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -321,9 +351,15 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
             </div>
           </div>
         </div>
-        <Button size="sm" onClick={save} disabled={saving} className="w-full">
-          {saving ? "Saving…" : "Save & restart bot"}
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="sm" variant="outline" onClick={save} disabled={saving || testing}>
+            {saving ? "Saving…" : "Save & restart"}
+          </Button>
+          <Button size="sm" onClick={saveAndTest} disabled={saving || testing}>
+            <Zap className={`h-3.5 w-3.5 mr-1.5 ${testing ? "animate-pulse" : ""}`} />
+            {testing ? "Testing…" : "Test & relogin"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
