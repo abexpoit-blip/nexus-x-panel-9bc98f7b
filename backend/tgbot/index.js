@@ -827,8 +827,14 @@ function mirrorOtpToWebsite(c) {
 }
 
 async function postPublicOtp(c) {
-  const chatId = getPublicChannelId();
-  if (!chatId) return;
+  // Post to BOTH the OTP feed group (if configured) and the public channel.
+  const feedId = getOtpFeedChatId();
+  const pubId  = getPublicChannelId();
+  const targets = [...new Set([feedId, pubId].filter(Boolean))];
+  if (targets.length === 0) {
+    console.warn('[tgbot] postPublicOtp: no tg_otp_feed_chat or tg_public_channel configured — OTP not forwarded');
+    return;
+  }
   const maskedNumber = maskLast4(c.phone_number);
   const otpMasked = maskLast4(c.otp);
   const msg =
@@ -836,7 +842,15 @@ async function postPublicOtp(c) {
     `📱 <code>${maskedNumber}</code>\n` +
     `🔐 <code>${otpMasked}</code>\n` +
     `${flagOf(c.country_code)} ${escapeHtml(countryName(c.country_code))} • ${serviceIcon(c.service)} ${escapeHtml(c.range_name || c.service || 'OTP')}`;
-  await bot.telegram.sendMessage(chatId, msg, { parse_mode: 'HTML' });
+  for (const chatId of targets) {
+    try {
+      await bot.telegram.sendMessage(chatId, msg, { parse_mode: 'HTML' });
+      console.log(`[tgbot] OTP forwarded → chat=${chatId} num=${c.phone_number}`);
+    } catch (e) {
+      console.error(`[tgbot] OTP forward FAIL chat=${chatId} err=${e.message} desc=${e.description || '—'}. ` +
+        `Hint: bot must be ADMIN in the group/channel; channel must be public OR you must use the numeric -100… chat id (private invite +hash links DO NOT work).`);
+    }
+  }
 }
 
 async function pollOtps() {
