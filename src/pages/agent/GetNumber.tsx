@@ -789,9 +789,9 @@ const AgentGetNumber = () => {
 
         {provider === "all" && !isAdmin ? (
           /* ============ AGENT unified flow: Country → Range → Get ============ */
-          <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1.4fr_auto] gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_auto] gap-4 items-end">
             {/* Country (sticky — persists in localStorage) */}
-            <div className="space-y-2 relative" ref={allCountryRef}>
+            <div className="space-y-2 relative min-w-0" ref={allCountryRef}>
               <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
                 <span>Country</span>
                 <span className="text-[10px] text-muted-foreground/70 font-normal">
@@ -864,7 +864,7 @@ const AgentGetNumber = () => {
             </div>
 
             {/* Range — filtered by selected country */}
-            <div className="space-y-2 relative" ref={rangeRef}>
+            <div className="space-y-2 relative min-w-0" ref={rangeRef}>
               <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
                 <span>Range</span>
                 <span className="text-[10px] text-muted-foreground/70 font-normal">
@@ -946,7 +946,7 @@ const AgentGetNumber = () => {
             <Button
               onClick={handleGetNumber}
               disabled={loading || maintenanceMode || usedToday >= dailyLimit || !rangeName}
-              className="h-11 bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0 min-w-[180px]"
+              className="h-11 w-full md:w-auto md:min-w-[180px] bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
