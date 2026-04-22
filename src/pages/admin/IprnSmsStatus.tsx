@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import {
   RefreshCw, Power, PowerOff, Download, KeyRound, Cookie, Trash2,
-  CircleCheck, CircleAlert, CircleDashed, Search,
+  CircleCheck, CircleAlert, CircleDashed, Search, Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/premium/PageHeader";
 
