@@ -789,7 +789,7 @@ const AgentGetNumber = () => {
 
         {provider === "all" && !isAdmin ? (
           /* ============ AGENT unified flow: Country → Range → Get ============ */
-          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)_auto] gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_auto] gap-4 items-end">
             {/* Country (sticky — persists in localStorage) */}
             <div className="space-y-2 relative min-w-0" ref={allCountryRef}>
               <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
@@ -801,9 +801,9 @@ const AgentGetNumber = () => {
               <button
                 type="button"
                 onClick={() => setAllCountryOpen((v) => !v)}
-                className="w-full h-11 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2"
+                className="w-full min-h-[2.75rem] py-2 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2 text-left"
               >
-                <span className={cn("truncate", !selectedAllCountry && "text-muted-foreground")}>
+                <span className={cn("min-w-0 break-words", !selectedAllCountry && "text-muted-foreground")}>
                   {selectedAllCountry ? (
                     <>
                       {selectedAllCountry.name}
@@ -864,7 +864,7 @@ const AgentGetNumber = () => {
             </div>
 
             {/* Range — filtered by selected country */}
-            <div className="space-y-2 relative min-w-0" ref={rangeRef}>
+            <div className="space-y-2 relative min-w-0 sm:col-span-1" ref={rangeRef}>
               <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
                 <span>Range</span>
                 <span className="text-[10px] text-muted-foreground/70 font-normal">
@@ -875,22 +875,22 @@ const AgentGetNumber = () => {
                 type="button"
                 onClick={() => allCountry && setRangeOpen((v) => !v)}
                 disabled={!allCountry}
-                className="w-full h-11 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full min-h-[2.75rem] py-2 rounded-lg bg-white/[0.04] border border-white/[0.1] px-3 text-sm text-foreground focus:outline-none focus:border-primary/50 flex items-start justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-left"
               >
-                <span className={cn("truncate", !selectedRange && "text-muted-foreground")}>
+                <span className={cn("min-w-0 break-words leading-tight", !selectedRange && "text-muted-foreground")}>
                   {!allCountry
                     ? "Pick a country first"
                     : selectedRange ? (
                       <>
                         {isHotRange(selectedRange.name) && <span className="mr-1">🔥</span>}
                         {labelForRange(selectedRange.name)}
-                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold">
+                        <span className="ml-2 inline-block text-[10px] px-1.5 py-0.5 rounded bg-neon-green/15 text-neon-green font-semibold whitespace-nowrap">
                           {selectedRange.count} avail
                         </span>
                       </>
                     ) : filteredRanges.length === 0 ? "No ranges for this country" : "Select a range..."}
                 </span>
-                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", rangeOpen && "rotate-180")} />
+                <ChevronDown className={cn("w-4 h-4 mt-0.5 text-muted-foreground transition-transform shrink-0", rangeOpen && "rotate-180")} />
               </button>
               {rangeOpen && allCountry && (
                 <div className="absolute z-[200] mt-1 w-full rounded-lg bg-[hsl(var(--card))] border border-white/[0.12] shadow-2xl overflow-hidden">
@@ -946,7 +946,7 @@ const AgentGetNumber = () => {
             <Button
               onClick={handleGetNumber}
               disabled={loading || maintenanceMode || usedToday >= dailyLimit || !rangeName}
-              className="h-11 w-full md:w-auto md:min-w-[180px] bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0"
+              className="h-11 w-full lg:w-auto lg:min-w-[180px] sm:col-span-2 lg:col-span-1 bg-gradient-to-r from-primary to-neon-magenta text-primary-foreground font-semibold hover:opacity-90 border-0"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
