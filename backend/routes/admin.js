@@ -302,7 +302,7 @@ router.get('/pool-inspector', async (req, res) => {
     const { bestCountryCode, countryName: cnFromCC } = require('../lib/countryInfer');
     const POOL_LABELS = {
       ims: 'Server B', msi: 'Server C', numpanel: 'Server D',
-      iprn: 'Server E', iprn_sms: 'Server F',
+      iprn: 'Server E', iprn_sms: 'Server F', seven1tel: 'Server G',
     };
     const isEnabled = (id) => {
       const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(`${id}_enabled`);
@@ -755,7 +755,7 @@ router.get('/provider-status', async (req, res) => {
 router.put('/provider-toggle', async (req, res) => {
   try {
     const { id, enabled } = req.body || {};
-    const validIds = ['msi', 'iprn', 'iprn_sms', 'numpanel', 'ims'];
+    const validIds = ['msi', 'iprn', 'iprn_sms', 'numpanel', 'ims', 'seven1tel'];
     if (!validIds.includes(id)) {
       return res.status(400).json({ error: `id must be one of: ${validIds.join(', ')}` });
     }
@@ -772,6 +772,7 @@ router.put('/provider-toggle', async (req, res) => {
       id === 'iprn' ? 'iprnBot' :
       id === 'iprn_sms' ? 'iprnSmsBot' :
       id === 'msi' ? 'msiBot' :
+      id === 'seven1tel' ? 'seven1telBot' :
       id === 'numpanel' ? 'numpanelBot' :
       'imsBot';
     let botMsg = '';
@@ -1248,6 +1249,7 @@ const RANGE_META_TABLES = {
   msi: 'msi_range_meta',
   iprn: 'iprn_range_meta',
   iprn_sms: 'iprn_sms_range_meta',
+  seven1tel: 'seven1tel_range_meta',
 };
 const VALID_SERVICE_TAGS = new Set(['facebook', 'whatsapp', 'telegram', 'instagram', 'twitter', 'tiktok', 'google', 'other', null, '']);
 
@@ -1301,6 +1303,7 @@ rangeMetaRoutes('ims');
 rangeMetaRoutes('msi');
 rangeMetaRoutes('iprn');
 rangeMetaRoutes('iprn_sms');
+rangeMetaRoutes('seven1tel');
 
 router.get('/numpanel-credentials', (req, res) => {
   const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
@@ -1917,3 +1920,214 @@ router.post('/iprn-sms-test-login', async (req, res) => {
 
 module.exports = router;
 
+
+// ============================================================
+// SEVEN1TEL Bot — mirrors IMS endpoints (status/start/stop/restart/scrape/sync/credentials)
+// ============================================================
+
+router.get('/seven1tel-status', (req, res) => {
+  try {
+    const { getStatus } = require('../workers/seven1telBot');
+    res.json({ status: getStatus() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/seven1tel-restart', async (req, res) => {
+  try {
+    const { restart } = require('../workers/seven1telBot');
+    await restart();
+    logFromReq(req, 'seven1tel_bot_restart');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/seven1tel-start', async (req, res) => {
+  try {
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('seven1tel_enabled', 'true', strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = strftime('%s','now')
+    `).run();
+    const bot = require('../workers/seven1telBot');
+    bot.start();
+    const snapshot = bot.getStatus ? bot.getStatus() : null;
+    if (!snapshot?.running) {
+      return res.status(400).json({ error: snapshot?.lastError || 'SEVEN1TEL bot did not start', status: snapshot, auto_enabled: true });
+    }
+    bot.logEvent && bot.logEvent('success', 'Bot started by admin');
+    logFromReq(req, 'seven1tel_bot_start');
+    res.json({ ok: true, status: snapshot, auto_enabled: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/seven1tel-stop', async (req, res) => {
+  try {
+    const bot = require('../workers/seven1telBot');
+    await bot.stop();
+    bot.logEvent && bot.logEvent('warn', 'Bot stopped by admin');
+    logFromReq(req, 'seven1tel_bot_stop');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/seven1tel-scrape-now', async (req, res) => {
+  try {
+    const { scrapeNow } = require('../workers/seven1telBot');
+    const result = await scrapeNow();
+    logFromReq(req, 'seven1tel_scrape_now', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/seven1tel-sync-live', async (req, res) => {
+  try {
+    const { syncLive } = require('../workers/seven1telBot');
+    const result = await syncLive();
+    logFromReq(req, 'seven1tel_sync_live', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/seven1tel-pool-breakdown', (req, res) => {
+  const ranges = db.prepare(`
+    SELECT
+      COALESCE(a.operator, 'Unknown') AS name,
+      COUNT(*) AS count,
+      MAX(a.allocated_at) AS last_added,
+      MIN(a.allocated_at) AS first_added,
+      m.custom_name, m.tag_color, m.priority,
+      m.request_override, m.notes, m.disabled, m.service_tag
+    FROM allocations a
+    LEFT JOIN seven1tel_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+    WHERE a.provider = 'seven1tel' AND a.status = 'pool'
+    GROUP BY COALESCE(a.operator, 'Unknown')
+    ORDER BY COALESCE(m.priority, 0) DESC, count DESC
+  `).all();
+  const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='seven1tel' AND status='active'`).get().c;
+  const totalUsed = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='seven1tel' AND status='used'`).get().c;
+  res.json({ ranges, totalActive, totalUsed });
+});
+
+router.get('/seven1tel-credentials', (req, res) => {
+  const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
+  const username = get('seven1tel_username') || process.env.SEVEN1TEL_USERNAME || '';
+  const password = get('seven1tel_password') || process.env.SEVEN1TEL_PASSWORD || '';
+  const base_url = get('seven1tel_base_url') || process.env.SEVEN1TEL_BASE_URL || 'http://94.23.120.156';
+  const enabled = (get('seven1tel_enabled') || process.env.SEVEN1TEL_ENABLED || 'false').toString().toLowerCase() === 'true';
+  const mask = (s) => s ? (s.length <= 4 ? '****' : s.slice(0,2) + '****' + s.slice(-2)) : '';
+  res.json({
+    enabled,
+    base_url,
+    username,
+    password_masked: mask(password),
+    has_password: !!password,
+    source: {
+      username: get('seven1tel_username') ? 'database' : (process.env.SEVEN1TEL_USERNAME ? 'env' : 'none'),
+      password: get('seven1tel_password') ? 'database' : (process.env.SEVEN1TEL_PASSWORD ? 'env' : 'none'),
+    },
+  });
+});
+
+router.put('/seven1tel-credentials', async (req, res) => {
+  try {
+    const { username, password, base_url, enabled } = req.body || {};
+    const upsert = db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `);
+    if (typeof username === 'string' && username.length) upsert.run('seven1tel_username', username.trim());
+    if (typeof password === 'string' && password.length) upsert.run('seven1tel_password', password);
+    if (typeof base_url === 'string' && base_url.length) {
+      // Normalize: keep scheme+host only. Strip /ints/login or any path the admin pasted.
+      let clean = base_url.trim().replace(/\/+$/, '');
+      try {
+        const u = new URL(/^https?:\/\//i.test(clean) ? clean : `http://${clean}`);
+        clean = `${u.protocol}//${u.host}`;
+      } catch (_) {
+        clean = clean.replace(/\/ints\/.*$/i, '').replace(/\/+$/, '');
+      }
+      if (clean) upsert.run('seven1tel_base_url', clean);
+    }
+    if (typeof enabled === 'boolean') upsert.run('seven1tel_enabled', enabled ? 'true' : 'false');
+    logFromReq(req, 'seven1tel_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
+    try {
+      const bot = require('../workers/seven1telBot');
+      await bot.restart();
+      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
+    } catch (e) { console.warn('seven1tel-credentials: restart failed:', e.message); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- SEVEN1TEL OTP poll interval (mirrors IMS) ----
+router.get('/seven1tel-otp-interval', (req, res) => {
+  const dbVal = +(db.prepare("SELECT value FROM settings WHERE key = 'seven1tel_otp_interval'").get()?.value || 0);
+  const envVal = +(process.env.SEVEN1TEL_SCRAPE_INTERVAL || 5);
+  const effective = dbVal > 0 ? dbVal : envVal;
+  res.json({ interval_sec: effective, source: dbVal > 0 ? 'database' : 'env', options: [3, 5, 10, 30], min: 3, max: 120 });
+});
+
+router.put('/seven1tel-otp-interval', async (req, res) => {
+  try {
+    const interval = +(req.body?.interval_sec);
+    if (!Number.isFinite(interval) || interval < 3 || interval > 120) {
+      return res.status(400).json({ error: 'interval_sec must be a number between 3 and 120' });
+    }
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('seven1tel_otp_interval', ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `).run(String(interval));
+    logFromReq(req, 'seven1tel_otp_interval_updated', { meta: { interval_sec: interval } });
+    try {
+      const bot = require('../workers/seven1telBot');
+      await bot.restart();
+      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
+    } catch (e) { console.warn('seven1tel-otp-interval restart:', e.message); }
+    res.json({ ok: true, interval_sec: interval });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- SEVEN1TEL Session Cookies (mirrors IMS) ----
+router.get('/seven1tel-cookies', (req, res) => {
+  const row = db.prepare("SELECT value, updated_at FROM settings WHERE key = 'seven1tel_cookies'").get();
+  if (!row || !row.value) return res.json({ has_cookies: false, count: 0, saved_at: null });
+  let count = 0;
+  try {
+    const parsed = JSON.parse(row.value);
+    count = Array.isArray(parsed) ? parsed.length : 0;
+  } catch (_) {
+    count = (row.value.match(/[^;\s][^;]*=/g) || []).length;
+  }
+  res.json({ has_cookies: true, count, saved_at: row.updated_at });
+});
+
+router.put('/seven1tel-cookies', async (req, res) => {
+  try {
+    const { cookies } = req.body || {};
+    if (typeof cookies !== 'string' || !cookies.trim()) {
+      return res.status(400).json({ error: 'cookies (string) required' });
+    }
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('seven1tel_cookies', ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
+    `).run(cookies.trim());
+    logFromReq(req, 'seven1tel_cookies_updated', { meta: { length: cookies.length } });
+    try {
+      const bot = require('../workers/seven1telBot');
+      await bot.restart();
+      bot.logEvent && bot.logEvent('success', 'Session cookies updated by admin — bot restarting');
+    } catch (e) { console.warn('seven1tel-cookies: restart failed:', e.message); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/seven1tel-cookies', async (req, res) => {
+  try {
+    db.prepare("DELETE FROM settings WHERE key = 'seven1tel_cookies'").run();
+    logFromReq(req, 'seven1tel_cookies_cleared', {});
+    try {
+      const bot = require('../workers/seven1telBot');
+      await bot.restart();
+    } catch (_) {}
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
