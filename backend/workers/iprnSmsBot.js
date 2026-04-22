@@ -221,9 +221,26 @@ function getStatus() {
 
 // OTP cache (currently no live OTP feed for this account — kept for parity)
 const recentOtpCache = new Map();
-function getRecentOtpFor(phone) { return recentOtpCache.has(phone); }
+function phoneVariants(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return [];
+  const vars = new Set([digits]);
+  // Portal stats rows currently expose the sold number with an international
+  // "00" prefix (e.g. 00639...), while the pool/import may store the same
+  // number as bare E.164 digits (e.g. 639...). Match against BOTH so OTPs
+  // still credit regardless of which side added/removed the 00 prefix.
+  if (digits.startsWith('00') && digits.length > 4) {
+    vars.add(digits.replace(/^00+/, ''));
+  } else if (digits.length > 6) {
+    vars.add(`00${digits}`);
+  }
+  return [...vars];
+}
+function getRecentOtpFor(phone) {
+  return phoneVariants(phone).some((p) => recentOtpCache.has(p));
+}
 function rememberOtp(phone) {
-  recentOtpCache.set(String(phone), Date.now());
+  for (const p of phoneVariants(phone)) recentOtpCache.set(p, Date.now());
   // Cap at 2000 entries — drop oldest
   if (recentOtpCache.size > 2000) {
     const cutoff = Date.now() - 6 * 60 * 60 * 1000; // 6h
@@ -595,6 +612,21 @@ async function fetchStatsOnce(url) {
   return { ok: true, rows };
 }
 
+function findActiveAllocationByScrapedPhone(scrapedPhone) {
+  let best = null;
+  const sel = db.prepare(`
+    SELECT * FROM allocations
+    WHERE provider='iprn_sms' AND phone_number=? AND status='active' AND otp IS NULL
+    ORDER BY allocated_at DESC LIMIT 1
+  `);
+  for (const candidate of phoneVariants(scrapedPhone)) {
+    const row = sel.get(candidate);
+    if (!row) continue;
+    if (!best || (row.allocated_at || 0) > (best.allocated_at || 0)) best = row;
+  }
+  return best;
+}
+
 async function scrapeOtps() {
   await ensureLoggedIn();
 
@@ -636,11 +668,7 @@ async function scrapeOtps() {
 
     rememberOtp(row.phone);
 
-    const a = db.prepare(`
-      SELECT * FROM allocations
-      WHERE provider='iprn_sms' AND phone_number=? AND status='active' AND otp IS NULL
-      ORDER BY allocated_at DESC LIMIT 1
-    `).get(row.phone);
+    const a = findActiveAllocationByScrapedPhone(row.phone);
     if (!a) {
       // Log unmatched OTPs too so admin can see "we saw an OTP but no agent
       // had this number active" — useful when agents complain "OTP missing"
@@ -652,7 +680,7 @@ async function scrapeOtps() {
         otp_code: otp,
         endpoint: workingUrl,
         currency: OTP_CURRENCY,
-        detail: `Saw OTP for ${row.phone} but no active allocation`,
+        detail: `Saw OTP for ${row.phone} but no active allocation (${phoneVariants(row.phone).join(' / ')})`,
       });
       continue;
     }
@@ -668,7 +696,10 @@ async function scrapeOtps() {
         otp_code: otp,
         endpoint: workingUrl,
         currency: OTP_CURRENCY,
-        detail: row.cli ? `Matched (${row.cli})` : 'Matched',
+        detail: [
+          row.cli ? `Matched (${row.cli})` : 'Matched',
+          a.phone_number && a.phone_number !== row.phone ? `stored=${a.phone_number}` : null,
+        ].filter(Boolean).join(' · '),
       });
       delivered++;
       status.otpsDeliveredTotal++;
