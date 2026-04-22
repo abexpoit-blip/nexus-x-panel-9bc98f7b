@@ -339,6 +339,7 @@ const AgentGetNumber = () => {
     const onClick = (e: MouseEvent) => {
       if (countryRef.current && !countryRef.current.contains(e.target as Node)) setCountryOpen(false);
       if (rangeRef.current && !rangeRef.current.contains(e.target as Node)) setRangeOpen(false);
+      if (allCountryRef.current && !allCountryRef.current.contains(e.target as Node)) setAllCountryOpen(false);
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -360,9 +361,44 @@ const AgentGetNumber = () => {
       const m = allRanges.find((x) => x.key === key);
       return m ? m.name : key;
     };
-    if (!q) return ranges;
-    return ranges.filter((r) => labelOf(r.name).toLowerCase().includes(q));
-  }, [ranges, rangeSearch, provider, allRanges]);
+    // For agents in unified-pool mode, also restrict to the chosen country.
+    let pool = ranges;
+    if (provider === "all" && allCountry) {
+      const allowedKeys = new Set(
+        allRanges.filter((r) => (r.country_code || "") === allCountry).map((r) => r.key)
+      );
+      pool = pool.filter((r) => allowedKeys.has(r.name));
+    }
+    if (!q) return pool;
+    return pool.filter((r) => labelOf(r.name).toLowerCase().includes(q));
+  }, [ranges, rangeSearch, provider, allRanges, allCountry]);
+
+  // Country list derived from the unified pool (for agent Country dropdown).
+  // Each entry shows the country name (or ISO code) + total ranges/numbers
+  // available across all underlying bots — gives the agent an at-a-glance
+  // sense of which countries actually have stock right now.
+  const allCountryList = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; ranges: number; count: number }>();
+    for (const r of allRanges) {
+      const code = r.country_code || "ZZ";
+      const name = r.country_name || code;
+      const ex = map.get(code) || { code, name, ranges: 0, count: 0 };
+      ex.ranges += 1;
+      ex.count += r.count;
+      map.set(code, ex);
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allRanges]);
+
+  const filteredAllCountries = useMemo(() => {
+    const q = allCountrySearch.trim().toLowerCase();
+    if (!q) return allCountryList;
+    return allCountryList.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+    );
+  }, [allCountryList, allCountrySearch]);
+
+  const selectedAllCountry = allCountryList.find((c) => c.code === allCountry);
 
   const selectedRange = ranges.find((r) => r.name === rangeName);
   // Friendly label resolver. For the unified "All Servers" pool:
