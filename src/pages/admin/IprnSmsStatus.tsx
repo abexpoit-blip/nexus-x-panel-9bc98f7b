@@ -15,6 +15,7 @@ import {
   CircleCheck, CircleAlert, CircleDashed, Search, Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/premium/PageHeader";
+import { RangePoolGrid } from "@/components/admin/RangePoolGrid";
 
 function fmtAgo(ts: number | null | undefined): string {
   if (!ts) return "never";
@@ -39,7 +40,13 @@ export default function IprnSmsStatus() {
   const { toast } = useToast();
   const [status, setStatus] = useState<any>(null);
   const [breakdown, setBreakdown] = useState<{
-    ranges: Array<{ range_name: string; count: number; disabled: number }>;
+    ranges: Array<{
+      name: string; range_name: string; count: number;
+      last_added: number | null; first_added: number | null;
+      custom_name: string | null; tag_color: string | null; priority: number | null;
+      request_override: number | null; notes: string | null;
+      disabled: number; service_tag: string | null;
+    }>;
     totalPool: number; totalActive: number; totalUsed: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,7 +182,25 @@ export default function IprnSmsStatus() {
         <CookieSessionPanel onChanged={refresh} />
       </div>
 
-      <RangesCard ranges={breakdown?.ranges || []} />
+      <RangePoolGrid
+        ranges={(breakdown?.ranges || []).map(r => ({
+          name: r.name || r.range_name,
+          count: r.count,
+          last_added: r.last_added ?? 0,
+          first_added: r.first_added ?? undefined,
+          custom_name: r.custom_name ?? null,
+          tag_color: r.tag_color ?? null,
+          priority: r.priority ?? null,
+          request_override: r.request_override ?? null,
+          notes: r.notes ?? null,
+          disabled: r.disabled,
+          service_tag: r.service_tag ?? null,
+        }))}
+        totalActive={breakdown?.totalActive || 0}
+        totalUsed={breakdown?.totalUsed || 0}
+        provider="iprn_sms"
+        onChanged={refresh}
+      />
 
       <NumbersPoolTable />
     </div>

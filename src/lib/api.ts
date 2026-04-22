@@ -630,6 +630,24 @@ export const api = {
     msiRangeMetaDelete: (prefix: string) =>
       request<{ ok: boolean }>(`/admin/msi-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
 
+    // ---- IPRN range meta (shared rangeMetaRoutes('iprn')) ----
+    iprnRangeMetaSave: (body: {
+      range_prefix: string; custom_name?: string | null; tag_color?: string | null;
+      priority?: number | null; request_override?: number | null; notes?: string | null;
+      disabled?: boolean; service_tag?: string | null;
+    }) => request<{ ok: boolean }>("/admin/iprn-range-meta", { method: "PUT", body: JSON.stringify(body) }),
+    iprnRangeMetaDelete: (prefix: string) =>
+      request<{ ok: boolean }>(`/admin/iprn-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
+
+    // ---- IPRN-SMS range meta (shared rangeMetaRoutes('iprn_sms')) ----
+    iprnSmsRangeMetaSave: (body: {
+      range_prefix: string; custom_name?: string | null; tag_color?: string | null;
+      priority?: number | null; request_override?: number | null; notes?: string | null;
+      disabled?: boolean; service_tag?: string | null;
+    }) => request<{ ok: boolean }>("/admin/iprn_sms-range-meta", { method: "PUT", body: JSON.stringify(body) }),
+    iprnSmsRangeMetaDelete: (prefix: string) =>
+      request<{ ok: boolean }>(`/admin/iprn_sms-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
+
     // ---- Global provider settings ----
     systemHealth: () => request<SystemHealth>("/admin/system-health"),
     providerStatus: () => request<{ providers: ProviderStatus[] }>("/admin/provider-status"),
@@ -765,7 +783,13 @@ export const api = {
     stop: () => request<{ ok: boolean }>("/admin/iprn-sms-stop", { method: "POST" }),
     scrapeNow: () => request<{ ok: boolean; added?: number; error?: string }>("/admin/iprn-sms-scrape-now", { method: "POST" }),
     poolBreakdown: () => request<{
-      ranges: Array<{ range_name: string; count: number; disabled: number }>;
+      ranges: Array<{
+        name: string; range_name: string; count: number;
+        last_added: number | null; first_added: number | null;
+        custom_name: string | null; tag_color: string | null; priority: number | null;
+        request_override: number | null; notes: string | null;
+        disabled: number; service_tag: string | null;
+      }>;
       totalPool: number; totalActive: number; totalUsed: number;
     }>("/admin/iprn-sms-pool-breakdown"),
     credentials: () => request<{

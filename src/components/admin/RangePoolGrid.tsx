@@ -21,7 +21,7 @@ export type RangeRow = {
   service_tag: string | null;
 };
 
-type Provider = "numpanel" | "ims" | "msi";
+type Provider = "numpanel" | "ims" | "msi" | "iprn" | "iprn_sms";
 
 const TAG_COLORS = [
   { key: "cyan",   cls: "from-neon-cyan/20 to-neon-cyan/5 border-neon-cyan/40 text-neon-cyan",        swatch: "bg-neon-cyan" },
@@ -51,12 +51,16 @@ const serviceMeta = (key: string | null | undefined) =>
 function apiSave(provider: Provider, body: Record<string, unknown>) {
   if (provider === "numpanel") return api.admin.numpanelRangeMetaSave(body as Parameters<typeof api.admin.numpanelRangeMetaSave>[0]);
   if (provider === "ims") return api.admin.imsRangeMetaSave(body as Parameters<typeof api.admin.imsRangeMetaSave>[0]);
-  return api.admin.msiRangeMetaSave(body as Parameters<typeof api.admin.msiRangeMetaSave>[0]);
+  if (provider === "msi") return api.admin.msiRangeMetaSave(body as Parameters<typeof api.admin.msiRangeMetaSave>[0]);
+  if (provider === "iprn") return api.admin.iprnRangeMetaSave(body as Parameters<typeof api.admin.iprnRangeMetaSave>[0]);
+  return api.admin.iprnSmsRangeMetaSave(body as Parameters<typeof api.admin.iprnSmsRangeMetaSave>[0]);
 }
 function apiDelete(provider: Provider, prefix: string) {
   if (provider === "numpanel") return api.admin.numpanelRangeMetaDelete(prefix);
   if (provider === "ims") return api.admin.imsRangeMetaDelete(prefix);
-  return api.admin.msiRangeMetaDelete(prefix);
+  if (provider === "msi") return api.admin.msiRangeMetaDelete(prefix);
+  if (provider === "iprn") return api.admin.iprnRangeMetaDelete(prefix);
+  return api.admin.iprnSmsRangeMetaDelete(prefix);
 }
 
 const RangeCard = ({ r, provider, onChanged }: { r: RangeRow; provider: Provider; onChanged: () => void }) => {

@@ -1241,11 +1241,13 @@ router.get('/numpanel-pool-breakdown', (req, res) => {
   res.json({ ranges, totalActive, totalUsed });
 });
 
-// ---- Generic Range Metadata Routes (numpanel | ims | msi) ----
+// ---- Generic Range Metadata Routes (numpanel | ims | msi | iprn | iprn_sms) ----
 const RANGE_META_TABLES = {
   numpanel: 'numpanel_range_meta',
   ims: 'ims_range_meta',
   msi: 'msi_range_meta',
+  iprn: 'iprn_range_meta',
+  iprn_sms: 'iprn_sms_range_meta',
 };
 const VALID_SERVICE_TAGS = new Set(['facebook', 'whatsapp', 'telegram', 'instagram', 'twitter', 'tiktok', 'google', 'other', null, '']);
 
@@ -1297,6 +1299,8 @@ function rangeMetaRoutes(provider) {
 rangeMetaRoutes('numpanel');
 rangeMetaRoutes('ims');
 rangeMetaRoutes('msi');
+rangeMetaRoutes('iprn');
+rangeMetaRoutes('iprn_sms');
 
 router.get('/numpanel-credentials', (req, res) => {
   const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
@@ -1769,14 +1773,20 @@ router.get('/iprn-sms-pool-breakdown', (req, res) => {
   try {
     const ranges = db.prepare(`
       SELECT
+        COALESCE(a.operator, 'Unknown') AS name,
         COALESCE(a.operator, 'Unknown') AS range_name,
         COUNT(*) AS count,
-        COALESCE(m.disabled, 0) AS disabled
+        MAX(a.allocated_at) AS last_added,
+        MIN(a.allocated_at) AS first_added,
+        m.custom_name, m.tag_color, m.priority,
+        m.request_override, m.notes,
+        COALESCE(m.disabled, 0) AS disabled,
+        m.service_tag
       FROM allocations a
       LEFT JOIN iprn_sms_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
       WHERE a.provider = 'iprn_sms' AND a.status = 'pool'
-      GROUP BY range_name, m.disabled
-      ORDER BY count DESC
+      GROUP BY COALESCE(a.operator, 'Unknown')
+      ORDER BY COALESCE(m.priority, 0) DESC, count DESC
     `).all();
     const totalPool = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn_sms' AND status='pool'`).get().c;
     const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn_sms' AND status='active'`).get().c;

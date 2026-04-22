@@ -271,6 +271,20 @@ function ensureRangeMetaTable() {
         updated_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
       )
     `).run();
+    // Extra columns to match other providers' range_meta so the shared
+    // RangePoolGrid admin UI can edit custom_name/tag_color/priority/notes/etc.
+    const cols = db.prepare(`PRAGMA table_info(iprn_sms_range_meta)`).all().map(c => c.name);
+    const addCol = (name, ddl) => {
+      if (!cols.includes(name)) {
+        try { db.prepare(`ALTER TABLE iprn_sms_range_meta ADD COLUMN ${name} ${ddl}`).run(); } catch (_) {}
+      }
+    };
+    addCol('custom_name',      'TEXT');
+    addCol('tag_color',        'TEXT');
+    addCol('priority',         'INTEGER');
+    addCol('request_override', 'INTEGER');
+    addCol('notes',            'TEXT');
+    addCol('service_tag',      'TEXT');
   } catch (e) { dwarn('[iprn_sms-bot] ensureRangeMetaTable:', e.message); }
 }
 

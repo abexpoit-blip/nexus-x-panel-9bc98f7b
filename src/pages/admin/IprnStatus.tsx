@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { RangePoolGrid } from "@/components/admin/RangePoolGrid";
 
 type IprnStatusT = {
   enabled: boolean;
@@ -538,32 +539,26 @@ export default function IprnStatus() {
       </div>
 
       {/* Range pool grid */}
-      {pool && pool.ranges.length > 0 && (
-        <div className="glass-card border border-white/[0.06] rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-              <Database className="w-3 h-3 text-neon-magenta" /> Pool by Range
-            </div>
-            <div className="flex gap-3 text-[10px] uppercase tracking-wider text-muted-foreground">
-              <span>Active: <span className="font-mono text-neon-cyan">{pool.totalActive}</span></span>
-              <span>Used: <span className="font-mono text-neon-green">{pool.totalUsed}</span></span>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {pool.ranges.map(r => (
-              <div key={r.name} className={cn(
-                "rounded-lg border px-3 py-2 flex items-center justify-between gap-2",
-                r.disabled ? "border-destructive/30 bg-destructive/5 opacity-60" : "border-white/[0.06] bg-white/[0.02]"
-              )}>
-                <div className="min-w-0">
-                  <div className="text-xs font-mono truncate text-foreground">{r.custom_name || r.name}</div>
-                  <div className="text-[10px] text-muted-foreground">{r.last_added ? fmtAgo(r.last_added) : "—"}</div>
-                </div>
-                <span className="text-sm font-bold font-mono text-neon-magenta shrink-0">{r.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {pool && (
+        <RangePoolGrid
+          ranges={(pool.ranges || []).map(r => ({
+            name: r.name,
+            count: r.count,
+            last_added: r.last_added ?? 0,
+            first_added: r.first_added ?? undefined,
+            custom_name: r.custom_name,
+            tag_color: r.tag_color,
+            priority: r.priority,
+            request_override: r.request_override,
+            notes: r.notes,
+            disabled: r.disabled,
+            service_tag: r.service_tag,
+          }))}
+          totalActive={pool.totalActive || 0}
+          totalUsed={pool.totalUsed || 0}
+          provider="iprn"
+          onChanged={() => refetchPool()}
+        />
       )}
 
       {/* Live Numbers Pool — actual rows from /admin/iprn-numbers */}
