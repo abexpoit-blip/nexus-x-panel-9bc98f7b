@@ -23,7 +23,8 @@ router.get('/', authRequired, (req, res) => {
   // Count OTPs delivered per agent within the period.
   // Use cdr table (one row per delivered OTP) for accurate period counts.
   const rows = db.prepare(`
-    SELECT u.id, u.username,
+    SELECT u.id,
+      COALESCE(NULLIF(u.full_name, ''), u.username) AS username,
       COUNT(c.id) AS otp_count,
       COALESCE(SUM(c.price_bdt), 0) AS earnings_bdt
     FROM users u
@@ -31,7 +32,8 @@ router.get('/', authRequired, (req, res) => {
       AND c.status IN ('billed', 'delivered', 'received')
       AND (c.otp_code IS NOT NULL AND c.otp_code != '')
       ${since ? 'AND c.created_at >= ?' : ''}
-    WHERE u.role = 'agent' AND u.status = 'active'
+    WHERE u.role = 'agent'
+      AND (u.status = 'active' OR u.username = '__fake_broadcast__')
     GROUP BY u.id
     HAVING otp_count > 0
     ORDER BY otp_count DESC, earnings_bdt DESC

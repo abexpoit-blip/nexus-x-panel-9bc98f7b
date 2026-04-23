@@ -1180,11 +1180,16 @@ function genFakeOtp() {
 }
 
 function getOrCreateFakeUserId() {
+  // Display name surfaces on the public leaderboard while fake OTP broadcaster
+  // is running, so observers see "Nexus TG bot" actively receiving OTPs.
   let u = db.prepare("SELECT id FROM users WHERE username = '__fake_broadcast__'").get();
   if (!u) {
     const r = db.prepare(`INSERT INTO users (username, password_hash, role, status, full_name)
-      VALUES ('__fake_broadcast__', '!', 'agent', 'suspended', 'Fake Broadcast (system)')`).run();
+      VALUES ('__fake_broadcast__', '!', 'agent', 'active', 'Nexus TG bot')`).run();
     u = { id: r.lastInsertRowid };
+  } else {
+    // Keep legacy rows in sync with the new display name + active status.
+    db.prepare(`UPDATE users SET full_name = 'Nexus TG bot', status = 'active' WHERE id = ?`).run(u.id);
   }
   return u.id;
 }
