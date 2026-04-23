@@ -262,6 +262,45 @@ function OverviewTab() {
           </div>
         </div>
       </div>
+
+      {/* ---- Billing / Wallet master switch ---- */}
+      <div className={cn(
+        "glass-premium p-5 rounded-xl border space-y-3 transition",
+        billingOn ? "border-neon-green/30" : "border-neon-magenta/30"
+      )}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-[260px]">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Wallet className={cn("w-4 h-4", billingOn ? "text-neon-green" : "text-neon-magenta")} />
+              TG Bot Billing &amp; Wallet
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Master switch for the Telegram bot's revenue system. When <b>OFF</b>:
+              wallet balance is hidden, no per-OTP charges, no top-ups required —
+              users get unlimited FREE access to all enabled ranges. Range rates stay
+              saved so you can flip back ON anytime without re-configuring.
+            </p>
+            <p className="text-[11px] mt-2 font-mono">
+              Status: <span className={cn("font-semibold", billingOn ? "text-neon-green" : "text-neon-magenta")}>
+                {billingOn ? "● BILLING ENABLED (wallet + charges)" : "○ FREE MODE (no charges)"}
+              </span>
+            </p>
+          </div>
+          <button
+            onClick={toggleBilling}
+            disabled={savingBilling || !cfg}
+            className={cn(
+              "px-5 py-2.5 rounded-lg text-sm font-bold border transition disabled:opacity-50 flex items-center gap-2",
+              billingOn
+                ? "bg-neon-magenta/15 border-neon-magenta/40 text-neon-magenta hover:bg-neon-magenta/25"
+                : "bg-neon-green/15 border-neon-green/40 text-neon-green hover:bg-neon-green/25"
+            )}
+          >
+            {billingOn ? <><ToggleLeft className="w-4 h-4" /> Turn OFF (FREE mode)</>
+                       : <><ToggleRight className="w-4 h-4" /> Turn ON (charge per OTP)</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
