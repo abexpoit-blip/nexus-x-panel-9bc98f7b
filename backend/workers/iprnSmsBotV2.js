@@ -662,7 +662,34 @@ async function fetchStatsOnce(url) {
               : Array.isArray(body) ? body
               : null;
   if (!rows) return { ok: false, status: res.status, ct, reason: 'no rows array' };
-  return { ok: true, rows };
+  const totalRows = Math.max(
+    +(body?.recordsFiltered || 0),
+    +(body?.recordsTotal || 0),
+    rows.length,
+  );
+  return { ok: true, rows, totalRows };
+}
+
+function withStatsPaging(url, start, length) {
+  const u = new URL(url, BASE_URL);
+  u.searchParams.set('start', String(Math.max(0, +start || 0)));
+  u.searchParams.set('length', String(Math.max(1, +length || 200)));
+  return `${u.pathname}?${u.searchParams.toString()}`;
+}
+
+async function fetchAllStatsRows(url, firstPage) {
+  const pageSize = 200;
+  const first = firstPage || await fetchStatsOnce(withStatsPaging(url, 0, pageSize));
+  if (!first?.ok) return first;
+  const rows = Array.isArray(first.rows) ? first.rows.slice() : [];
+  const totalRows = Math.max(+first.totalRows || 0, rows.length);
+  for (let start = rows.length; start < totalRows; start += pageSize) {
+    const next = await fetchStatsOnce(withStatsPaging(url, start, pageSize));
+    if (!next?.ok || !Array.isArray(next.rows) || next.rows.length === 0) break;
+    rows.push(...next.rows);
+    if (next.rows.length < pageSize) break;
+  }
+  return { ok: true, rows, totalRows: rows.length };
 }
 
 function findActiveAllocationByScrapedPhone(scrapedPhone) {
@@ -734,8 +761,12 @@ async function scrapeOtpsForCurrency(currency) {
   let workingUrl = null;
   for (const url of tryList) {
     try {
-      const r = await fetchStatsOnce(url);
-      if (r.ok) { result = r; workingUrl = url; break; }
+      const firstPage = await fetchStatsOnce(url);
+      if (firstPage.ok) {
+        result = await fetchAllStatsRows(url, firstPage);
+        workingUrl = url;
+        break;
+      }
     } catch (e) {
       if (/Session expired/.test(e.message)) throw e;
       // try next
