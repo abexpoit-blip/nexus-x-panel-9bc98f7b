@@ -6,7 +6,8 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 const { Telegraf, Markup } = require('telegraf');
 const db = require('../lib/db');
 const { bestCountryCode, countryName: ccName, flagOf: ccFlag, COUNTRY_NAMES: CC_NAMES } = require('../lib/countryInfer');
-const { renderFlagHtml, getFlagEmoji, FLAG_EMOJI_IDS, loadFlagPack } = require('./flagEmojiMap');
+const { renderFlagHtml, getFlagEmoji, FLAG_EMOJI_IDS, loadFlagPack,
+        ICON_EMOJI_IDS, loadIconPack } = require('./flagEmojiMap');
 
 const TOKEN = process.env.TG_BOT_TOKEN;
 if (!TOKEN) {
@@ -1053,7 +1054,14 @@ async function postPublicOtp(c) {
     // We display dots so the code stays hidden until copy.
     rows.push([{ text: ' •••••••• ', copy_text: { text: otpFull } }]);
   }
-  if (botUrl) rows.push([{ text: '‼️ Bot', url: botUrl }]);
+  // Bottom action row — Bot link + universal Support link (nexus-x.site).
+  // Inline-keyboard button labels do NOT support <tg-emoji> custom emoji
+  // (Telegram strips HTML in button text), so we use unicode glyphs that look
+  // identical to the icon pack on premium clients via the message body.
+  const actionRow = [];
+  if (botUrl) actionRow.push({ text: '‼️ Bot Pnl', url: botUrl });
+  actionRow.push({ text: '♻️ All Support', url: SITE_URL });
+  rows.push(actionRow);
   const reply_markup = rows.length ? { inline_keyboard: rows } : undefined;
 
   for (const chatId of targets) {
@@ -1474,6 +1482,12 @@ async function feedForwardAllOtps() {
     const added = await loadFlagPack(bot, flagPack);
     const mappedFlags = Object.keys(FLAG_EMOJI_IDS).length;
     console.log(`✓ Country flag custom emoji: ${mappedFlags} total (${added} auto-loaded from pack "${flagPack}") · unmapped countries render as unicode flag fallback`);
+    // Icon pack — generic premium custom emoji for service/UI glyphs (‼️ ♻️ 📘 🟢 …).
+    // Override with env var TG_ICON_PACK if you switch packs.
+    const iconPack = process.env.TG_ICON_PACK || 'IconsEmoji_JABA';
+    const iconAdded = await loadIconPack(bot, iconPack);
+    const mappedIcons = Object.keys(ICON_EMOJI_IDS).length;
+    console.log(`✓ Icon custom emoji: ${mappedIcons} total (${iconAdded} auto-loaded from pack "${iconPack}") · falls back to plain unicode for non-premium users`);
     bot.launch({ dropPendingUpdates: false });
 
     // ── Auto-resolve OTP feed channel chat_id ─────────────────────────
