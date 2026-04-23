@@ -6,6 +6,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 const { Telegraf, Markup } = require('telegraf');
 const db = require('../lib/db');
 const { bestCountryCode, countryName: ccName, flagOf: ccFlag, COUNTRY_NAMES: CC_NAMES } = require('../lib/countryInfer');
+const { renderFlagHtml, getFlagEmoji, FLAG_EMOJI_IDS } = require('./flagEmojiMap');
 
 const TOKEN = process.env.TG_BOT_TOKEN;
 if (!TOKEN) {
@@ -216,19 +217,10 @@ function serviceCustomEmoji(svc) {
   return null;
 }
 
-// Telegram PREMIUM custom emoji IDs for country flags. IDs confirmed via forwarded
-// message dumps. For unknown flags we fall back to the unicode flag (always works).
-function flagCustomEmoji(cc) {
-  if (!cc) return null;
-  const code = String(cc).toUpperCase();
-  const CONFIRMED = {
-    TN: '5221991375016310330',
-    IQ: '5221980268230882832',
-    KE: '5222089648163009103',
-  };
-  if (CONFIRMED[code]) return { id: CONFIRMED[code], fallback: ccFlag(cc) };
-  return null;
-}
+// Country flag rendering — delegated to ./flagEmojiMap which holds the full
+// custom-emoji-id table for premium animated flags + automatic unicode fallback
+// for every ISO-3166 country code (so unmapped countries still get a flag).
+// Use `renderFlagHtml(cc)` to produce the ready-to-embed HTML snippet.
 
 // ---------- TG user ensure ----------
 function ensureTgUser(ctx) {
@@ -1033,11 +1025,8 @@ async function postPublicOtp(c) {
   // Line 2: full OTP wrapped in spoiler (<tg-spoiler>) so users tap to reveal
   // Inline keyboard: single "‼️ Bot" button — no Support button.
   const cc = (c.country_code || '').toUpperCase();
-  const flag = flagOf(c.country_code) || '🏳️';
-  const flagCustom = flagCustomEmoji(c.country_code);
-  const flagBrand = flagCustom
-    ? `<tg-emoji emoji-id="${flagCustom.id}">${flagCustom.fallback}</tg-emoji>`
-    : flag;
+  // Render flag as premium custom emoji when ID is mapped, else unicode flag.
+  const flagBrand = renderFlagHtml(cc);
   const svcRaw = c.service || c.range_name || 'SMS';
   const svcLabel = String(svcRaw).replace(/[_\-]+/g, ' ').trim();
   const svcTag = serviceIcon(svcRaw);
@@ -1478,6 +1467,8 @@ async function feedForwardAllOtps() {
     const me = await bot.telegram.getMe();
     BOT_USERNAME = me.username || BOT_USERNAME;
     console.log(`✓ NEXUS X tgbot launching as @${me.username} (${me.id})`);
+    const mappedFlags = Object.keys(FLAG_EMOJI_IDS).length;
+    console.log(`✓ Country flag custom emoji: ${mappedFlags} mapped (premium look) · all others render as unicode flag fallback`);
     bot.launch({ dropPendingUpdates: false });
 
     // ── Auto-resolve OTP feed channel chat_id ─────────────────────────
