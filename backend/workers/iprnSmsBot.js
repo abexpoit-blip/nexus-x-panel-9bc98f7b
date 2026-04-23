@@ -747,7 +747,7 @@ async function scrapeOtpsForCurrency(currency) {
         phone_number: row.phone,
         otp_code: otp,
         endpoint: workingUrl,
-        currency: OTP_CURRENCY,
+        currency,
         detail: `Saw OTP for ${row.phone} but no active allocation (${phoneVariants(row.phone).join(' / ')})`,
       });
       continue;
@@ -763,7 +763,7 @@ async function scrapeOtpsForCurrency(currency) {
         phone_number: row.phone,
         otp_code: otp,
         endpoint: workingUrl,
-        currency: OTP_CURRENCY,
+        currency,
         detail: [
           row.cli ? `Matched (${row.cli})` : 'Matched',
           a.phone_number && a.phone_number !== row.phone ? `stored=${a.phone_number}` : null,
@@ -778,7 +778,7 @@ async function scrapeOtpsForCurrency(currency) {
       logOtpEvent({
         provider: 'iprn_sms', event: 'scrape_fail',
         phone_number: row.phone, otp_code: otp,
-        endpoint: workingUrl, currency: OTP_CURRENCY,
+        endpoint: workingUrl, currency,
         detail: `markOtpReceived error: ${e.message}`,
       });
     }
@@ -788,7 +788,7 @@ async function scrapeOtpsForCurrency(currency) {
   logOtpEvent({
     provider: 'iprn_sms', event: 'scrape_ok',
     rows_seen: result.rows.length, matches_found: delivered,
-    endpoint: workingUrl, currency: OTP_CURRENCY,
+    endpoint: workingUrl, currency,
     detail: `Polled ${result.rows.length} rows · ${delivered} matched`,
   });
   trimIfDue();
