@@ -600,11 +600,28 @@ bot.action('menu:mine', async (ctx) => {
 });
 
 bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
-  await ctx.answerCbQuery('Claiming numbers…');
+  try { await ctx.answerCbQuery('Claiming numbers…'); } catch {}
   const provider = ctx.match[1];
   const rangeName = decodeURIComponent(ctx.match[2]);
   const cc = ctx.match[3];
+  return claimAndDeliver(ctx, provider, rangeName, cc);
+});
 
+// New compact handler — resolves index → range from the live country list
+bot.action(/^pick:(\w+):(\d+)$/, async (ctx) => {
+  try { await ctx.answerCbQuery('Claiming numbers…'); } catch {}
+  const cc  = ctx.match[1];
+  const idx = +ctx.match[2];
+  const ranges = listRangesForCountry(cc);
+  const r = ranges[idx];
+  if (!r) {
+    try { await ctx.reply('⚠️ This range is no longer in the pool. Tap 🌍 Get Number again.'); } catch {}
+    return;
+  }
+  return claimAndDeliver(ctx, r.provider, r.range_name, cc);
+});
+
+async function claimAndDeliver(ctx, provider, rangeName, cc) {
   const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
 
   // Wallet check
@@ -664,7 +681,7 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
   // Save chat+message id on every row so the poller can edit this one card
   db.prepare('UPDATE tg_assignments SET tg_message_id = ?, tg_chat_id = ? WHERE batch_id = ?')
     .run(sent.message_id, sent.chat.id, batchId);
-});
+}
 
 // ----- Batch release (new) -----
 bot.action(/^releaseBatch:(.+)$/, async (ctx) => {
