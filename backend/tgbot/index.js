@@ -174,6 +174,28 @@ function serviceIcon(svc) {
   return '[SMS]';
 }
 
+// Brand emoji for each service — shown alongside the [TAG] in OTP feed posts
+// so the line reads e.g.  📘 [FB]  or  🟢 [WA]  or  ✈️ [TG].
+function serviceEmoji(svc) {
+  if (!svc) return '✉️';
+  const s = String(svc).toLowerCase();
+  if (s.includes('facebook'))  return '📘';
+  if (s.includes('whatsapp'))  return '🟢';
+  if (s.includes('telegram'))  return '✈️';
+  if (s.includes('tiktok'))    return '🎵';
+  if (s.includes('instagram')) return '📸';
+  if (s.includes('google') || s.includes('gmail')) return '🔴';
+  if (s.includes('twitter') || s.includes('x.com')) return '🐦';
+  if (s.includes('signal'))    return '💬';
+  if (s.includes('viber'))     return '🟣';
+  if (s.includes('discord'))   return '🎮';
+  if (s.includes('uber'))      return '🚗';
+  if (s.includes('amazon'))    return '📦';
+  if (s.includes('apple'))     return '🍎';
+  if (s.includes('microsoft') || s.includes('outlook')) return '🪟';
+  return '✉️';
+}
+
 // ---------- TG user ensure ----------
 function ensureTgUser(ctx) {
   const u = ctx.from;
@@ -981,12 +1003,13 @@ async function postPublicOtp(c) {
   const svcRaw = c.service || c.range_name || 'SMS';
   const svcLabel = String(svcRaw).replace(/[_\-]+/g, ' ').trim();
   const svcTag = serviceIcon(svcRaw);
+  const svcEmoji = serviceEmoji(svcRaw);
   const maskedNumber = maskLast4(c.phone_number);
   const otpFull = String(c.otp || '').trim();
 
   const msg =
-    `<b>কি এটা কি তোমার</b>\n` +
-    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
+    `<b>Nexus X Number Panel</b>\n` +
+    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcEmoji} ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
     `<tg-spoiler>${escapeHtml(otpFull)}</tg-spoiler>`;
 
   // Inline keyboard — Bot link only (Support removed per spec)
