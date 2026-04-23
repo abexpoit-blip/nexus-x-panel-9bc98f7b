@@ -577,9 +577,16 @@ bot.action(/^country:(\w+)$/, async (ctx) => {
     }
     // Telegram callback_data has a 64-byte limit. Range names can be long
     // ("Pakistan Pakistan-Cn-01 …") → encode by index instead of name.
+    // Compact button label — flag is already in the header above, so we drop it
+    // here and lead with the service tag (FB/WA/TG…) followed by a trimmed
+    // range name + count + price. Keeps the row readable on mobile.
+    const trim = (s, n) => {
+      const x = String(s || '').replace(/\s+/g, ' ').trim();
+      return x.length > n ? x.slice(0, n - 1) + '…' : x;
+    };
     const buttons = ranges.map((r, i) => [
       Markup.button.callback(
-        `${flagOf(cc)} ${serviceIcon(r.service)} ${r.range_name} — ${r.cnt} • ${fmtBdt(r.tg_rate_bdt)}`,
+        `${serviceIcon(r.service)} ${trim(r.range_name, 26)} · ${r.cnt} · ${fmtBdt(r.tg_rate_bdt)}`,
         `pick:${cc}:${i}`
       ),
     ]);
