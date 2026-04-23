@@ -205,17 +205,26 @@ function serviceEmoji(svc) {
 function serviceCustomEmoji(svc) {
   if (!svc) return null;
   const s = String(svc).toLowerCase();
-  // { id: <custom_emoji_id>, fallback: <plain unicode emoji> }
-  // All IDs below confirmed via forwarded message dump from the reference bot.
-  if (s.includes('facebook'))  return { id: '5389064576333527180', fallback: '📘' };
-  if (s.includes('whatsapp'))  return { id: '5233354831984353090', fallback: '📱' };
-  if (s.includes('telegram'))  return { id: '5364125616801073577', fallback: '✈️' };
-  // Not yet confirmed — fallback to unicode emoji on render.
-  if (s.includes('tiktok'))    return null;
-  if (s.includes('instagram')) return null;
-  if (s.includes('google') || s.includes('gmail')) return null;
-  if (s.includes('twitter') || s.includes('x.com')) return null;
-  return null;
+  // Map service → unicode brand glyph; then look it up in the icon pack.
+  // IDs from the auto-loaded icon pack (IconsEmoji_JABA) take precedence over
+  // hand-confirmed legacy IDs so a single pack swap updates every service.
+  const HARDCODED = {
+    '📘': '5389064576333527180', // Facebook (confirmed dump)
+    '📱': '5233354831984353090', // WhatsApp (confirmed dump)
+    '✈️': '5364125616801073577', // Telegram (confirmed dump)
+  };
+  let glyph = null;
+  if (s.includes('facebook'))  glyph = '📘';
+  else if (s.includes('whatsapp'))  glyph = '🟢';
+  else if (s.includes('telegram'))  glyph = '✈️';
+  else if (s.includes('tiktok'))    glyph = '🎵';
+  else if (s.includes('instagram')) glyph = '📸';
+  else if (s.includes('google') || s.includes('gmail')) glyph = '🔴';
+  else if (s.includes('twitter') || s.includes('x.com')) glyph = '🐦';
+  if (!glyph) return null;
+  const id = ICON_EMOJI_IDS[glyph] || HARDCODED[glyph] || null;
+  if (!id) return { id: null, fallback: glyph };
+  return { id, fallback: glyph };
 }
 
 // Country flag rendering — delegated to ./flagEmojiMap which holds the full
