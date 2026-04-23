@@ -36,7 +36,7 @@ const STATUS_CHIPS: Array<{ key: string; label: string; tone: string }> = [
   { key: "released",  label: "Released",  tone: "bg-rose-500/15 text-rose-300" },
 ];
 
-export default function IprnSmsStatus() {
+export default function IprnSmsV2Status() {
   const { toast } = useToast();
   const [status, setStatus] = useState<any>(null);
   const [breakdown, setBreakdown] = useState<{
@@ -54,7 +54,7 @@ export default function IprnSmsStatus() {
 
   const refresh = async () => {
     try {
-      const [s, b] = await Promise.all([api.iprnSms.status(), api.iprnSms.poolBreakdown()]);
+      const [s, b] = await Promise.all([api.iprnSmsV2.status(), api.iprnSmsV2.poolBreakdown()]);
       setStatus(s.status);
       setBreakdown(b);
     } catch (e) {
@@ -94,22 +94,22 @@ export default function IprnSmsStatus() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="IPRN-SMS Bot"
+        title="IPRN-SMS Bot V2"
         description="panel.iprn-sms.com — Symfony JSON API + ZIP-based auto-pool. No HTML scraping."
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
               <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} /> Refresh
             </Button>
-            <Button size="sm" variant="outline" onClick={() => action("Force pool sync", api.iprnSms.scrapeNow)} disabled={!!busy}>
+            <Button size="sm" variant="outline" onClick={() => action("Force pool sync", api.iprnSmsV2.scrapeNow)} disabled={!!busy}>
               <Download className="h-3.5 w-3.5 mr-1.5" /> Sync now
             </Button>
-            <Button size="sm" variant="outline" onClick={() => action("Restart bot", api.iprnSms.restart)} disabled={!!busy}>
+            <Button size="sm" variant="outline" onClick={() => action("Restart bot", api.iprnSmsV2.restart)} disabled={!!busy}>
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Restart
             </Button>
             {status?.enabled
-              ? <Button size="sm" variant="destructive" onClick={() => action("Stop bot", api.iprnSms.stop)} disabled={!!busy}><PowerOff className="h-3.5 w-3.5 mr-1.5" /> Stop</Button>
-              : <Button size="sm" onClick={() => action("Start bot", api.iprnSms.start)} disabled={!!busy}><Power className="h-3.5 w-3.5 mr-1.5" /> Start</Button>}
+              ? <Button size="sm" variant="destructive" onClick={() => action("Stop bot", api.iprnSmsV2.stop)} disabled={!!busy}><PowerOff className="h-3.5 w-3.5 mr-1.5" /> Stop</Button>
+              : <Button size="sm" onClick={() => action("Start bot", api.iprnSmsV2.start)} disabled={!!busy}><Power className="h-3.5 w-3.5 mr-1.5" /> Start</Button>}
           </div>
         }
       />
@@ -198,7 +198,7 @@ export default function IprnSmsStatus() {
         }))}
         totalActive={breakdown?.totalActive || 0}
         totalUsed={breakdown?.totalUsed || 0}
-        provider="iprn_sms"
+        provider="iprn_sms_v2"
         onChanged={refresh}
       />
 
@@ -218,7 +218,7 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
   const [errors, setErrors] = useState<{ username?: string; password?: string; base_url?: string }>({});
 
   useEffect(() => {
-    api.iprnSms.credentials().then((c) => {
+    api.iprnSmsV2.credentials().then((c) => {
       setCreds(c);
       setForm({
         username: c.username || "",
@@ -259,7 +259,7 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
     if (!v) return;
     setSaving(true);
     try {
-      await api.iprnSms.credentialsSave({
+      await api.iprnSmsV2.credentialsSave({
         username: v.username || undefined,
         password: form.password || undefined,
         base_url: v.baseUrl || undefined,
@@ -284,14 +284,14 @@ function CredentialsCard({ onSaved }: { onSaved: () => void }) {
     if (!v) return;
     setTesting(true);
     try {
-      await api.iprnSms.credentialsSave({
+      await api.iprnSmsV2.credentialsSave({
         username: v.username || undefined,
         password: form.password || undefined,
         base_url: v.baseUrl || undefined,
         sms_type: form.sms_type,
         enabled: form.enabled,
       });
-      const result = await api.iprnSms.testLogin();
+      const result = await api.iprnSmsV2.testLogin();
       if (result.ok) {
         toast({
           title: "✓ Login successful",
@@ -394,13 +394,13 @@ function CookieSessionPanel({ onChanged }: { onChanged: () => void }) {
   const { toast } = useToast();
   const [meta, setMeta] = useState<{ has_cookies: boolean; count: number; saved_at: number | null; names?: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
-  const refresh = () => api.iprnSms.cookies().then(setMeta).catch(() => {});
+  const refresh = () => api.iprnSmsV2.cookies().then(setMeta).catch(() => {});
   useEffect(() => { refresh(); const i = setInterval(refresh, 15_000); return () => clearInterval(i); }, []);
 
   const clear = async () => {
     setBusy(true);
     try {
-      await api.iprnSms.cookiesClear();
+      await api.iprnSmsV2.cookiesClear();
       toast({ title: "Session cleared", description: "Bot will perform a fresh login on next cycle" });
       refresh();
       onChanged();
@@ -494,7 +494,7 @@ function NumbersPoolTable() {
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true);
-      api.iprnSms.numbers({ status: filter, q, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
+      api.iprnSmsV2.numbers({ status: filter, q, limit: PAGE_SIZE, offset: page * PAGE_SIZE })
         .then(setData)
         .catch(() => setData({ rows: [], total: 0, counts: {} }))
         .finally(() => setLoading(false));
