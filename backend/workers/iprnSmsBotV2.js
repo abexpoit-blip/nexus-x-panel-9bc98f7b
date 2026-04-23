@@ -547,16 +547,27 @@ function buildOtpEndpointCandidates(currency) {
   const t = todayStr();
   const cur = String(currency || 'USD').toUpperCase();
   const cid = CURRENCY_ID_BY_CODE[cur] || 2;
+  const dtCols = [
+    'source', 'name', 'short_code', 'phone_number',
+    'payout', 'message', 'notified', 'created',
+  ].map((name, idx) => (
+    `columns%5B${idx}%5D%5Bdata%5D=${encodeURIComponent(name)}` +
+    `&columns%5B${idx}%5D%5Bname%5D=` +
+    `&columns%5B${idx}%5D%5Bsearchable%5D=true` +
+    `&columns%5B${idx}%5D%5Borderable%5D=true` +
+    `&columns%5B${idx}%5D%5Bsearch%5D%5Bvalue%5D=` +
+    `&columns%5B${idx}%5D%5Bsearch%5D%5Bregex%5D=false`
+  )).join('&');
   const qsCode =
     `date_from=${encodeURIComponent(t + ' 00')}` +
     `&date_to=${encodeURIComponent(t + ' 23')}` +
     `&currency=${cur}` +
-    `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
+    `&draw=1&${dtCols}&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   const qsId =
     `date_from=${encodeURIComponent(t + ' 00')}` +
     `&date_to=${encodeURIComponent(t + ' 23')}` +
     `&currency_id=${cid}` +
-    `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
+    `&draw=1&${dtCols}&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   return [
     `/api/helper/premium-number/stats/${TYPE}.json?${qsId}`,
     `/api/helper/premium-number/stats/${TYPE}?${qsCode}`,
@@ -645,7 +656,11 @@ function normalizeStatsRow(row) {
 
 async function fetchStatsOnce(url) {
   const res = await http.get(url, {
-    headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      Referer: `${BASE_URL}/premium_number/stats/${TYPE}`,
+    },
     validateStatus: (s) => s < 600,
   });
   const ct = String(res.headers['content-type'] || '');
