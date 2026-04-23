@@ -18,13 +18,13 @@ type BotEntry = {
 };
 
 const BOTS: BotEntry[] = [
-  { key: "ims",         label: "IMS",          panel: "imssms.org",            route: "/admin/ims-status",        fetcher: () => api.imsBot.status() as any },
-  { key: "msi",         label: "MSI",          panel: "145.239.130.45/ints",   route: "/admin/msi-status",        fetcher: () => api.msiBot.status() as any },
+  { key: "ims",         label: "IMS",          panel: "imssms.org",            route: "/admin/ims-status",        fetcher: () => api.admin.imsStatus() },
+  { key: "msi",         label: "MSI",          panel: "145.239.130.45/ints",   route: "/admin/msi-status",        fetcher: () => api.admin.msiStatus() },
   { key: "numpanel",    label: "NumPanel",     panel: "51.89.99.105",          route: "/admin/numpanel-status",   fetcher: () => api.admin.numpanelStatus() },
   { key: "iprn",        label: "IPRN",         panel: "iprndata.com",          route: "/admin/iprn-status",       fetcher: () => api.iprn.status() },
   { key: "iprn_sms",    label: "IPRN-SMS",     panel: "panel.iprn-sms.com",    route: "/admin/iprn-sms-status",   fetcher: () => api.iprnSms.status() },
   { key: "iprn_sms_v2", label: "IPRN-SMS V2",  panel: "panel.iprn-sms.com",    route: "/admin/iprn-sms-v2-status", fetcher: () => api.iprnSmsV2.status() },
-  { key: "seven1tel",   label: "Seven1Tel",    panel: "94.23.120.156/ints",    route: "/admin/seven1tel-status",  fetcher: () => api.seven1tel.status() as any },
+  { key: "seven1tel",   label: "Seven1Tel",    panel: "94.23.120.156/ints",    route: "/admin/seven1tel-status",  fetcher: () => api.admin.seven1telStatus() },
 ];
 
 function fmtAgo(ts: number | null | undefined): string {
