@@ -682,11 +682,24 @@ function findActiveAllocationByScrapedPhone(scrapedPhone) {
 
 async function scrapeOtps() {
   await ensureLoggedIn();
+  if (!status.otpEndpoints) status.otpEndpoints = {};
+  let total = 0;
+  for (const cur of OTP_CURRENCIES) {
+    try {
+      total += await scrapeOtpsForCurrency(cur);
+    } catch (e) {
+      if (/Session expired/.test(e.message)) throw e;
+      dwarn(`[iprn_sms_v2-bot] ${cur} scrape failed:`, e.message);
+    }
+  }
+  return total;
+}
 
-  // Try the cached endpoint first; if missing or it stops working, probe candidates.
-  const tryList = status.otpEndpoint
-    ? [status.otpEndpoint, ...buildOtpEndpointCandidates().filter((u) => u !== status.otpEndpoint)]
-    : buildOtpEndpointCandidates();
+async function scrapeOtpsForCurrency(currency) {
+  const cached = status.otpEndpoints && status.otpEndpoints[currency];
+  const tryList = cached
+    ? [cached, ...buildOtpEndpointCandidates(currency).filter((u) => u !== cached)]
+    : buildOtpEndpointCandidates(currency);
 
   let result = null;
   let workingUrl = null;
@@ -703,13 +716,14 @@ async function scrapeOtps() {
   status.lastOtpScrapeAt = Math.floor(Date.now() / 1000);
   if (!result) {
     status.lastOtpScrapeOk = false;
-    throw new Error(`No working OTP stats endpoint (tried ${tryList.length}). Run scripts/iprn-sms-stats-probe.js`);
+    throw new Error(`No working OTP stats endpoint for ${currency} (tried ${tryList.length}). Run scripts/iprn-sms-stats-probe.js`);
   }
   status.lastOtpScrapeOk = true;
-  if (status.otpEndpoint !== workingUrl) {
+  if (status.otpEndpoints[currency] !== workingUrl) {
+    status.otpEndpoints[currency] = workingUrl;
     status.otpEndpoint = workingUrl;
-    console.log(`[iprn_sms_v2-bot] OTP endpoint resolved: ${workingUrl}`);
-    logEvent('success', `OTP endpoint resolved: ${workingUrl}`);
+    console.log(`[iprn_sms_v2-bot] OTP endpoint resolved (${currency}): ${workingUrl}`);
+    logEvent('success', `OTP endpoint resolved (${currency}): ${workingUrl}`);
   }
 
   let delivered = 0;
