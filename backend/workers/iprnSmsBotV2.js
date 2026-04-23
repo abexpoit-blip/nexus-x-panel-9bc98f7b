@@ -746,10 +746,11 @@ function withStatsPaging(url, start, length) {
 
 async function fetchAllStatsRows(url, firstPage) {
   const pageSize = 200;
+  const maxPages = Math.max(1, +(process.env.IPRN_SMS_V2_OTP_MAX_PAGES || 2));
   const first = firstPage || await fetchStatsOnce(withStatsPaging(url, 0, pageSize));
   if (!first?.ok) return first;
   const rows = Array.isArray(first.rows) ? first.rows.slice() : [];
-  const totalRows = Math.max(+first.totalRows || 0, rows.length);
+  const totalRows = Math.min(Math.max(+first.totalRows || 0, rows.length), pageSize * maxPages);
   for (let start = rows.length; start < totalRows; start += pageSize) {
     const next = await fetchStatsOnce(withStatsPaging(url, start, pageSize));
     if (!next?.ok || !Array.isArray(next.rows) || next.rows.length === 0) break;
