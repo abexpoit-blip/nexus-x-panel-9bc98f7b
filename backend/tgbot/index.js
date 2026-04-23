@@ -1031,6 +1031,13 @@ function expireOldAssignments() {
       WHERE status = 'active' AND expires_at < ?
     `).all(now());
     if (expired.length === 0) return;
+    // Collect impacted batches BEFORE we mutate, so we can refresh their TG cards.
+    const expiredIds = expired.map(e => e.id);
+    const placeholders = expiredIds.map(() => '?').join(',');
+    const impactedBatches = db.prepare(
+      `SELECT DISTINCT batch_id FROM tg_assignments WHERE id IN (${placeholders}) AND batch_id IS NOT NULL`
+    ).all(...expiredIds).map(r => r.batch_id);
+
     const txn = db.transaction(() => {
       for (const e of expired) {
         db.prepare("UPDATE tg_assignments SET status='expired' WHERE id = ?").run(e.id);
@@ -1039,6 +1046,36 @@ function expireOldAssignments() {
     });
     txn();
     console.log(`[tgbot] expired ${expired.length} unused number(s) → returned to pool`);
+
+    // Auto-vanish expired numbers from the user's TG batch cards.
+    // For each impacted batch: if EVERY row is expired/released and none received OTP,
+    // delete the message entirely. Otherwise re-render so live OTPs stay visible
+    // and expired ones disappear (status='expired' rows are filtered out).
+    for (const batchId of impactedBatches) {
+      try {
+        const rows = getBatchAssignments(batchId);
+        if (rows.length === 0) continue;
+        const head = rows[0];
+        if (!head.tg_chat_id || !head.tg_message_id) continue;
+
+        const liveRows = rows.filter(a => a.status === 'active' || a.status === 'otp_received');
+        const hasOtp   = rows.some(a => a.status === 'otp_received' && a.otp_code);
+
+        if (liveRows.length === 0 && !hasOtp) {
+          // Nothing useful left → just delete the card so it vanishes from chat.
+          bot.telegram.deleteMessage(head.tg_chat_id, head.tg_message_id).catch(() => {});
+        } else {
+          // Re-render the card showing only live + OTP rows (drop expired).
+          const visible = rows.filter(a => a.status !== 'expired' && a.status !== 'released');
+          const allDone = !visible.some(a => a.status === 'active');
+          bot.telegram.editMessageText(
+            head.tg_chat_id, head.tg_message_id, undefined,
+            renderBatchCard(visible),
+            { parse_mode: 'HTML', reply_markup: batchKeyboard(batchId, allDone).reply_markup }
+          ).catch(() => {});
+        }
+      } catch (e) { console.warn('[tgbot] batch refresh fail:', e.message); }
+    }
   } catch (e) {
     console.error('[tgbot] expire error:', e.message);
   }
