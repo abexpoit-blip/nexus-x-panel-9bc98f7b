@@ -534,20 +534,32 @@ function todayStr() {
 // IMPORTANT: panel field naming is confusing —
 //   short_code   = the actual phone number we sold to the agent
 //   phone_number = the CLI/sender name (e.g., "Facebook")
-function buildOtpEndpointCandidates() {
+// Currency_id mapping observed on panel.iprn-sms.com:
+//   1 = EUR, 2 = USD, 3 = GBP
+const CURRENCY_ID_BY_CODE = { EUR: 1, USD: 2, GBP: 3 };
+const OTP_CURRENCIES = ['USD', 'EUR']; // user wants BOTH scraped each cycle
+
+function buildOtpEndpointCandidates(currency) {
   const t = todayStr();
-  const qs =
+  const cur = String(currency || 'USD').toUpperCase();
+  const cid = CURRENCY_ID_BY_CODE[cur] || 2;
+  const qsCode =
     `date_from=${encodeURIComponent(t + ' 00')}` +
     `&date_to=${encodeURIComponent(t + ' 23')}` +
-    `&currency_id=${OTP_CURRENCY_ID}` +
+    `&currency=${cur}` +
+    `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
+  const qsId =
+    `date_from=${encodeURIComponent(t + ' 00')}` +
+    `&date_to=${encodeURIComponent(t + ' 23')}` +
+    `&currency_id=${cid}` +
     `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   return [
-    // Primary — confirmed working endpoint (note the .json suffix!)
-    `/api/helper/premium-number/stats/${TYPE}.json?${qs}`,
-    // Fallbacks kept in case panel changes / different account roles
-    `/api/helper/premium-number/stats/${TYPE}?${qs}`,
-    `/api/helper/premium-number/stats-data/${TYPE}.json?${qs}`,
-    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qs}`,
+    `/api/helper/premium-number/stats/${TYPE}.json?${qsId}`,
+    `/api/helper/premium-number/stats/${TYPE}?${qsCode}`,
+    `/api/helper/premium-number/stats/${TYPE}.json?${qsCode}`,
+    `/api/helper/premium-number/stats/${TYPE}?${qsId}`,
+    `/api/helper/premium-number/stats-data/${TYPE}.json?${qsCode}`,
+    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qsCode}`,
   ];
 }
 
