@@ -414,7 +414,7 @@ function renderBatchCard(assignments) {
   let txt =
     `📱 <b>Your Numbers (${assignments.length})</b>\n` +
     `${flag} <b>${escapeHtml(cName)}</b> — ${svc}\n` +
-    `${timer} until expiry • Rate: ${fmtBdt(head.rate_bdt)} per OTP\n` +
+    `${timer} until expiry${isBillingEnabled() ? ` • Rate: ${fmtBdt(head.rate_bdt)} per OTP` : ' • 🎁 FREE'}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n`;
 
   assignments.forEach((a, i) => {
