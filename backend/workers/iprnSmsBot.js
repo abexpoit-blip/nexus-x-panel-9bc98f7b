@@ -569,10 +569,10 @@ function buildOtpEndpointCandidates(currency) {
     `&currency_id=${cid}` +
     `&draw=1&${dtCols}&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   return [
-    `/api/helper/premium-number/stats/${TYPE}?${qsCode}`,
-    `/api/helper/premium-number/stats/${TYPE}.json?${qsCode}`,
-    `/api/helper/premium-number/stats/${TYPE}?${qsId}`,
     `/api/helper/premium-number/stats/${TYPE}.json?${qsId}`,
+    `/api/helper/premium-number/stats/${TYPE}?${qsId}`,
+    `/api/helper/premium-number/stats/${TYPE}.json?${qsCode}`,
+    `/api/helper/premium-number/stats/${TYPE}?${qsCode}`,
     `/api/helper/premium-number/stats-data/${TYPE}.json?${qsCode}`,
     `/api/helper/premium-number/sms-stats/${TYPE}.json?${qsCode}`,
   ];
@@ -793,9 +793,21 @@ async function scrapeOtpsForCurrency(currency) {
     try {
       const firstPage = await fetchStatsOnce(url);
       if (firstPage.ok) {
-        result = await fetchAllStatsRows(url, firstPage);
-        workingUrl = url;
-        break;
+        const full = await fetchAllStatsRows(url, firstPage);
+        if (!full?.ok) continue;
+        // IMPORTANT: some candidate endpoints return valid JSON but EMPTY rows
+        // because the panel silently ignores `currency=USD` and falls back to
+        // the default EUR view. Keep that as a fallback only; prefer the first
+        // endpoint that actually returns OTP rows.
+        if (!result) {
+          result = full;
+          workingUrl = url;
+        }
+        if ((full.totalRows || 0) > 0 || (full.rows?.length || 0) > 0) {
+          result = full;
+          workingUrl = url;
+          break;
+        }
       }
     } catch (e) {
       if (/Session expired/.test(e.message)) throw e;
