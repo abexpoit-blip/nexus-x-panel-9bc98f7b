@@ -89,9 +89,10 @@ function seedDefaults() {
     const stmt = db.prepare(`INSERT OR IGNORE INTO settings (key, value, updated_at)
       VALUES (?, ?, strftime('%s','now'))`);
     db.transaction(() => {
-      stmt.run('tg_public_channel', '@nexusxotpgroup');
-      stmt.run('tg_required_group', 'https://t.me/nexusxotpgroup');
-      stmt.run('tg_required_group_chat', '@nexusxotpgroup');
+      // Unified channel — @nexusxotpgroup was removed; use @nexusxotpfeed everywhere.
+      stmt.run('tg_public_channel', '@nexusxotpfeed');
+      stmt.run('tg_required_group', 'https://t.me/nexusxotpfeed');
+      stmt.run('tg_required_group_chat', '@nexusxotpfeed');
       stmt.run('tg_otp_feed_chat', '@nexusxotpfeed');
       stmt.run('tg_required_otp_group', 'https://t.me/nexusxotpfeed');
       stmt.run('tg_required_otp_group_chat', '@nexusxotpfeed');
