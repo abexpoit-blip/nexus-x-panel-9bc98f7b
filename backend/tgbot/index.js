@@ -1276,6 +1276,51 @@ bot.catch((err, ctx) => {
   console.error(`[tgbot] error for ${ctx.updateType}:`, err);
 });
 
+// ============================================================
+// UNIVERSAL OTP FEED FORWARDER
+// Posts every freshly-received OTP to @nexusxotpfeed (or whatever
+// `tg_otp_feed_chat` is set to), regardless of source — website agents,
+// telegram bot users, anything that writes allocations.otp.
+// pollOtps() already forwards bot-claimed OTPs; this catches the rest.
+// ============================================================
+async function feedForwardAllOtps() {
+  try {
+    const feedId = getOtpFeedChatId();
+    const pubId  = getPublicChannelId();
+    const targets = [...new Set([feedId, pubId].filter(Boolean))];
+    if (targets.length === 0) return; // nothing configured
+
+    const rows = db.prepare(`
+      SELECT id, phone_number, otp, cli, operator AS range_name,
+             country_code, otp_received_at, provider
+      FROM allocations
+      WHERE otp IS NOT NULL AND otp != ''
+        AND otp_received_at IS NOT NULL
+        AND otp_received_at >= ?
+      ORDER BY otp_received_at ASC
+      LIMIT 50
+    `).all(lastFeedScanAt - 5);
+    lastFeedScanAt = now();
+
+    for (const r of rows) {
+      if (recentlyForwarded.has(r.id)) continue;
+      markForwarded(r.id);
+      // Try to derive a clean service label from cli/range
+      const svcRaw = r.cli || r.range_name || 'SMS';
+      const svc = String(svcRaw).split(/[\s\-_:]/)[0].toUpperCase();
+      await postPublicOtp({
+        phone_number: r.phone_number,
+        otp: r.otp,
+        country_code: r.country_code,
+        service: svc,
+        range_name: r.range_name,
+      }).catch((e) => console.error('[tgbot] feedForward post fail:', e.message));
+    }
+  } catch (e) {
+    console.error('[tgbot] feedForwardAllOtps error:', e.message);
+  }
+}
+
 (async () => {
   try {
     // Make sure no webhook is set (we use polling)
