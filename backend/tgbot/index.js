@@ -63,18 +63,18 @@ function getBotConfig() {
     `).all();
     const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
     return {
-      publicChannel: map.tg_public_channel || '@nexusxotpgroup',
-      requiredGroup: map.tg_required_group || 'https://t.me/nexusxotpgroup',
-      requiredGroupChat: map.tg_required_group_chat || '@nexusxotpgroup',
+      publicChannel: map.tg_public_channel || '@nexusxotpfeed',
+      requiredGroup: map.tg_required_group || 'https://t.me/nexusxotpfeed',
+      requiredGroupChat: map.tg_required_group_chat || '@nexusxotpfeed',
       otpGroup: map.tg_required_otp_group || 'https://t.me/nexusxotpfeed',
       otpGroupChat: map.tg_required_otp_group_chat || '@nexusxotpfeed',
       terms: map.tg_terms_text || 'By using this bot you agree to follow our rules, keep OTP data private, and use numbers responsibly.',
     };
   } catch {
     return {
-      publicChannel: '@nexusxotpgroup',
-      requiredGroup: 'https://t.me/nexusxotpgroup',
-      requiredGroupChat: '@nexusxotpgroup',
+      publicChannel: '@nexusxotpfeed',
+      requiredGroup: 'https://t.me/nexusxotpfeed',
+      requiredGroupChat: '@nexusxotpfeed',
       otpGroup: 'https://t.me/nexusxotpfeed',
       otpGroupChat: '@nexusxotpfeed',
       terms: 'By using this bot you agree to follow our rules, keep OTP data private, and use numbers responsibly.',
@@ -89,9 +89,10 @@ function seedDefaults() {
     const stmt = db.prepare(`INSERT OR IGNORE INTO settings (key, value, updated_at)
       VALUES (?, ?, strftime('%s','now'))`);
     db.transaction(() => {
-      stmt.run('tg_public_channel', '@nexusxotpgroup');
-      stmt.run('tg_required_group', 'https://t.me/nexusxotpgroup');
-      stmt.run('tg_required_group_chat', '@nexusxotpgroup');
+      // Unified channel — @nexusxotpgroup was removed; use @nexusxotpfeed everywhere.
+      stmt.run('tg_public_channel', '@nexusxotpfeed');
+      stmt.run('tg_required_group', 'https://t.me/nexusxotpfeed');
+      stmt.run('tg_required_group_chat', '@nexusxotpfeed');
       stmt.run('tg_otp_feed_chat', '@nexusxotpfeed');
       stmt.run('tg_required_otp_group', 'https://t.me/nexusxotpfeed');
       stmt.run('tg_required_otp_group_chat', '@nexusxotpfeed');
