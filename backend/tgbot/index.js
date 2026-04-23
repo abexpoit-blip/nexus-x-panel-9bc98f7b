@@ -174,6 +174,28 @@ function serviceIcon(svc) {
   return '[SMS]';
 }
 
+// Brand emoji for each service — shown alongside the [TAG] in OTP feed posts
+// so the line reads e.g.  📘 [FB]  or  🟢 [WA]  or  ✈️ [TG].
+function serviceEmoji(svc) {
+  if (!svc) return '✉️';
+  const s = String(svc).toLowerCase();
+  if (s.includes('facebook'))  return '📘';
+  if (s.includes('whatsapp'))  return '🟢';
+  if (s.includes('telegram'))  return '✈️';
+  if (s.includes('tiktok'))    return '🎵';
+  if (s.includes('instagram')) return '📸';
+  if (s.includes('google') || s.includes('gmail')) return '🔴';
+  if (s.includes('twitter') || s.includes('x.com')) return '🐦';
+  if (s.includes('signal'))    return '💬';
+  if (s.includes('viber'))     return '🟣';
+  if (s.includes('discord'))   return '🎮';
+  if (s.includes('uber'))      return '🚗';
+  if (s.includes('amazon'))    return '📦';
+  if (s.includes('apple'))     return '🍎';
+  if (s.includes('microsoft') || s.includes('outlook')) return '🪟';
+  return '✉️';
+}
+
 // ---------- TG user ensure ----------
 function ensureTgUser(ctx) {
   const u = ctx.from;
