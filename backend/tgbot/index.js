@@ -606,12 +606,10 @@ async function showCountries(ctx) {
   );
 }
 
-bot.action(/^country:(\w+)$/, async (ctx) => {
+bot.action(/^country:(\w+)(?::(\d+))?$/, async (ctx) => {
   try { await ctx.answerCbQuery(); } catch {}
   const cc = ctx.match[1];
-  // Optional pagination: country:PH:2 → page 2
-  const parts = ctx.match.input.split(':');
-  const page = Math.max(1, parseInt(parts[2], 10) || 1);
+  const page = Math.max(1, parseInt(ctx.match[2], 10) || 1);
   try {
     const ranges = listRangesForCountry(cc);
     if (ranges.length === 0) {
