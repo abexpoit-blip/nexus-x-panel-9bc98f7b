@@ -1333,6 +1333,45 @@ async function feedForwardAllOtps() {
     const me = await bot.telegram.getMe();
     console.log(`✓ NEXUS X tgbot launching as @${me.username} (${me.id})`);
     bot.launch({ dropPendingUpdates: false });
+
+    // ── Auto-resolve OTP feed channel chat_id ─────────────────────────
+    // We seed @nexusxotpfeed as the default username. On boot we ask
+    // Telegram for its real numeric chat id (-100…) and persist it,
+    // so private channels and edge-cases also work without manual setup.
+    (async () => {
+      const candidates = [
+        getOtpFeedChatId(),
+        getPublicChannelId(),
+      ].filter(Boolean);
+      const seen = new Set();
+      for (const handle of candidates) {
+        if (seen.has(handle)) continue;
+        seen.add(handle);
+        try {
+          const chat = await bot.telegram.getChat(handle);
+          console.log(`✓ OTP feed channel resolved → handle="${handle}" id=${chat.id} title="${chat.title || chat.username || '?'}" type=${chat.type}`);
+          // Persist numeric id alongside the username for resilience.
+          if (handle === getOtpFeedChatId()) {
+            db.prepare(
+              `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`
+            ).run('tg_otp_feed_chat_id', String(chat.id));
+          }
+          // Probe admin status to surface permission errors EARLY.
+          try {
+            const member = await bot.telegram.getChatMember(chat.id, me.id);
+            const ok = ['administrator', 'creator'].includes(member.status);
+            console.log(`  ↳ bot status in ${handle}: ${member.status}${ok ? ' ✅' : ' ⚠️ NOT ADMIN — OTPs will fail to post'}`);
+          } catch (e) {
+            console.warn(`  ↳ getChatMember failed for ${handle}: ${e.message}`);
+          }
+        } catch (e) {
+          console.error(`✗ OTP feed channel UNREACHABLE: handle="${handle}" — ${e.message}. ` +
+            `Hint: bot must be added as ADMIN to ${handle} with "Post Messages" permission.`);
+        }
+      }
+    })().catch((e) => console.error('[tgbot] feed resolve outer err:', e.message));
+
     setInterval(pollOtps, 4000);
     setInterval(expireOldAssignments, 30_000);
     setInterval(feedForwardAllOtps, 5000);
