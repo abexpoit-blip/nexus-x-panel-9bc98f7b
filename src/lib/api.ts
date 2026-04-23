@@ -281,6 +281,23 @@ export type Notification = {
   id: number; user_id: number | null; title: string; message: string;
   type: string; is_read: number; created_at: number;
 };
+export type OtpDeliveryRow = {
+  id: number; ts: number; event: string;
+  phone_number: string | null; otp_code: string | null;
+  endpoint: string | null; currency: string | null; detail: string | null;
+  allocation_id: number | null; user_id: number | null;
+  agent_username: string | null;
+  allocation_status: string | null;
+  allocation_range: string | null;
+  allocated_at: number | null;
+  otp_received_at: number | null;
+};
+export type OtpDeliveriesResponse = {
+  rows: OtpDeliveryRow[];
+  stats: { scraped: number; matched: number; credited: number; rejected: number; failures: number };
+  since: number;
+  provider: string;
+};
 export type AuditLog = {
   id: number; user_id: number | null; username?: string; action: string;
   target_type?: string; target_id?: string | number; meta?: string;
@@ -410,6 +427,26 @@ export const api = {
       }>;
       stats_24h: { scrapes: number; failures: number; matched: number; credited: number; unmatched: number };
     }>(`/numbers/otp-audit${suffix}`);
+  },
+  // Per-bot OTP delivery feed (admin only). Joined with allocations + users
+  // so the UI can show "OTP X went to agent Y, status: credited/rejected".
+  iprnSmsDeliveries: (params: { limit?: number; event?: string; q?: string; sinceHours?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.event) qs.set("event", params.event);
+    if (params.q) qs.set("q", params.q);
+    if (params.sinceHours) qs.set("since", String(Math.floor(Date.now() / 1000) - params.sinceHours * 3600));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<OtpDeliveriesResponse>(`/admin/iprn-sms-otp-deliveries${suffix}`);
+  },
+  iprnSmsV2Deliveries: (params: { limit?: number; event?: string; q?: string; sinceHours?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.event) qs.set("event", params.event);
+    if (params.q) qs.set("q", params.q);
+    if (params.sinceHours) qs.set("since", String(Math.floor(Date.now() / 1000) - params.sinceHours * 3600));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<OtpDeliveriesResponse>(`/admin/iprn-sms-v2-otp-deliveries${suffix}`);
   },
   pricing: () => request<{ pricing: { id: number; name: string; code: string; flag: string; price_bdt: number; operator_count: number }[] }>("/numbers/pricing"),
 

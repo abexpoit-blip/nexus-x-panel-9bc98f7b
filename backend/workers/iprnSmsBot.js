@@ -80,6 +80,7 @@ let loggedIn = false;
 let busy = false;
 let numbersTimer = null;
 let otpTimer = null;
+let cleanupTimer = null;
 let _stopped = false;
 
 function cookieHeader() {
@@ -939,6 +940,35 @@ async function runNumbersLoop() {
   }
 }
 
+// ============================================================
+// Used-number purge — panel.iprn-sms.com keeps sold numbers in its ZIP feed
+// forever, so without this loop our `allocations` table grows unbounded and
+// the same phone can never be sold again even if the panel later allows it.
+// We delete allocations whose status is in (received/released/expired) and
+// were allocated > USED_TTL_MIN minutes ago. After deletion the ZIP-import
+// dedup will allow the panel to re-add a fresh row for that phone (so the
+// number can come back into the pool with a fresh allocation_at timestamp).
+// Default 30 minutes — admin can override via IPRN_SMS_USED_TTL_MIN.
+const USED_TTL_MIN = Math.max(1, +(process.env.IPRN_SMS_USED_TTL_MIN || 30));
+const CLEANUP_INTERVAL = 5 * 60; // 5 minutes — cheap, idempotent
+function purgeUsedNumbers() {
+  try {
+    const cutoff = Math.floor(Date.now() / 1000) - USED_TTL_MIN * 60;
+    const r = db.prepare(`
+      DELETE FROM allocations
+      WHERE provider = 'iprn_sms'
+        AND status IN ('received','released','expired')
+        AND allocated_at < ?
+    `).run(cutoff);
+    if (r.changes > 0) {
+      console.log(`[iprn_sms-bot] purged ${r.changes} used numbers older than ${USED_TTL_MIN}m`);
+      logEvent('info', `Purged ${r.changes} used numbers (>${USED_TTL_MIN}m old)`);
+    }
+  } catch (e) {
+    dwarn('[iprn_sms-bot] purgeUsedNumbers failed:', e.message);
+  }
+}
+
 function start() {
   ({ ENABLED, BASE_URL, USERNAME, PASSWORD, TYPE } = resolveCreds());
   status.enabled = ENABLED;
@@ -973,6 +1003,12 @@ function start() {
   console.log(`[iprn_sms-bot] OTP poller starting → currency=${OTP_CURRENCY} interval=${OTP_INTERVAL}s`);
   runOtpLoop().catch(() => {});
   otpTimer = setInterval(runOtpLoop, OTP_INTERVAL * 1000);
+
+  // Purge old used numbers so the panel's "no remove" behaviour doesn't
+  // permanently lock a phone out of the pool. Runs every 5 minutes.
+  console.log(`[iprn_sms-bot] used-number purge → ttl=${USED_TTL_MIN}m, interval=${CLEANUP_INTERVAL}s`);
+  purgeUsedNumbers();
+  cleanupTimer = setInterval(purgeUsedNumbers, CLEANUP_INTERVAL * 1000);
 }
 
 function stop() {
@@ -980,6 +1016,7 @@ function stop() {
   status.running = false;
   if (numbersTimer) { clearInterval(numbersTimer); numbersTimer = null; }
   if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
+  if (cleanupTimer) { clearInterval(cleanupTimer); cleanupTimer = null; }
 }
 
 async function restart() {

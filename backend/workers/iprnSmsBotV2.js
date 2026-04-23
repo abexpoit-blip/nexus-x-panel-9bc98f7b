@@ -80,6 +80,7 @@ let loggedIn = false;
 let busy = false;
 let numbersTimer = null;
 let otpTimer = null;
+let cleanupTimer = null;
 let _stopped = false;
 
 function cookieHeader() {
@@ -930,6 +931,29 @@ async function runNumbersLoop() {
   }
 }
 
+// ============================================================
+// Used-number purge — see iprnSmsBot.js for rationale. 30-minute TTL by
+// default; override via IPRN_SMS_V2_USED_TTL_MIN.
+const USED_TTL_MIN = Math.max(1, +(process.env.IPRN_SMS_V2_USED_TTL_MIN || 30));
+const CLEANUP_INTERVAL = 5 * 60;
+function purgeUsedNumbers() {
+  try {
+    const cutoff = Math.floor(Date.now() / 1000) - USED_TTL_MIN * 60;
+    const r = db.prepare(`
+      DELETE FROM allocations
+      WHERE provider = 'iprn_sms_v2'
+        AND status IN ('received','released','expired')
+        AND allocated_at < ?
+    `).run(cutoff);
+    if (r.changes > 0) {
+      console.log(`[iprn_sms_v2-bot] purged ${r.changes} used numbers older than ${USED_TTL_MIN}m`);
+      logEvent('info', `Purged ${r.changes} used numbers (>${USED_TTL_MIN}m old)`);
+    }
+  } catch (e) {
+    dwarn('[iprn_sms_v2-bot] purgeUsedNumbers failed:', e.message);
+  }
+}
+
 function start() {
   ({ ENABLED, BASE_URL, USERNAME, PASSWORD, TYPE } = resolveCreds());
   status.enabled = ENABLED;
@@ -964,6 +988,10 @@ function start() {
   console.log(`[iprn_sms_v2-bot] OTP poller starting → currency=${OTP_CURRENCY} interval=${OTP_INTERVAL}s`);
   runOtpLoop().catch(() => {});
   otpTimer = setInterval(runOtpLoop, OTP_INTERVAL * 1000);
+
+  console.log(`[iprn_sms_v2-bot] used-number purge → ttl=${USED_TTL_MIN}m, interval=${CLEANUP_INTERVAL}s`);
+  purgeUsedNumbers();
+  cleanupTimer = setInterval(purgeUsedNumbers, CLEANUP_INTERVAL * 1000);
 }
 
 function stop() {
@@ -971,6 +999,7 @@ function stop() {
   status.running = false;
   if (numbersTimer) { clearInterval(numbersTimer); numbersTimer = null; }
   if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
+  if (cleanupTimer) { clearInterval(cleanupTimer); cleanupTimer = null; }
 }
 
 async function restart() {

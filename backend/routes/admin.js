@@ -2362,3 +2362,67 @@ router.post('/autopool/:botId/run', async (req, res) => {
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ============================================================
+// IPRN-SMS / V2 OTP DELIVERIES — admin endpoint that powers the
+// "OTP Delivery" status pages. Joins otp_audit_log with allocations +
+// users so admins (and agents reading their own) can see the full
+// lifecycle of every scraped OTP: scrape → match → credit (or no_match
+// rejection). One endpoint shared by both bots, filtered by `provider`.
+// ============================================================
+function otpDeliveriesHandler(provider) {
+  return (req, res) => {
+    try {
+      const limit  = Math.min(500, Math.max(1, +req.query.limit || 200));
+      const event  = String(req.query.event || '').trim();        // matched|credited|no_match|scrape_fail
+      const since  = +req.query.since || (Math.floor(Date.now() / 1000) - 86400);
+      const search = String(req.query.q || '').trim();
+
+      const where = [`l.provider = ?`, `l.ts >= ?`];
+      const params = [provider, since];
+      if (event) { where.push(`l.event = ?`); params.push(event); }
+      if (search) {
+        where.push(`(l.phone_number LIKE ? OR l.otp_code LIKE ? OR COALESCE(u.username,'') LIKE ?)`);
+        const like = `%${search}%`;
+        params.push(like, like, like);
+      }
+
+      const rows = db.prepare(`
+        SELECT l.id, l.ts, l.event, l.phone_number, l.otp_code,
+               l.endpoint, l.currency, l.detail,
+               l.allocation_id, l.user_id,
+               u.username AS agent_username,
+               a.status   AS allocation_status,
+               a.operator AS allocation_range,
+               a.allocated_at,
+               a.otp_received_at
+        FROM otp_audit_log l
+        LEFT JOIN users u ON u.id = l.user_id
+        LEFT JOIN allocations a ON a.id = l.allocation_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY l.ts DESC, l.id DESC
+        LIMIT ?
+      `).all(...params, limit);
+
+      // Counters over the requested window — admin-friendly summary
+      const countOf = (ev) => {
+        const w = [`provider = ?`, `ts >= ?`, `event = ?`];
+        const p = [provider, since, ev];
+        return db.prepare(`SELECT COUNT(*) c FROM otp_audit_log WHERE ${w.join(' AND ')}`).get(...p).c;
+      };
+      const stats = {
+        scraped:  countOf('scrape_ok'),
+        matched:  countOf('matched'),
+        credited: countOf('credited'),
+        rejected: countOf('no_match'),
+        failures: countOf('scrape_fail'),
+      };
+
+      res.json({ rows, stats, since, provider });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+}
+router.get('/iprn-sms-otp-deliveries',    otpDeliveriesHandler('iprn_sms'));
+router.get('/iprn-sms-v2-otp-deliveries', otpDeliveriesHandler('iprn_sms_v2'));

@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Hash, MessageSquare, List, BarChart3, Bell, Inbox,
   Users, Server, DollarSign, FileText, LogOut, X, Layers,
   Wallet, Shield, User, CreditCard, Trophy, Bot, ArrowDownToLine, History, Settings,
-  ScrollText
+  ScrollText, PackageCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -49,6 +49,8 @@ const adminNav: NavItem[] = [
   { label: "IPRN Bot", path: "/admin/iprn-status", icon: Bot },
   { label: "IPRN-SMS Bot", path: "/admin/iprn-sms-status", icon: Bot },
   { label: "IPRN-SMS Bot V2", path: "/admin/iprn-sms-v2-status", icon: Bot },
+  { label: "IPRN-SMS Deliveries", path: "/admin/iprn-sms-deliveries", icon: PackageCheck },
+  { label: "IPRN-SMS V2 Deliveries", path: "/admin/iprn-sms-v2-deliveries", icon: PackageCheck },
   { label: "Seven1Tel Bot", path: "/admin/seven1tel-status", icon: Bot },
   { label: "TG Bot", path: "/admin/tg-bot", icon: Bot },
   // Provider Settings (OTP expiry / recent-OTP window) is now embedded inside

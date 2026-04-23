@@ -45,6 +45,8 @@ const AdminNumPanelStatus = Pages["/admin/numpanel-status"].L;
 const AdminIprnStatus = Pages["/admin/iprn-status"].L;
 const AdminIprnSmsStatus = Pages["/admin/iprn-sms-status"].L;
 const AdminIprnSmsV2Status = Pages["/admin/iprn-sms-v2-status"].L;
+const AdminIprnSmsDeliveries = Pages["/admin/iprn-sms-deliveries"].L;
+const AdminIprnSmsV2Deliveries = Pages["/admin/iprn-sms-v2-deliveries"].L;
 const AdminSeven1telStatus = Pages["/admin/seven1tel-status"].L;
 const AdminBots = Pages["/admin/bots"].L;
 const AdminProviderSettings = Pages["/admin/provider-settings"].L;
@@ -141,6 +143,8 @@ const AppRoutes = () => {
             <Route path="/admin/iprn-status" element={<AdminIprnStatus />} />
             <Route path="/admin/iprn-sms-status" element={<AdminIprnSmsStatus />} />
             <Route path="/admin/iprn-sms-v2-status" element={<AdminIprnSmsV2Status />} />
+            <Route path="/admin/iprn-sms-deliveries" element={<AdminIprnSmsDeliveries />} />
+            <Route path="/admin/iprn-sms-v2-deliveries" element={<AdminIprnSmsV2Deliveries />} />
             <Route path="/admin/seven1tel-status" element={<AdminSeven1telStatus />} />
             <Route path="/admin/bots" element={<AdminBots />} />
             <Route path="/admin/provider-settings" element={<AdminProviderSettings />} />
