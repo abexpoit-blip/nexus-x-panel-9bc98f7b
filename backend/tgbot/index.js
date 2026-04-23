@@ -1025,12 +1025,18 @@ async function postPublicOtp(c) {
   const svcLabel = String(svcRaw).replace(/[_\-]+/g, ' ').trim();
   const svcTag = serviceIcon(svcRaw);
   const svcEmoji = serviceEmoji(svcRaw);
+  const svcCustom = serviceCustomEmoji(svcRaw);
+  // Render brand emoji as a Telegram custom (premium) emoji when available — falls
+  // back to a plain unicode emoji on non-premium clients automatically.
+  const svcBrand = svcCustom
+    ? `<tg-emoji emoji-id="${svcCustom.id}">${svcCustom.fallback}</tg-emoji>`
+    : svcEmoji;
   const maskedNumber = maskLast4(c.phone_number);
   const otpFull = String(c.otp || '').trim();
 
   const msg =
     `<b>Nexus X Number Panel</b>\n` +
-    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcEmoji} ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
+    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcBrand} ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
     `<tg-spoiler>${escapeHtml(otpFull)}</tg-spoiler>`;
 
   // Inline keyboard — Bot link only (Support removed per spec)
