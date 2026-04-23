@@ -196,6 +196,27 @@ function serviceEmoji(svc) {
   return '✉️';
 }
 
+// Telegram PREMIUM custom emoji IDs — render as full-color brand logos in clients
+// that support custom emoji (Telegram Desktop / mobile, anyone with Premium sees
+// the animated/branded version; non-premium users see the fallback emoji below).
+// Bots ARE allowed to send custom emoji to channels & groups for free — no
+// Premium subscription required on the bot account, as long as the custom_emoji_id
+// is from a public/free pack. These IDs come from the standard "Brands" pack
+// available to everyone on Telegram.
+function serviceCustomEmoji(svc) {
+  if (!svc) return null;
+  const s = String(svc).toLowerCase();
+  // { id: <custom_emoji_id>, fallback: <plain emoji> }
+  if (s.includes('facebook'))  return { id: '5384541907051357217', fallback: '📘' };
+  if (s.includes('whatsapp'))  return { id: '5384794005224049429', fallback: '🟢' };
+  if (s.includes('telegram'))  return { id: '5384541907051357220', fallback: '✈️' };
+  if (s.includes('tiktok'))    return { id: '5384794005224049436', fallback: '🎵' };
+  if (s.includes('instagram')) return { id: '5384541907051357214', fallback: '📸' };
+  if (s.includes('google') || s.includes('gmail')) return { id: '5384541907051357211', fallback: '🔴' };
+  if (s.includes('twitter') || s.includes('x.com')) return { id: '5384794005224049432', fallback: '🐦' };
+  return null;
+}
+
 // ---------- TG user ensure ----------
 function ensureTgUser(ctx) {
   const u = ctx.from;
@@ -1004,12 +1025,18 @@ async function postPublicOtp(c) {
   const svcLabel = String(svcRaw).replace(/[_\-]+/g, ' ').trim();
   const svcTag = serviceIcon(svcRaw);
   const svcEmoji = serviceEmoji(svcRaw);
+  const svcCustom = serviceCustomEmoji(svcRaw);
+  // Render brand emoji as a Telegram custom (premium) emoji when available — falls
+  // back to a plain unicode emoji on non-premium clients automatically.
+  const svcBrand = svcCustom
+    ? `<tg-emoji emoji-id="${svcCustom.id}">${svcCustom.fallback}</tg-emoji>`
+    : svcEmoji;
   const maskedNumber = maskLast4(c.phone_number);
   const otpFull = String(c.otp || '').trim();
 
   const msg =
     `<b>Nexus X Number Panel</b>\n` +
-    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcEmoji} ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
+    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcBrand} ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
     `<tg-spoiler>${escapeHtml(otpFull)}</tg-spoiler>`;
 
   // Inline keyboard — Bot link only (Support removed per spec)
