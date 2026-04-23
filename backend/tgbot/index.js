@@ -868,8 +868,10 @@ async function postPublicOtp(c) {
   }
   const maskedNumber = maskLast4(c.phone_number);
   const otpMasked = maskLast4(c.otp);
+  const svc = c.service ? `${serviceIcon(c.service)} <b>${escapeHtml(c.service.toUpperCase())}</b>` : `${serviceIcon(null)} SMS`;
   const msg =
     `🔥 <b>New OTP Received</b>\n` +
+    `${svc}\n` +
     `📱 <code>${maskedNumber}</code>\n` +
     `🔐 <code>${otpMasked}</code>\n` +
     `${flagOf(c.country_code)} ${escapeHtml(countryName(c.country_code))} • ${serviceIcon(c.service)} ${escapeHtml(c.range_name || c.service || 'OTP')}`;
