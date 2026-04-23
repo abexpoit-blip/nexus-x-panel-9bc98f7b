@@ -117,4 +117,11 @@ function renderFlagHtml(cc) {
   return fallback;
 }
 
-module.exports = { FLAG_EMOJI_IDS, unicodeFlag, getFlagEmoji, renderFlagHtml };
+module.exports = {
+  FLAG_EMOJI_IDS,
+  MANUAL_FLAG_IDS,
+  unicodeFlag,
+  getFlagEmoji,
+  renderFlagHtml,
+  loadFlagPack,
+};
