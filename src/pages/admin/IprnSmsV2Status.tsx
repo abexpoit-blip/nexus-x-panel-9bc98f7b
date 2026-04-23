@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/premium/PageHeader";
 import { RangePoolGrid } from "@/components/admin/RangePoolGrid";
+import { AutoPoolCard } from "@/components/admin/AutoPoolCard";
 
 function fmtAgo(ts: number | null | undefined): string {
   if (!ts) return "never";
@@ -113,6 +114,8 @@ export default function IprnSmsV2Status() {
           </div>
         }
       />
+
+      <AutoPoolCard botId="iprn_sms_v2" />
 
       {/* Top KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

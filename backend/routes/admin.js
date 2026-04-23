@@ -2321,3 +2321,44 @@ router.delete('/seven1tel-cookies', async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ============================================================
+// Auto-pool admin routes — per-bot scrape interval / TTL / size cap.
+// One row per registered bot in lib/autopool.js.
+// ============================================================
+router.get('/autopool', (req, res) => {
+  try {
+    const autopool = require('../lib/autopool');
+    res.json({ bots: autopool.listBots() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/autopool/:botId', (req, res) => {
+  try {
+    const autopool = require('../lib/autopool');
+    const bot = autopool.getBot(req.params.botId);
+    if (!bot) return res.status(404).json({ error: 'Unknown bot' });
+    res.json({ bot });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/autopool/:botId', (req, res) => {
+  try {
+    const autopool = require('../lib/autopool');
+    const cur = autopool.getBot(req.params.botId);
+    if (!cur) return res.status(404).json({ error: 'Unknown bot' });
+    const { enabled, interval_min, ttl_min, max_size } = req.body || {};
+    const next = autopool.saveConfig(req.params.botId, { enabled, interval_min, ttl_min, max_size });
+    logFromReq(req, 'autopool_config_updated', { meta: { botId: req.params.botId, ...next } });
+    res.json({ ok: true, config: next });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/autopool/:botId/run', async (req, res) => {
+  try {
+    const autopool = require('../lib/autopool');
+    const r = await autopool.runOnce(req.params.botId, { force: true });
+    logFromReq(req, 'autopool_run_now', { meta: { botId: req.params.botId, result: r.result } });
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});

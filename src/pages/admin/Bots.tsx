@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/premium/PageHeader";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Bot, ExternalLink, RefreshCw, CircleCheck, CircleAlert, PowerOff, CircleDashed,
-  Play, Square, RotateCw,
+  Play, Square, RotateCw, Timer, Save,
 } from "lucide-react";
 
 type BotEntry = {
@@ -209,6 +211,110 @@ export default function Bots() {
       <div key={tick} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {BOTS.map((b) => <BotCard key={b.key} bot={b} />)}
       </div>
+
+      <AutoPoolQuickPanel />
     </div>
+  );
+}
+
+/**
+ * Compact per-bot scrape-interval / TTL / cap editor for the hub.
+ * Heavier controls + run-now live on each bot's individual status page.
+ */
+function AutoPoolQuickPanel() {
+  const [bots, setBots] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, { enabled: boolean; interval_min: number; ttl_min: number; max_size: number }>>({});
+
+  const load = async () => {
+    try {
+      const r = await api.autopool.list();
+      setBots(r.bots || []);
+      const d: typeof drafts = {};
+      for (const b of r.bots || []) {
+        d[b.botId] = {
+          enabled: !!b.config?.enabled,
+          interval_min: b.config?.interval_min ?? 15,
+          ttl_min: b.config?.ttl_min ?? 360,
+          max_size: b.config?.max_size ?? 5000,
+        };
+      }
+      setDrafts(d);
+    } catch (e: any) {
+      toast.error(`Auto-pool load: ${e?.message || "error"}`);
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); const i = setInterval(load, 30_000); return () => clearInterval(i); }, []);
+
+  const save = async (botId: string) => {
+    setSavingId(botId);
+    try {
+      await api.autopool.save(botId, drafts[botId]);
+      toast.success(`${botId}: auto-pool saved`);
+      load();
+    } catch (e: any) {
+      toast.error(`${botId} save failed: ${e?.message || "error"}`);
+    } finally { setSavingId(null); }
+  };
+
+  return (
+    <Card className="border-white/[0.06]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Timer className="h-4 w-4 text-primary" /> Auto-pool quick edit
+        </CardTitle>
+        <div className="text-xs text-muted-foreground">
+          Enable a bot's scheduler and tune scrape interval / stale TTL / pool cap. Open the bot's page for run-now and live results.
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <CircleDashed className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : bots.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No bots registered.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wide text-muted-foreground border-b border-white/[0.06]">
+                  <th className="text-left py-2 pr-3">Bot</th>
+                  <th className="text-center px-2">On</th>
+                  <th className="text-center px-2">Interval (min)</th>
+                  <th className="text-center px-2">TTL (min)</th>
+                  <th className="text-center px-2">Max size</th>
+                  <th className="text-center px-2">Pool</th>
+                  <th className="text-right pl-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {bots.map((b) => {
+                  const d = drafts[b.botId] || { enabled: false, interval_min: 15, ttl_min: 360, max_size: 5000 };
+                  return (
+                    <tr key={b.botId} className="border-b border-white/[0.04] last:border-0">
+                      <td className="py-2 pr-3 font-medium">{b.label}</td>
+                      <td className="px-2 text-center">
+                        <Switch checked={d.enabled} onCheckedChange={(v) => setDrafts((s) => ({ ...s, [b.botId]: { ...d, enabled: !!v } }))} />
+                      </td>
+                      <td className="px-2"><Input type="number" className="h-8 w-20 mx-auto text-center" value={d.interval_min} onChange={(e) => setDrafts((s) => ({ ...s, [b.botId]: { ...d, interval_min: +e.target.value || 0 } }))} /></td>
+                      <td className="px-2"><Input type="number" className="h-8 w-20 mx-auto text-center" value={d.ttl_min} onChange={(e) => setDrafts((s) => ({ ...s, [b.botId]: { ...d, ttl_min: +e.target.value || 0 } }))} /></td>
+                      <td className="px-2"><Input type="number" className="h-8 w-24 mx-auto text-center" value={d.max_size} onChange={(e) => setDrafts((s) => ({ ...s, [b.botId]: { ...d, max_size: +e.target.value || 0 } }))} /></td>
+                      <td className="px-2 text-center font-semibold">{(b.pool ?? 0).toLocaleString()}</td>
+                      <td className="pl-2 text-right">
+                        <Button size="sm" variant="outline" disabled={savingId === b.botId} onClick={() => save(b.botId)}>
+                          {savingId === b.botId ? <CircleDashed className="h-3.5 w-3.5 animate-spin" /> : <><Save className="h-3.5 w-3.5 mr-1.5" />Save</>}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

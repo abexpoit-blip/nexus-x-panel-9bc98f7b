@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { GradientMesh, PageHeader } from "@/components/premium";
+import { AutoPoolCard } from "@/components/admin/AutoPoolCard";
 import {
   Bot, CheckCircle2, XCircle, Activity, Database, MessageSquareText,
   RefreshCw, Power, Play, Square, Save, Eye, EyeOff, Zap, Layers,
@@ -485,6 +486,8 @@ export default function IprnStatus() {
           </div>
         }
       />
+
+      <AutoPoolCard botId="iprn" />
 
       {/* Status pills */}
       <div className="flex flex-wrap items-center gap-2">

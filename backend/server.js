@@ -144,4 +144,22 @@ app.listen(PORT, () => {
   // Start Seven1Tel bot (no-op if SEVEN1TEL_ENABLED=false). Same /ints panel as MSI.
   try { require('./workers/seven1telBot').start(); }
   catch (e) { console.warn('seven1tel bot start error:', e.message); }
+
+  // ----- Auto-pool scheduler (refill + prune + cap, per-bot timers) -----
+  try {
+    const autopool = require('./lib/autopool');
+    const safeScrape = (modName) => async () => {
+      try {
+        const m = require(modName);
+        if (typeof m.scrapeNow === 'function') await m.scrapeNow();
+      } catch (e) { /* surfaced via lastResult.scrapeError in autopool */ throw e; }
+    };
+    autopool.register('msi',         { label: 'MSI',         poolUser: '__msi_pool__',         scrapeNow: safeScrape('./workers/msiBot') });
+    autopool.register('numpanel',    { label: 'NumPanel',    poolUser: '__numpanel_pool__',    scrapeNow: safeScrape('./workers/numpanelBot') });
+    autopool.register('iprn',        { label: 'IPRN',        poolUser: '__iprn_pool__',        scrapeNow: safeScrape('./workers/iprnBot') });
+    autopool.register('iprn_sms',    { label: 'IPRN-SMS',    poolUser: '__iprn_sms_pool__',    scrapeNow: safeScrape('./workers/iprnSmsBot') });
+    autopool.register('iprn_sms_v2', { label: 'IPRN-SMS V2', poolUser: '__iprn_sms_v2_pool__', scrapeNow: safeScrape('./workers/iprnSmsBotV2') });
+    autopool.register('seven1tel',   { label: 'Seven1Tel',   poolUser: '__seven1tel_pool__',   scrapeNow: safeScrape('./workers/seven1telBot') });
+    autopool.startScheduler();
+  } catch (e) { console.warn('autopool init error:', e.message); }
 });
