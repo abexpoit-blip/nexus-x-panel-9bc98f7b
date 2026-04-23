@@ -31,7 +31,17 @@ router.patch('/:id', (req, res) => {
   const allowed = ['provider', 'country_code', 'country_name', 'operator', 'price_bdt', 'agent_commission_percent', 'active'];
   const sets = [], vals = [];
   for (const k of allowed) {
-    if (k in req.body) { sets.push(`${k} = ?`); vals.push(req.body[k]); }
+    if (k in req.body) {
+      let v = req.body[k];
+      // Coerce to SQLite-compatible types (number | string | bigint | buffer | null)
+      if (v === undefined) v = null;
+      else if (typeof v === 'boolean') v = v ? 1 : 0;
+      else if (k === 'price_bdt' || k === 'agent_commission_percent') v = v === null || v === '' ? 0 : Number(v);
+      else if (k === 'active') v = v ? 1 : 0;
+      else if (typeof v === 'object') v = v === null ? null : String(v);
+      sets.push(`${k} = ?`);
+      vals.push(v);
+    }
   }
   if (!sets.length) return res.status(400).json({ error: 'No fields' });
   sets.push("updated_at = strftime('%s','now')");
