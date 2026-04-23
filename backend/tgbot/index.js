@@ -6,7 +6,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 const { Telegraf, Markup } = require('telegraf');
 const db = require('../lib/db');
 const { bestCountryCode, countryName: ccName, flagOf: ccFlag, COUNTRY_NAMES: CC_NAMES } = require('../lib/countryInfer');
-const { renderFlagHtml, getFlagEmoji, FLAG_EMOJI_IDS } = require('./flagEmojiMap');
+const { renderFlagHtml, getFlagEmoji, FLAG_EMOJI_IDS, loadFlagPack } = require('./flagEmojiMap');
 
 const TOKEN = process.env.TG_BOT_TOKEN;
 if (!TOKEN) {
@@ -1467,8 +1467,13 @@ async function feedForwardAllOtps() {
     const me = await bot.telegram.getMe();
     BOT_USERNAME = me.username || BOT_USERNAME;
     console.log(`✓ NEXUS X tgbot launching as @${me.username} (${me.id})`);
+    // Auto-load the public "FlagsByKoylli" custom emoji pack so EVERY country
+    // (200+) gets the premium animated flag without us hand-copying IDs.
+    // Override with env var TG_FLAG_PACK if you want a different pack.
+    const flagPack = process.env.TG_FLAG_PACK || 'FlagsByKoylli';
+    const added = await loadFlagPack(bot, flagPack);
     const mappedFlags = Object.keys(FLAG_EMOJI_IDS).length;
-    console.log(`✓ Country flag custom emoji: ${mappedFlags} mapped (premium look) · all others render as unicode flag fallback`);
+    console.log(`✓ Country flag custom emoji: ${mappedFlags} total (${added} auto-loaded from pack "${flagPack}") · unmapped countries render as unicode flag fallback`);
     bot.launch({ dropPendingUpdates: false });
 
     // ── Auto-resolve OTP feed channel chat_id ─────────────────────────
