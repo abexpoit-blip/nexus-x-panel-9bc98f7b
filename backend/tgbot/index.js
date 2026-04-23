@@ -217,19 +217,10 @@ function serviceCustomEmoji(svc) {
   return null;
 }
 
-// Telegram PREMIUM custom emoji IDs for country flags. IDs confirmed via forwarded
-// message dumps. For unknown flags we fall back to the unicode flag (always works).
-function flagCustomEmoji(cc) {
-  if (!cc) return null;
-  const code = String(cc).toUpperCase();
-  const CONFIRMED = {
-    TN: '5221991375016310330',
-    IQ: '5221980268230882832',
-    KE: '5222089648163009103',
-  };
-  if (CONFIRMED[code]) return { id: CONFIRMED[code], fallback: ccFlag(cc) };
-  return null;
-}
+// Country flag rendering — delegated to ./flagEmojiMap which holds the full
+// custom-emoji-id table for premium animated flags + automatic unicode fallback
+// for every ISO-3166 country code (so unmapped countries still get a flag).
+// Use `renderFlagHtml(cc)` to produce the ready-to-embed HTML snippet.
 
 // ---------- TG user ensure ----------
 function ensureTgUser(ctx) {
