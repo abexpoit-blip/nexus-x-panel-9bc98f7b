@@ -18,7 +18,10 @@ export interface User {
 export interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string, surface?: "agent" | "admin") => Promise<User | null>;
+  // Resolves with the user on success; rejects with an Error whose
+  // .message is the server-supplied reason (e.g. "Account suspended",
+  // "Account pending admin approval", "Invalid username or password").
+  login: (username: string, password: string, surface?: "agent" | "admin") => Promise<User>;
   logout: () => void;
   signupEnabled: boolean;
   setSignupEnabled: (enabled: boolean) => void;
