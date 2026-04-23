@@ -536,18 +536,30 @@ function todayStr() {
 //   phone_number = the CLI/sender name (e.g., "Facebook")
 function buildOtpEndpointCandidates() {
   const t = todayStr();
-  const qs =
+  // Probe-verified (2026-04-23) on shahriyaar account:
+  //   GET /api/helper/premium-number/stats/sms?currency=USD&date_from=...&date_to=...
+  //   → 200 application/json with {recordsTotal, aaData:[...]}
+  // The `.json` suffix + `currency_id=N` form returns 404 on this account,
+  // so the no-suffix + `currency=USD` variant is now PRIMARY.
+  const qsUsd =
+    `date_from=${encodeURIComponent(t + ' 00')}` +
+    `&date_to=${encodeURIComponent(t + ' 23')}` +
+    `&currency=USD` +
+    `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
+  const qsId =
     `date_from=${encodeURIComponent(t + ' 00')}` +
     `&date_to=${encodeURIComponent(t + ' 23')}` +
     `&currency_id=${OTP_CURRENCY_ID}` +
     `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   return [
-    // Primary — confirmed working endpoint (note the .json suffix!)
-    `/api/helper/premium-number/stats/${TYPE}.json?${qs}`,
-    // Fallbacks kept in case panel changes / different account roles
-    `/api/helper/premium-number/stats/${TYPE}?${qs}`,
-    `/api/helper/premium-number/stats-data/${TYPE}.json?${qs}`,
-    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qs}`,
+    // PRIMARY — probe-verified working on this account
+    `/api/helper/premium-number/stats/${TYPE}?${qsUsd}`,
+    // Fallbacks for other account roles / panel updates
+    `/api/helper/premium-number/stats/${TYPE}.json?${qsUsd}`,
+    `/api/helper/premium-number/stats/${TYPE}?${qsId}`,
+    `/api/helper/premium-number/stats/${TYPE}.json?${qsId}`,
+    `/api/helper/premium-number/stats-data/${TYPE}.json?${qsUsd}`,
+    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qsUsd}`,
   ];
 }
 
