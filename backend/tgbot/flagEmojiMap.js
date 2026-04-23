@@ -21,14 +21,66 @@
 
 'use strict';
 
-// Confirmed custom_emoji_id values, captured from the reference OTP feed channel.
-// Add more entries here as you forward more sample messages.
-const FLAG_EMOJI_IDS = Object.freeze({
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto-loaded flag IDs. The bot calls `loadFlagPack(bot, packName)` at startup
+// with a Telegram sticker-set name (e.g. "FlagsByKoylli"). Every sticker in the
+// pack has both a `custom_emoji_id` and an `emoji` field — we walk the unicode
+// flag glyph back to its ISO-3166 alpha-2 country code and store it here.
+//
+// Manual entries take precedence over auto-loaded IDs (so you can override or
+// pre-seed with confirmed IDs even before first launch).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Pre-seeded confirmed IDs from forwarded message dumps.
+const MANUAL_FLAG_IDS = {
   TN: '5221991375016310330', // Tunisia
   IQ: '5221980268230882832', // Iraq
   KE: '5222089648163009103', // Kenya
-  // ── add new IDs below this line ──
-});
+};
+
+// Mutable map populated at startup (manual + auto-loaded). Read with getFlagEmoji().
+const FLAG_EMOJI_IDS = { ...MANUAL_FLAG_IDS };
+
+// Convert a unicode flag glyph (e.g. 🇧🇩) back to its ISO-3166 alpha-2 code.
+// Returns null if the input is not a valid regional-indicator flag pair.
+function flagGlyphToCC(glyph) {
+  if (!glyph || typeof glyph !== 'string') return null;
+  const codepoints = Array.from(glyph).map((c) => c.codePointAt(0) || 0);
+  if (codepoints.length !== 2) return null;
+  const A = 0x1f1e6;
+  const Z = 0x1f1ff;
+  if (codepoints[0] < A || codepoints[0] > Z) return null;
+  if (codepoints[1] < A || codepoints[1] > Z) return null;
+  return String.fromCharCode(65 + (codepoints[0] - A), 65 + (codepoints[1] - A));
+}
+
+/**
+ * Load a Telegram custom-emoji sticker pack and register every flag in it.
+ * `bot` is a Telegraf instance (uses bot.telegram.getStickerSet under the hood).
+ * Returns the number of flag IDs registered.
+ */
+async function loadFlagPack(bot, packName) {
+  if (!bot || !packName) return 0;
+  try {
+    const set = await bot.telegram.getStickerSet(packName);
+    let added = 0;
+    for (const st of set.stickers || []) {
+      const id = st.custom_emoji_id || (st.thumbnail && st.thumbnail.file_id);
+      const cc = flagGlyphToCC(st.emoji);
+      if (!id || !cc) continue;
+      // Manual entries always win — they're confirmed by hand.
+      if (MANUAL_FLAG_IDS[cc]) continue;
+      if (!FLAG_EMOJI_IDS[cc]) {
+        FLAG_EMOJI_IDS[cc] = String(id);
+        added++;
+      }
+    }
+    return added;
+  } catch (e) {
+    console.warn(`[flagEmojiMap] failed to load pack "${packName}": ${e.message}`);
+    return 0;
+  }
+}
 
 // Convert an ISO-3166 alpha-2 country code into its unicode flag emoji
 // (regional-indicator pair). Always works in any Telegram client.
