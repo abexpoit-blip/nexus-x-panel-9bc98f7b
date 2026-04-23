@@ -48,13 +48,13 @@ const COUNTRY_NAMES: Record<string, string> = {
 const countryName = (cc?: string | null) => (cc && COUNTRY_NAMES[cc.toUpperCase()]) || cc || "Unknown";
 const serviceIcon = (s?: string | null) => {
   const x = (s || "").toLowerCase();
-  if (x.includes("facebook")) return "🟦";
-  if (x.includes("whatsapp")) return "🟢";
-  if (x.includes("telegram")) return "✈️";
-  if (x.includes("tiktok")) return "🎵";
-  if (x.includes("instagram")) return "📷";
-  if (x.includes("google")) return "🔍";
-  return "📡";
+  if (x.includes("facebook"))  return "[FB]";
+  if (x.includes("whatsapp"))  return "[WA]";
+  if (x.includes("telegram"))  return "[TG]";
+  if (x.includes("tiktok"))    return "[TT]";
+  if (x.includes("instagram")) return "[IG]";
+  if (x.includes("google"))    return "[GG]";
+  return "[SMS]";
 };
 
 export default function TgBot() {
@@ -349,13 +349,13 @@ function RangesTab() {
                       className="bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-xs"
                     >
                       <option value="">—</option>
-                      <option value="facebook">🟦 Facebook</option>
-                      <option value="whatsapp">🟢 WhatsApp</option>
-                      <option value="telegram">✈️ Telegram</option>
-                      <option value="tiktok">🎵 TikTok</option>
-                      <option value="instagram">📷 Instagram</option>
-                      <option value="google">🔍 Google</option>
-                      <option value="other">📡 Other</option>
+                      <option value="facebook">[FB] Facebook</option>
+                      <option value="whatsapp">[WA] WhatsApp</option>
+                      <option value="telegram">[TG] Telegram</option>
+                      <option value="tiktok">[TT] TikTok</option>
+                      <option value="instagram">[IG] Instagram</option>
+                      <option value="google">[GG] Google</option>
+                      <option value="other">[SMS] Other</option>
                     </select>
                   </td>
                   <td className="py-2.5 px-4 text-right">
