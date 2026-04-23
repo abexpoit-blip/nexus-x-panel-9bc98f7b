@@ -549,6 +549,9 @@ bot.hears('🏆 Leaderboard', async (ctx) => {
 
 bot.hears('💰 Wallet', async (ctx) => {
   const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
+  if (!isBillingEnabled()) {
+    return ctx.replyWithHTML('🎁 <b>Wallet disabled</b> — bot is currently in FREE mode. Enjoy unlimited OTPs!');
+  }
   await showWallet(ctx);
 });
 
