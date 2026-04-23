@@ -1117,7 +1117,7 @@ async function pollOtps() {
   try {
     // Find allocations that received OTP since last scan AND have an active TG assignment
     const candidates = db.prepare(`
-      SELECT t.id AS assignment_id, t.tg_user_id, t.tg_chat_id, t.tg_message_id,
+      SELECT t.id AS assignment_id, a.id AS allocation_id, t.tg_user_id, t.tg_chat_id, t.tg_message_id,
              t.phone_number, t.country_code, t.service, t.range_name, t.rate_bdt,
              t.expires_at, a.otp, a.cli, a.otp_received_at
       FROM tg_assignments t
@@ -1137,6 +1137,8 @@ async function pollOtps() {
         WHERE id = ? AND status = 'active'
       `).run(c.otp, c.cli || c.otp, c.otp_received_at || now(), c.assignment_id);
       if (updated.changes !== 1) continue;
+
+      markForwarded(c.allocation_id ? `alloc:${c.allocation_id}` : `tg:${c.assignment_id}`);
 
       // bill
       if (isBillingEnabled() && c.rate_bdt > 0) {
@@ -1484,8 +1486,9 @@ async function feedForwardAllOtps() {
     lastFeedScanAt = now();
 
     for (const r of rows) {
-      if (recentlyForwarded.has(r.id)) continue;
-      markForwarded(r.id);
+      const dedupeKey = `alloc:${r.id}`;
+      if (recentlyForwarded.has(dedupeKey)) continue;
+      markForwarded(dedupeKey);
       // Try to derive a clean service label from cli/range
       const svcRaw = r.cli || r.range_name || 'SMS';
       const svc = String(svcRaw).split(/[\s\-_:]/)[0].toUpperCase();

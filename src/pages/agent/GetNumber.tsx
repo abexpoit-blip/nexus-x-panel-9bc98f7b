@@ -102,6 +102,7 @@ const AgentGetNumber = () => {
   const [rangeOpen, setRangeOpen] = useState(false);
   const rangeRef = useRef<HTMLDivElement>(null);
   const [numbers, setNumbers] = useState<AllocatedNumber[]>([]);
+  const numbersRef = useRef<AllocatedNumber[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [copiedOtpId, setCopiedOtpId] = useState<number | null>(null);
@@ -313,6 +314,10 @@ const AgentGetNumber = () => {
   useEffect(() => {
     api.myNumbers().then(({ numbers }) => setNumbers(numbers as AllocatedNumber[])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    numbersRef.current = numbers;
+  }, [numbers]);
 
   // Reload countries OR ranges whenever the agent switches Server A / B
   useEffect(() => {
@@ -572,22 +577,21 @@ const AgentGetNumber = () => {
     }
   };
 
-  // Poll OTP sync every 5s while there are pending numbers.
-  // When a poll reveals NEW OTPs (numbers that previously had no OTP but now do),
-  // we flash their rows green for 8s + toast which number got it. This makes it
-  // dead-obvious which row in a 100-number list just received its code.
+  // Lightweight refresh while numbers are pending. We DO NOT trigger /numbers/sync
+  // on every tick anymore because that caused extra provider hits, duplicate race
+  // windows with background workers, and unnecessary UI lag under load.
   useEffect(() => {
     const pending = numbers.filter((n) => !n.otp).length;
     if (pending === 0) return;
     const interval = setInterval(async () => {
+      if (document.hidden) return;
       try {
-        await api.syncOtp();
         const { numbers: fresh, otp_expiry_sec, server_now } = await api.myNumbers();
         const freshList = fresh as AllocatedNumber[];
         if (otp_expiry_sec && otp_expiry_sec > 0) setExpirySec(otp_expiry_sec);
         if (server_now && server_now > 0) setServerDriftSec(Math.floor(Date.now() / 1000) - server_now);
         // Diff: which previously-pending IDs now have an OTP?
-        const prevPendingIds = new Set(numbers.filter((n) => !n.otp).map((n) => n.id));
+        const prevPendingIds = new Set(numbersRef.current.filter((n) => !n.otp).map((n) => n.id));
         const newlyReceived = freshList.filter((n) => n.otp && prevPendingIds.has(n.id));
         if (newlyReceived.length > 0) {
           setFlashOtpIds((prev) => {
@@ -622,7 +626,7 @@ const AgentGetNumber = () => {
         }
         setNumbers(freshList);
       } catch { /* ignore */ }
-    }, 5000);
+    }, 8000);
     return () => clearInterval(interval);
   }, [numbers]);
 

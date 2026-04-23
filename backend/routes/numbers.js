@@ -648,13 +648,24 @@ async function markOtpReceived(allocation, otpCode, cli = null, auditMeta = null
     operator: allocation.operator,
   });
 
+  const existing = db.prepare(`
+    SELECT id, otp, status FROM allocations WHERE id = ? LIMIT 1
+  `).get(allocation.id);
+  if (!existing) return false;
+  if (existing.status === 'received' && String(existing.otp || '') === String(otpCode || '')) {
+    return false;
+  }
+
+  let applied = false;
   const tx = db.transaction(() => {
     // Update allocation (preserve existing cli if a new one isn't provided)
-    db.prepare(`
+    const update = db.prepare(`
       UPDATE allocations SET otp = ?, cli = COALESCE(?, cli),
              status = 'received', otp_received_at = strftime('%s','now')
-      WHERE id = ?
+       WHERE id = ? AND status = 'active' AND (otp IS NULL OR otp = '')
     `).run(otpCode, cli || null, allocation.id);
+    if (update.changes !== 1) return;
+    applied = true;
 
     // Insert CDR (with CLI tag for service identification)
     db.prepare(`
@@ -701,6 +712,7 @@ async function markOtpReceived(allocation, otpCode, cli = null, auditMeta = null
     `).run(allocation.user_id, 'OTP received', notifMsg);
   });
   tx();
+  if (!applied) return false;
 
   // Best-effort audit row — agent-visible "credited" event so they can see
   // the full lifecycle of their OTP (scrape → match → credit).
@@ -720,6 +732,7 @@ async function markOtpReceived(allocation, otpCode, cli = null, auditMeta = null
         : `OTP received (no commission)${cli ? ` · ${cli}` : ''}`,
     });
   } catch (_) { /* never break delivery */ }
+  return true;
 }
 
 // ============================================================
