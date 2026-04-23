@@ -534,32 +534,32 @@ function todayStr() {
 // IMPORTANT: panel field naming is confusing —
 //   short_code   = the actual phone number we sold to the agent
 //   phone_number = the CLI/sender name (e.g., "Facebook")
-function buildOtpEndpointCandidates() {
+// Currency_id mapping observed on panel.iprn-sms.com:
+//   1 = EUR, 2 = USD, 3 = GBP
+const CURRENCY_ID_BY_CODE = { EUR: 1, USD: 2, GBP: 3 };
+const OTP_CURRENCIES = ['USD', 'EUR']; // user wants BOTH scraped each cycle
+
+function buildOtpEndpointCandidates(currency) {
   const t = todayStr();
-  // Probe-verified (2026-04-23) on shahriyaar account:
-  //   GET /api/helper/premium-number/stats/sms?currency=USD&date_from=...&date_to=...
-  //   → 200 application/json with {recordsTotal, aaData:[...]}
-  // The `.json` suffix + `currency_id=N` form returns 404 on this account,
-  // so the no-suffix + `currency=USD` variant is now PRIMARY.
-  const qsUsd =
+  const cur = String(currency || 'USD').toUpperCase();
+  const cid = CURRENCY_ID_BY_CODE[cur] || 2;
+  const qsCode =
     `date_from=${encodeURIComponent(t + ' 00')}` +
     `&date_to=${encodeURIComponent(t + ' 23')}` +
-    `&currency=USD` +
+    `&currency=${cur}` +
     `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   const qsId =
     `date_from=${encodeURIComponent(t + ' 00')}` +
     `&date_to=${encodeURIComponent(t + ' 23')}` +
-    `&currency_id=${OTP_CURRENCY_ID}` +
+    `&currency_id=${cid}` +
     `&draw=1&start=0&length=200&search%5Bvalue%5D=&search%5Bregex%5D=false`;
   return [
-    // PRIMARY — probe-verified working on this account
-    `/api/helper/premium-number/stats/${TYPE}?${qsUsd}`,
-    // Fallbacks for other account roles / panel updates
-    `/api/helper/premium-number/stats/${TYPE}.json?${qsUsd}`,
+    `/api/helper/premium-number/stats/${TYPE}?${qsCode}`,
+    `/api/helper/premium-number/stats/${TYPE}.json?${qsCode}`,
     `/api/helper/premium-number/stats/${TYPE}?${qsId}`,
     `/api/helper/premium-number/stats/${TYPE}.json?${qsId}`,
-    `/api/helper/premium-number/stats-data/${TYPE}.json?${qsUsd}`,
-    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qsUsd}`,
+    `/api/helper/premium-number/stats-data/${TYPE}.json?${qsCode}`,
+    `/api/helper/premium-number/sms-stats/${TYPE}.json?${qsCode}`,
   ];
 }
 
@@ -682,11 +682,25 @@ function findActiveAllocationByScrapedPhone(scrapedPhone) {
 
 async function scrapeOtps() {
   await ensureLoggedIn();
+  if (!status.otpEndpoints) status.otpEndpoints = {};
+  let total = 0;
+  for (const cur of OTP_CURRENCIES) {
+    try {
+      total += await scrapeOtpsForCurrency(cur);
+    } catch (e) {
+      if (/Session expired/.test(e.message)) throw e;
+      dwarn(`[iprn_sms-bot] ${cur} scrape failed:`, e.message);
+    }
+  }
+  return total;
+}
 
-  // Try the cached endpoint first; if missing or it stops working, probe candidates.
-  const tryList = status.otpEndpoint
-    ? [status.otpEndpoint, ...buildOtpEndpointCandidates().filter((u) => u !== status.otpEndpoint)]
-    : buildOtpEndpointCandidates();
+async function scrapeOtpsForCurrency(currency) {
+  // Try the cached per-currency endpoint first; if missing or it stops working, probe candidates.
+  const cached = status.otpEndpoints && status.otpEndpoints[currency];
+  const tryList = cached
+    ? [cached, ...buildOtpEndpointCandidates(currency).filter((u) => u !== cached)]
+    : buildOtpEndpointCandidates(currency);
 
   let result = null;
   let workingUrl = null;
@@ -703,13 +717,14 @@ async function scrapeOtps() {
   status.lastOtpScrapeAt = Math.floor(Date.now() / 1000);
   if (!result) {
     status.lastOtpScrapeOk = false;
-    throw new Error(`No working OTP stats endpoint (tried ${tryList.length}). Run scripts/iprn-sms-stats-probe.js`);
+    throw new Error(`No working OTP stats endpoint for ${currency} (tried ${tryList.length}). Run scripts/iprn-sms-stats-probe.js`);
   }
   status.lastOtpScrapeOk = true;
-  if (status.otpEndpoint !== workingUrl) {
-    status.otpEndpoint = workingUrl;
-    console.log(`[iprn_sms-bot] OTP endpoint resolved: ${workingUrl}`);
-    logEvent('success', `OTP endpoint resolved: ${workingUrl}`);
+  if (status.otpEndpoints[currency] !== workingUrl) {
+    status.otpEndpoints[currency] = workingUrl;
+    status.otpEndpoint = workingUrl; // back-compat for status UI
+    console.log(`[iprn_sms-bot] OTP endpoint resolved (${currency}): ${workingUrl}`);
+    logEvent('success', `OTP endpoint resolved (${currency}): ${workingUrl}`);
   }
 
   let delivered = 0;
@@ -732,14 +747,14 @@ async function scrapeOtps() {
         phone_number: row.phone,
         otp_code: otp,
         endpoint: workingUrl,
-        currency: OTP_CURRENCY,
+        currency,
         detail: `Saw OTP for ${row.phone} but no active allocation (${phoneVariants(row.phone).join(' / ')})`,
       });
       continue;
     }
 
     try {
-      await markOtpReceived(a, otp, row.cli, { endpoint: workingUrl, currency: OTP_CURRENCY });
+      await markOtpReceived(a, otp, row.cli, { endpoint: workingUrl, currency });
       logOtpEvent({
         provider: 'iprn_sms',
         event: 'matched',
@@ -748,7 +763,7 @@ async function scrapeOtps() {
         phone_number: row.phone,
         otp_code: otp,
         endpoint: workingUrl,
-        currency: OTP_CURRENCY,
+        currency,
         detail: [
           row.cli ? `Matched (${row.cli})` : 'Matched',
           a.phone_number && a.phone_number !== row.phone ? `stored=${a.phone_number}` : null,
@@ -763,7 +778,7 @@ async function scrapeOtps() {
       logOtpEvent({
         provider: 'iprn_sms', event: 'scrape_fail',
         phone_number: row.phone, otp_code: otp,
-        endpoint: workingUrl, currency: OTP_CURRENCY,
+        endpoint: workingUrl, currency,
         detail: `markOtpReceived error: ${e.message}`,
       });
     }
@@ -773,7 +788,7 @@ async function scrapeOtps() {
   logOtpEvent({
     provider: 'iprn_sms', event: 'scrape_ok',
     rows_seen: result.rows.length, matches_found: delivered,
-    endpoint: workingUrl, currency: OTP_CURRENCY,
+    endpoint: workingUrl, currency,
     detail: `Polled ${result.rows.length} rows · ${delivered} matched`,
   });
   trimIfDue();
