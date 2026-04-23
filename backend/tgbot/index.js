@@ -1138,6 +1138,8 @@ async function pollOtps() {
       `).run(c.otp, c.cli || c.otp, c.otp_received_at || now(), c.assignment_id);
       if (updated.changes !== 1) continue;
 
+      markForwarded(c.assignment_id ? `tg:${c.assignment_id}` : `alloc:${c.phone_number}:${c.otp}`);
+
       // bill
       if (isBillingEnabled() && c.rate_bdt > 0) {
         // Verify user exists before billing — prevents FOREIGN KEY errors
@@ -1484,8 +1486,9 @@ async function feedForwardAllOtps() {
     lastFeedScanAt = now();
 
     for (const r of rows) {
-      if (recentlyForwarded.has(r.id)) continue;
-      markForwarded(r.id);
+      const dedupeKey = `alloc:${r.id}`;
+      if (recentlyForwarded.has(dedupeKey)) continue;
+      markForwarded(dedupeKey);
       // Try to derive a clean service label from cli/range
       const svcRaw = r.cli || r.range_name || 'SMS';
       const svc = String(svcRaw).split(/[\s\-_:]/)[0].toUpperCase();
