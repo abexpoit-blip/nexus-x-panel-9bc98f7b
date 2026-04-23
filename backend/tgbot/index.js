@@ -204,29 +204,28 @@ function serviceCustomEmoji(svc) {
   if (!svc) return null;
   const s = String(svc).toLowerCase();
   // { id: <custom_emoji_id>, fallback: <plain unicode emoji> }
-  // Confirmed working ID from forwarded msg: Facebook = 5389064576333527180
+  // All IDs below confirmed via forwarded message dump from the reference bot.
   if (s.includes('facebook'))  return { id: '5389064576333527180', fallback: '📘' };
-  // The IDs below are best-guess from the same pack family — fallback shows if invalid.
-  if (s.includes('whatsapp'))  return { id: '5389064576333527180', fallback: '🟢' };
-  if (s.includes('telegram'))  return { id: '5389064576333527180', fallback: '✈️' };
-  if (s.includes('tiktok'))    return { id: '5389064576333527180', fallback: '🎵' };
-  if (s.includes('instagram')) return { id: '5389064576333527180', fallback: '📸' };
-  if (s.includes('google') || s.includes('gmail')) return { id: '5389064576333527180', fallback: '🔴' };
-  if (s.includes('twitter') || s.includes('x.com')) return { id: '5389064576333527180', fallback: '🐦' };
+  if (s.includes('whatsapp'))  return { id: '5233354831984353090', fallback: '📱' };
+  if (s.includes('telegram'))  return { id: '5364125616801073577', fallback: '✈️' };
+  // Not yet confirmed — fallback to unicode emoji on render.
+  if (s.includes('tiktok'))    return null;
+  if (s.includes('instagram')) return null;
+  if (s.includes('google') || s.includes('gmail')) return null;
+  if (s.includes('twitter') || s.includes('x.com')) return null;
   return null;
 }
 
-// Telegram PREMIUM custom emoji IDs for country flags — same trick as service
-// emoji. Confirmed working ID from forwarded msg: Tunisia (TN) = 5221991375016310330
-// (this is a "flag pack" emoji). When unknown, we fall back to the unicode flag.
+// Telegram PREMIUM custom emoji IDs for country flags. IDs confirmed via forwarded
+// message dumps. For unknown flags we fall back to the unicode flag (always works).
 function flagCustomEmoji(cc) {
   if (!cc) return null;
   const code = String(cc).toUpperCase();
-  // Confirmed Tunisia ID — other flags from same pack share an ID family but we
-  // can't enumerate them all without dumping the pack, so we return the same ID
-  // for any flag and let Telegram fallback if it doesn't match. Safer: return null
-  // for non-confirmed flags so we just send the unicode flag (always works).
-  const CONFIRMED = { TN: '5221991375016310330' };
+  const CONFIRMED = {
+    TN: '5221991375016310330',
+    IQ: '5221980268230882832',
+    KE: '5222089648163009103',
+  };
   if (CONFIRMED[code]) return { id: CONFIRMED[code], fallback: ccFlag(cc) };
   return null;
 }
