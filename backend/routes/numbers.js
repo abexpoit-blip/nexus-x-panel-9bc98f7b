@@ -93,7 +93,8 @@ router.get('/msi/ranges', authRequired, async (req, res) => {
 router.get('/all/ranges', authRequired, async (req, res) => {
   const POOL_LABELS = {
     ims: 'Server B', msi: 'Server C', numpanel: 'Server D',
-    iprn: 'Server E', iprn_sms: 'Server F',
+    iprn: 'Server E', iprn_sms: 'Server F', iprn_sms_v2: 'Server F2',
+    seven1tel: 'Server G',
   };
   try {
     const out = [];
