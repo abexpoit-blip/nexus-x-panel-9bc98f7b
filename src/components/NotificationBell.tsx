@@ -65,8 +65,12 @@ export const NotificationBell = () => {
     queryKey: ["nav-notifications", user?.id],
     queryFn: () => api.notifications.list(),
     enabled: !!user,
-    refetchInterval: 5000,
-    staleTime: 3000,
+    // Poll less aggressively, and pause entirely when the tab is in the
+    // background. Fixes the laggy/stuck feeling caused by 5s polling +
+    // global rerender of the bell on every cycle.
+    refetchInterval: (q) => (document.hidden ? false : 15000),
+    refetchIntervalInBackground: false,
+    staleTime: 10_000,
   });
 
   const unread = data?.unread ?? 0;

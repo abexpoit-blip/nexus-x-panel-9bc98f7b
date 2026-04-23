@@ -16,15 +16,34 @@ export const ParticleCanvas = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
+    // Respect user motion preferences — render a single static frame and stop.
+    const reducedMotion = typeof window !== "undefined"
+      && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    // Scale particle count by viewport area + device pixel ratio so weak
+    // devices / small screens don't churn through O(n²) link calculations.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const area = window.innerWidth * window.innerHeight;
+    const PARTICLE_COUNT = Math.max(18, Math.min(36, Math.round(area / 38000)));
+    const LINK_DIST = 140;
+    const LINK_DIST_SQ = LINK_DIST * LINK_DIST;
+    const TARGET_FPS = 30;            // 30fps is plenty for ambient bg
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
     let animId: number;
+    let lastFrame = 0;
+    let visible = true;
     let particles: Particle[] = [];
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
     window.addEventListener("resize", resize);
@@ -37,10 +56,12 @@ export const ParticleCanvas = () => {
     ];
 
     // Initialize particles
-    for (let i = 0; i < 60; i++) {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
       particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+        x: Math.random() * W,
+        y: Math.random() * H,
         vx: (Math.random() - 0.5) * 0.4,
         vy: (Math.random() - 0.5) * 0.4,
         size: Math.random() * 2 + 0.5,
@@ -49,56 +70,66 @@ export const ParticleCanvas = () => {
       });
     }
 
-    const drawLine = (p1: Particle, p2: Particle, dist: number) => {
-      const opacity = (1 - dist / 180) * 0.15;
-      ctx.beginPath();
-      ctx.strokeStyle = `hsla(185, 100%, 50%, ${opacity})`;
-      ctx.lineWidth = 0.5;
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    };
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const renderFrame = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      ctx.clearRect(0, 0, w, h);
 
       particles.forEach((p) => {
         p.x += p.vx;
         p.y += p.vy;
 
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
 
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fillStyle = `hsla(${p.color}, ${p.opacity})`;
         ctx.fill();
-
-        // Glow effect
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.color}, ${p.opacity * 0.15})`;
-        ctx.fill();
       });
 
-      // Connection lines
+      // Connection lines — single stroke style, squared-distance check (no sqrt),
+      // batch into one beginPath/stroke call.
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = "hsla(185, 100%, 50%, 0.08)";
+      ctx.beginPath();
       for (let i = 0; i < particles.length; i++) {
+        const a = particles[i];
         for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 180) drawLine(particles[i], particles[j], dist);
+          const b = particles[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < LINK_DIST_SQ) {
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+          }
         }
       }
-
-      animId = requestAnimationFrame(animate);
+      ctx.stroke();
     };
 
-    animate();
+    const animate = (ts: number) => {
+      animId = requestAnimationFrame(animate);
+      if (!visible) return;
+      if (ts - lastFrame < FRAME_INTERVAL) return;
+      lastFrame = ts;
+      renderFrame();
+    };
+
+    if (reducedMotion) {
+      renderFrame(); // single static frame
+    } else {
+      animId = requestAnimationFrame(animate);
+    }
+
+    const onVisibility = () => { visible = !document.hidden; };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
