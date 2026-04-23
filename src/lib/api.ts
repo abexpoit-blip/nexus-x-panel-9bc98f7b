@@ -1029,6 +1029,7 @@ export const api = {
       tg_required_otp_group: string;
       tg_required_otp_group_chat: string;
       tg_terms_text: string;
+      tg_billing_enabled: string;
     }>("/admin/tgbot/config"),
     saveConfig: (body: {
       tg_public_channel?: string;
@@ -1037,6 +1038,7 @@ export const api = {
       tg_required_otp_group?: string;
       tg_required_otp_group_chat?: string;
       tg_terms_text?: string;
+      tg_billing_enabled?: string;
     }) => request<{ ok: boolean }>("/admin/tgbot/config", {
       method: "PUT", body: JSON.stringify(body),
     }),
