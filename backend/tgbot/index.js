@@ -560,7 +560,7 @@ async function showCountries(ctx) {
     )];
   });
   await ctx.replyWithHTML(
-    `<b>🌍 Available Countries</b>\nIcons show available services: 🟦 Facebook · 🟢 WhatsApp · ✈️ Telegram · 🎵 TikTok · 📷 Instagram · 🔍 Google · 📡 Other`,
+    `<b>🌍 Available Countries</b>\nTags show available services: <b>FB</b>=Facebook · <b>WA</b>=WhatsApp · <b>TG</b>=Telegram · <b>TT</b>=TikTok · <b>IG</b>=Instagram · <b>GG</b>=Google · <b>SMS</b>=Other`,
     Markup.inlineKeyboard(buttons)
   );
 }
