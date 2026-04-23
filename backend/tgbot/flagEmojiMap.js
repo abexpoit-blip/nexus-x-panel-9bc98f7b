@@ -53,7 +53,9 @@ async function loadIconPack(bot, packName) {
   if (!bot || !packName) return 0;
   try {
     const set = await bot.telegram.getStickerSet(packName);
+    console.log(`[flagEmojiMap] icon pack "${packName}" → type=${set.sticker_type || 'n/a'} stickers=${(set.stickers || []).length}`);
     let added = 0;
+    const sample = [];
     for (const st of set.stickers || []) {
       const id = st.custom_emoji_id;
       const glyph = st.emoji;
@@ -62,8 +64,10 @@ async function loadIconPack(bot, packName) {
       if (!ICON_EMOJI_IDS[glyph]) {
         ICON_EMOJI_IDS[glyph] = String(id);
         added++;
+        if (sample.length < 8) sample.push(`${glyph}=${id}`);
       }
     }
+    if (sample.length) console.log(`[flagEmojiMap] icon pack sample: ${sample.join(' ')}`);
     return added;
   } catch (e) {
     console.warn(`[flagEmojiMap] failed to load icon pack "${packName}": ${e.message}`);
@@ -100,6 +104,7 @@ async function loadFlagPack(bot, packName) {
   if (!bot || !packName) return 0;
   try {
     const set = await bot.telegram.getStickerSet(packName);
+    console.log(`[flagEmojiMap] flag pack "${packName}" → type=${set.sticker_type || 'n/a'} stickers=${(set.stickers || []).length}`);
     let added = 0;
     for (const st of set.stickers || []) {
       const id = st.custom_emoji_id || (st.thumbnail && st.thumbnail.file_id);
