@@ -754,7 +754,7 @@ async function scrapeOtpsForCurrency(currency) {
     }
 
     try {
-      await markOtpReceived(a, otp, row.cli, { endpoint: workingUrl, currency: OTP_CURRENCY });
+      await markOtpReceived(a, otp, row.cli, { endpoint: workingUrl, currency });
       logOtpEvent({
         provider: 'iprn_sms',
         event: 'matched',
