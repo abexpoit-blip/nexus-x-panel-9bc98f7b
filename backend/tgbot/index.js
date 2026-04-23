@@ -6,6 +6,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 const { Telegraf, Markup } = require('telegraf');
 const db = require('../lib/db');
 const { bestCountryCode, countryName: ccName, flagOf: ccFlag, COUNTRY_NAMES: CC_NAMES } = require('../lib/countryInfer');
+const { renderFlagHtml, getFlagEmoji, FLAG_EMOJI_IDS } = require('./flagEmojiMap');
 
 const TOKEN = process.env.TG_BOT_TOKEN;
 if (!TOKEN) {
