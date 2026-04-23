@@ -607,9 +607,12 @@ bot.action(/^country:(\w+)$/, async (ctx) => {
       const x = String(s || '').replace(/\s+/g, ' ').trim();
       return x.length > n ? x.slice(0, n - 1) + '…' : x;
     };
+    const billingOn = isBillingEnabled();
     const buttons = ranges.map((r, i) => [
       Markup.button.callback(
-        `${serviceIcon(r.service)} ${trim(r.range_name, 26)} · ${r.cnt} · ${fmtBdt(r.tg_rate_bdt)}`,
+        billingOn
+          ? `${serviceIcon(r.service)} ${trim(r.range_name, 26)} · ${r.cnt} · ${fmtBdt(r.tg_rate_bdt)}`
+          : `${serviceIcon(r.service)} ${trim(r.range_name, 30)} · ${r.cnt} · FREE`,
         `pick:${cc}:${i}`
       ),
     ]);
