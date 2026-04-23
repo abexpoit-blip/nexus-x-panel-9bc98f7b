@@ -1035,18 +1035,43 @@ async function postPublicOtp(c) {
   // Line 2: full OTP wrapped in spoiler (<tg-spoiler>) so users tap to reveal
   // Inline keyboard: single "‼️ Bot" button — no Support button.
   const cc = (c.country_code || '').toUpperCase();
-  // Render flag as premium custom emoji when ID is mapped, else unicode flag.
-  const flagBrand = renderFlagHtml(cc);
   const svcRaw = c.service || c.range_name || 'SMS';
   const svcLabel = String(svcRaw).replace(/[_\-]+/g, ' ').trim();
   const svcTag = serviceIcon(svcRaw);
-  const svcEmoji = serviceEmoji(svcRaw);
-  const svcCustom = serviceCustomEmoji(svcRaw);
-  // Render brand emoji as a Telegram custom (premium) emoji when available — falls
-  // back to a plain unicode emoji on non-premium clients automatically.
-  const svcBrand = svcCustom
-    ? `<tg-emoji emoji-id="${svcCustom.id}">${svcCustom.fallback}</tg-emoji>`
-    : svcEmoji;
+  const svcEmoji = serviceEmoji(svcRaw) || '✉️';
+
+  // ── Guaranteed-fallback emoji renderer ────────────────────────────────
+  // Wraps in <tg-emoji> ONLY when we have BOTH a non-empty id AND a non-empty
+  // unicode fallback glyph. If anything is missing/broken we emit the plain
+  // unicode emoji so the message body always shows SOMETHING, even when the
+  // sticker pack failed to load or returned malformed IDs.
+  const safeCustom = (id, fallback) => {
+    const fb = String(fallback || '').trim();
+    if (!fb) return ''; // truly nothing to show
+    const cleanId = String(id || '').trim();
+    if (!cleanId || !/^\d+$/.test(cleanId)) return fb; // bad id → unicode only
+    return `<tg-emoji emoji-id="${cleanId}">${fb}</tg-emoji>`;
+  };
+
+  // Flag — try premium ID, but ALWAYS fall through to unicode regional flag
+  // (and 🏳️ as last-resort) so the line never starts with empty space.
+  let flagBrand;
+  try {
+    const f = getFlagEmoji(cc);
+    flagBrand = safeCustom(f.id, f.fallback) || f.fallback || '🏳️';
+  } catch {
+    flagBrand = '🏳️';
+  }
+
+  // Service brand emoji — same guarantee, falls back to ✉️ if everything fails.
+  let svcBrand;
+  try {
+    const sc = serviceCustomEmoji(svcRaw);
+    svcBrand = sc ? safeCustom(sc.id, sc.fallback || svcEmoji) : svcEmoji;
+    if (!svcBrand) svcBrand = svcEmoji || '✉️';
+  } catch {
+    svcBrand = svcEmoji || '✉️';
+  }
   const maskedNumber = maskLast4(c.phone_number);
   const otpFull = String(c.otp || '').trim();
 
