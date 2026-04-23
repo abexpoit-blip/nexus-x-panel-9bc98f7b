@@ -472,10 +472,14 @@ async function scrapeNumbers() {
     return 0;
   }
 
-  // Skip phones already in pool/claiming/active
+  // Skip phones already known to us — IMPORTANT: panel.iprn-sms.com does NOT
+  // remove sold numbers from its ZIP feed, so without this check we'd
+  // re-import every number we've ever used on every pool sync. We must
+  // dedup against EVERY status (pool/claiming/active/received/released/
+  // expired/...) so a used number can never be sold to another agent.
   const existing = db.prepare(`
-    SELECT phone_number FROM allocations
-    WHERE provider='iprn_sms' AND status IN ('pool','claiming','active')
+    SELECT DISTINCT phone_number FROM allocations
+    WHERE provider='iprn_sms'
   `).all().reduce((s, r) => s.add(r.phone_number), new Set());
 
   const sysUser = ensurePoolUser();
