@@ -4,6 +4,7 @@ import { DEMO_USERS, demoData } from "./demoData";
 const BASE = (import.meta.env.VITE_API_URL as string) || "https://api.nexus-x.site/api";
 const TOKEN_KEY = "nexus_token";
 const DEMO_KEY = "nexus_demo_mode";
+const REQUEST_TIMEOUT_MS = Math.max(5000, +(import.meta.env.VITE_API_TIMEOUT_MS || 15000));
 
 export const tokenStore = {
   get: () => localStorage.getItem(TOKEN_KEY),
@@ -107,21 +108,34 @@ async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T
     token = null;
   }
 
-  const res = await fetch(`${BASE}${path}`, {
-    ...opts,
-    credentials: "include",                    // ← send/receive httpOnly cookie
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = (data as { error?: string }).error || `Request failed: ${res.status}`;
-    throw new ApiError(msg, res.status, data);
+  const controller = new AbortController();
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...opts,
+      credentials: "include",                    // ← send/receive httpOnly cookie
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = (data as { error?: string }).error || `Request failed: ${res.status}`;
+      throw new ApiError(msg, res.status, data);
+    }
+    return data as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError("Server took too long to respond. Please try again.", 504, { error: "Request timeout" });
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeoutId);
   }
-  return data as T;
 }
 
 /** Map an API path to a demo response. Returns undefined if no demo handler. */
