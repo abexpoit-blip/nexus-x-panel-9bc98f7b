@@ -557,23 +557,37 @@ async function showCountries(ctx) {
 }
 
 bot.action(/^country:(\w+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
+  try { await ctx.answerCbQuery(); } catch {}
   const cc = ctx.match[1];
-  const ranges = listRangesForCountry(cc);
-  if (ranges.length === 0) {
-    return ctx.editMessageText(`😕 No ranges available for ${countryName(cc)} right now.`);
+  try {
+    const ranges = listRangesForCountry(cc);
+    if (ranges.length === 0) {
+      try { await ctx.editMessageText(`😕 No ranges available for ${countryName(cc)} right now.`); }
+      catch { await ctx.replyWithHTML(`😕 No ranges available for ${countryName(cc)} right now.`); }
+      return;
+    }
+    // Telegram callback_data has a 64-byte limit. Range names can be long
+    // ("Pakistan Pakistan-Cn-01 …") → encode by index instead of name.
+    const buttons = ranges.map((r, i) => [
+      Markup.button.callback(
+        `${flagOf(cc)} ${serviceIcon(r.service)} ${r.range_name} — ${r.cnt} • ${fmtBdt(r.tg_rate_bdt)}`,
+        `pick:${cc}:${i}`
+      ),
+    ]);
+    buttons.push([Markup.button.callback('« Back to countries', 'menu:get')]);
+    const text = `${flagOf(cc)} <b>${countryName(cc)}</b>\nPick a service/range:`;
+    const markup = Markup.inlineKeyboard(buttons).reply_markup;
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: markup });
+    } catch (editErr) {
+      // Edit can fail (message too old, identical content, photo msg, etc.) → send fresh
+      console.warn('[tgbot] country edit failed, sending fresh:', editErr.description || editErr.message);
+      await ctx.replyWithHTML(text, { reply_markup: markup });
+    }
+  } catch (e) {
+    console.error('[tgbot] country handler error:', e.message);
+    try { await ctx.reply('⚠️ Something went wrong loading ranges. Tap 🌍 Get Number again.'); } catch {}
   }
-  const buttons = ranges.map(r => [
-    Markup.button.callback(
-      `${flagOf(cc)} ${serviceIcon(r.service)} ${r.range_name} — ${r.cnt} • ${fmtBdt(r.tg_rate_bdt)}`,
-      `range:${r.provider}:${encodeURIComponent(r.range_name)}:${cc}`
-    ),
-  ]);
-  buttons.push([Markup.button.callback('« Back to countries', 'menu:get')]);
-  await ctx.editMessageText(
-    `${flagOf(cc)} <b>${countryName(cc)}</b>\nPick a service/range:`,
-    { parse_mode: 'HTML', reply_markup: Markup.inlineKeyboard(buttons).reply_markup }
-  );
 });
 
 bot.action('menu:get', async (ctx) => {
@@ -586,11 +600,28 @@ bot.action('menu:mine', async (ctx) => {
 });
 
 bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
-  await ctx.answerCbQuery('Claiming numbers…');
+  try { await ctx.answerCbQuery('Claiming numbers…'); } catch {}
   const provider = ctx.match[1];
   const rangeName = decodeURIComponent(ctx.match[2]);
   const cc = ctx.match[3];
+  return claimAndDeliver(ctx, provider, rangeName, cc);
+});
 
+// New compact handler — resolves index → range from the live country list
+bot.action(/^pick:(\w+):(\d+)$/, async (ctx) => {
+  try { await ctx.answerCbQuery('Claiming numbers…'); } catch {}
+  const cc  = ctx.match[1];
+  const idx = +ctx.match[2];
+  const ranges = listRangesForCountry(cc);
+  const r = ranges[idx];
+  if (!r) {
+    try { await ctx.reply('⚠️ This range is no longer in the pool. Tap 🌍 Get Number again.'); } catch {}
+    return;
+  }
+  return claimAndDeliver(ctx, r.provider, r.range_name, cc);
+});
+
+async function claimAndDeliver(ctx, provider, rangeName, cc) {
   const u = ensureTgUser(ctx); if (!u || !(await ensureBotReady(ctx, u))) return;
 
   // Wallet check
@@ -650,7 +681,7 @@ bot.action(/^range:([^:]+):([^:]+):(\w+)$/, async (ctx) => {
   // Save chat+message id on every row so the poller can edit this one card
   db.prepare('UPDATE tg_assignments SET tg_message_id = ?, tg_chat_id = ? WHERE batch_id = ?')
     .run(sent.message_id, sent.chat.id, batchId);
-});
+}
 
 // ----- Batch release (new) -----
 bot.action(/^releaseBatch:(.+)$/, async (ctx) => {
