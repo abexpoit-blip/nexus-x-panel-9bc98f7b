@@ -80,6 +80,7 @@ let loggedIn = false;
 let busy = false;
 let numbersTimer = null;
 let otpTimer = null;
+let cleanupTimer = null;
 let _stopped = false;
 
 function cookieHeader() {
