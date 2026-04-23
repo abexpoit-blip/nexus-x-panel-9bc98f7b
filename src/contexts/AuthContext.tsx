@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { api, tokenStore } from "@/lib/api";
+import { api, tokenStore, ApiError } from "@/lib/api";
 import { AuthContext, type User } from "./auth-context";
 
 export { useAuth } from "@/hooks/useAuth";
@@ -62,7 +62,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }).catch(() => {});
   }, []);
 
-  const login = useCallback(async (username: string, password: string, surface: "agent" | "admin" = "agent"): Promise<User | null> => {
+  // Throws an Error with a user-facing message instead of swallowing every
+  // failure as `null`. This was the root cause of "1 day later, login says
+  // password incorrect" — the server actually returned things like
+  // "Account suspended" or "Account pending admin approval", but the UI
+  // hid the real reason and showed a generic "Invalid credentials".
+  const login = useCallback(async (username: string, password: string, surface: "agent" | "admin" = "agent"): Promise<User> => {
     try {
       const { token, user } = await api.login(username, password, surface);
       tokenStore.set(token);
@@ -71,8 +76,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(user);
       setImpersonator(null);
       return user;
-    } catch {
-      return null;
+    } catch (e) {
+      if (e instanceof ApiError) {
+        // 401 → bad credentials. 403 → suspended / pending / wrong portal.
+        // Anything else → surface as-is so user sees real reason.
+        throw new Error(e.message || (e.status === 401 ? "Invalid username or password" : "Login failed"));
+      }
+      // Network failure / CORS / server down — be explicit, don't pretend it's a password issue.
+      throw new Error("Cannot reach server. Please check your connection and try again.");
     }
   }, []);
 
