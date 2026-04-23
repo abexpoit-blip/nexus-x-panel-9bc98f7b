@@ -970,24 +970,52 @@ async function processBroadcasts() {
   if (!pending) return;
   db.prepare("UPDATE tg_broadcasts SET status='sending' WHERE id = ?").run(pending.id);
   const users = db.prepare("SELECT tg_user_id FROM tg_users WHERE status = 'active'").all();
+  console.log(`[tgbot] broadcast #${pending.id} starting → ${users.length} active users`);
   let sent = 0, failed = 0;
-  for (const u of users) {
+  const parseMode = pending.parse_mode || 'HTML';
+
+  // Mirror to public channel/group if configured (so even non-DM users see it)
+  const channelId = getPublicChannelId();
+  if (channelId) {
     try {
-      await bot.telegram.sendMessage(u.tg_user_id, pending.message, { parse_mode: pending.parse_mode || 'HTML' });
-      sent++;
-      // 30 msg/sec rate limit
-      await new Promise(r => setTimeout(r, 35));
+      await bot.telegram.sendMessage(channelId, pending.message, { parse_mode: parseMode, disable_web_page_preview: false });
+      console.log(`[tgbot] broadcast #${pending.id} mirrored to channel ${channelId}`);
     } catch (e) {
-      failed++;
-      // If user blocked the bot, mark them inactive
-      if (e.code === 403) {
-        db.prepare("UPDATE tg_users SET status='banned' WHERE tg_user_id = ?").run(u.tg_user_id);
+      console.warn(`[tgbot] broadcast channel mirror failed (${channelId}):`, e.description || e.message);
+    }
+  }
+
+  for (const u of users) {
+    let attempt = 0;
+    while (attempt < 3) {
+      try {
+        await bot.telegram.sendMessage(u.tg_user_id, pending.message, { parse_mode: parseMode });
+        sent++;
+        break;
+      } catch (e) {
+        const code = e.code || e.response?.error_code;
+        const retryAfter = e.parameters?.retry_after || e.response?.parameters?.retry_after;
+        // Telegram flood control — wait + retry
+        if (code === 429 && retryAfter) {
+          console.warn(`[tgbot] flood — sleeping ${retryAfter}s`);
+          await new Promise(r => setTimeout(r, (retryAfter + 1) * 1000));
+          attempt++;
+          continue;
+        }
+        // 403 = user blocked bot; 400 = user deactivated / chat not found
+        if (code === 403) {
+          db.prepare("UPDATE tg_users SET status='banned' WHERE tg_user_id = ?").run(u.tg_user_id);
+        }
+        failed++;
+        break;
       }
     }
+    // 30 msg/sec safety throttle
+    await new Promise(r => setTimeout(r, 40));
   }
   db.prepare("UPDATE tg_broadcasts SET status='done', sent_count=?, failed_count=?, finished_at=? WHERE id = ?")
     .run(sent, failed, now(), pending.id);
-  console.log(`[tgbot] broadcast #${pending.id} done: sent=${sent} failed=${failed}`);
+  console.log(`[tgbot] broadcast #${pending.id} done: sent=${sent} failed=${failed} (channel=${channelId || 'none'})`);
 }
 
 // ============================================================
