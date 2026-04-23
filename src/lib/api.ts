@@ -777,6 +777,28 @@ export const api = {
       request<{ ok: boolean }>("/admin/numpanel-cookies", { method: "DELETE" }),
   },
 
+  // ===== Auto-pool scheduler (per-bot scrape interval / TTL / size cap) =====
+  autopool: {
+    list: () => request<{ bots: Array<{
+      botId: string; label: string;
+      config: { enabled: boolean; interval_min: number; ttl_min: number; max_size: number };
+      pool: number;
+      lastRunAt: number | null;
+      lastResult: null | {
+        addedRequested: boolean; scrapeError: string | null;
+        pruned: number; capped: number; poolBefore: number; poolAfter: number;
+      };
+      running: boolean;
+      limits: { interval_min: { min: number; max: number }; ttl_min: { min: number; max: number }; max_size: { min: number; max: number } };
+      defaults: { enabled: boolean; interval_min: number; ttl_min: number; max_size: number };
+    }> }>("/admin/autopool"),
+    get: (botId: string) => request<{ bot: any }>(`/admin/autopool/${botId}`),
+    save: (botId: string, body: { enabled?: boolean; interval_min?: number; ttl_min?: number; max_size?: number }) =>
+      request<{ ok: boolean; config: any }>(`/admin/autopool/${botId}`, { method: "PUT", body: JSON.stringify(body) }),
+    runNow: (botId: string) =>
+      request<{ ok: boolean; result?: any; error?: string }>(`/admin/autopool/${botId}/run`, { method: "POST" }),
+  },
+
   // ===== IPRN Bot admin (HTTP-only, no cookies/captcha) =====
   iprn: {
     status: () => request<{ status: any }>("/admin/iprn-status"),
