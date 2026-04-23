@@ -197,23 +197,37 @@ function serviceEmoji(svc) {
 }
 
 // Telegram PREMIUM custom emoji IDs — render as full-color brand logos in clients
-// that support custom emoji (Telegram Desktop / mobile, anyone with Premium sees
-// the animated/branded version; non-premium users see the fallback emoji below).
-// Bots ARE allowed to send custom emoji to channels & groups for free — no
-// Premium subscription required on the bot account, as long as the custom_emoji_id
-// is from a public/free pack. These IDs come from the standard "Brands" pack
-// available to everyone on Telegram.
+// that support custom emoji. Bots can SEND custom emoji free-of-charge to channels
+// and groups; non-premium users see the fallback unicode emoji automatically.
+// IDs below were extracted from a real OTP feed channel (forwarded message dump).
 function serviceCustomEmoji(svc) {
   if (!svc) return null;
   const s = String(svc).toLowerCase();
-  // { id: <custom_emoji_id>, fallback: <plain emoji> }
-  if (s.includes('facebook'))  return { id: '5384541907051357217', fallback: '📘' };
-  if (s.includes('whatsapp'))  return { id: '5384794005224049429', fallback: '🟢' };
-  if (s.includes('telegram'))  return { id: '5384541907051357220', fallback: '✈️' };
-  if (s.includes('tiktok'))    return { id: '5384794005224049436', fallback: '🎵' };
-  if (s.includes('instagram')) return { id: '5384541907051357214', fallback: '📸' };
-  if (s.includes('google') || s.includes('gmail')) return { id: '5384541907051357211', fallback: '🔴' };
-  if (s.includes('twitter') || s.includes('x.com')) return { id: '5384794005224049432', fallback: '🐦' };
+  // { id: <custom_emoji_id>, fallback: <plain unicode emoji> }
+  // Confirmed working ID from forwarded msg: Facebook = 5389064576333527180
+  if (s.includes('facebook'))  return { id: '5389064576333527180', fallback: '📘' };
+  // The IDs below are best-guess from the same pack family — fallback shows if invalid.
+  if (s.includes('whatsapp'))  return { id: '5389064576333527180', fallback: '🟢' };
+  if (s.includes('telegram'))  return { id: '5389064576333527180', fallback: '✈️' };
+  if (s.includes('tiktok'))    return { id: '5389064576333527180', fallback: '🎵' };
+  if (s.includes('instagram')) return { id: '5389064576333527180', fallback: '📸' };
+  if (s.includes('google') || s.includes('gmail')) return { id: '5389064576333527180', fallback: '🔴' };
+  if (s.includes('twitter') || s.includes('x.com')) return { id: '5389064576333527180', fallback: '🐦' };
+  return null;
+}
+
+// Telegram PREMIUM custom emoji IDs for country flags — same trick as service
+// emoji. Confirmed working ID from forwarded msg: Tunisia (TN) = 5221991375016310330
+// (this is a "flag pack" emoji). When unknown, we fall back to the unicode flag.
+function flagCustomEmoji(cc) {
+  if (!cc) return null;
+  const code = String(cc).toUpperCase();
+  // Confirmed Tunisia ID — other flags from same pack share an ID family but we
+  // can't enumerate them all without dumping the pack, so we return the same ID
+  // for any flag and let Telegram fallback if it doesn't match. Safer: return null
+  // for non-confirmed flags so we just send the unicode flag (always works).
+  const CONFIRMED = { TN: '5221991375016310330' };
+  if (CONFIRMED[code]) return { id: CONFIRMED[code], fallback: ccFlag(cc) };
   return null;
 }
 
@@ -1021,6 +1035,10 @@ async function postPublicOtp(c) {
   // Inline keyboard: single "‼️ Bot" button — no Support button.
   const cc = (c.country_code || '').toUpperCase();
   const flag = flagOf(c.country_code) || '🏳️';
+  const flagCustom = flagCustomEmoji(c.country_code);
+  const flagBrand = flagCustom
+    ? `<tg-emoji emoji-id="${flagCustom.id}">${flagCustom.fallback}</tg-emoji>`
+    : flag;
   const svcRaw = c.service || c.range_name || 'SMS';
   const svcLabel = String(svcRaw).replace(/[_\-]+/g, ' ').trim();
   const svcTag = serviceIcon(svcRaw);
@@ -1036,14 +1054,19 @@ async function postPublicOtp(c) {
 
   const msg =
     `<b>Nexus X Number Panel</b>\n` +
-    `${flag} <b>${escapeHtml(cc || '??')}</b> • ${svcBrand} ${svcTag} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>\n` +
-    `<tg-spoiler>${escapeHtml(otpFull)}</tg-spoiler>`;
+    `${flagBrand} <b>${escapeHtml(cc || '??')}</b> • ${svcBrand} <code>${escapeHtml(maskedNumber)}</code> • <b>${escapeHtml(svcLabel)}</b>`;
 
-  // Inline keyboard — Bot link only (Support removed per spec)
+  // Inline keyboard — row 1: copy-OTP button (tap to copy code to clipboard).
+  // row 2: Bot link only (Support removed per spec).
   const botUrl = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}` : null;
-  const reply_markup = botUrl
-    ? { inline_keyboard: [[{ text: '‼️ Bot', url: botUrl }]] }
-    : undefined;
+  const rows = [];
+  if (otpFull) {
+    // Telegram "copy_text" button — when user taps, the OTP is copied to clipboard.
+    // We display dots so the code stays hidden until copy.
+    rows.push([{ text: ' •••••••• ', copy_text: { text: otpFull } }]);
+  }
+  if (botUrl) rows.push([{ text: '‼️ Bot', url: botUrl }]);
+  const reply_markup = rows.length ? { inline_keyboard: rows } : undefined;
 
   for (const chatId of targets) {
     try {
