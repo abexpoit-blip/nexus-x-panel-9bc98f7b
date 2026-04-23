@@ -609,8 +609,6 @@ async function showCountries(ctx) {
 bot.action(/^country:(\w+)(?::(\d+))?$/, async (ctx) => {
   try { await ctx.answerCbQuery(); } catch {}
   const cc = ctx.match[1];
-  // No-op handler for the "Page X/Y" indicator button
-  if (false) {} // placeholder to keep diff small
   const page = Math.max(1, parseInt(ctx.match[2], 10) || 1);
   try {
     const ranges = listRangesForCountry(cc);
