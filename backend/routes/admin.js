@@ -1926,6 +1926,192 @@ module.exports = router;
 
 
 // ============================================================
+// IPRN-SMS V2 bot admin routes (second account on panel.iprn-sms.com)
+// Exact mirror of /iprn-sms-* but targets workers/iprnSmsBotV2 with
+// settings keys prefixed iprn_sms_v2_ and provider id 'iprn_sms_v2'.
+// ============================================================
+router.get('/iprn-sms-v2-status', (req, res) => {
+  try {
+    const { getStatus } = require('../workers/iprnSmsBotV2');
+    res.json({ status: getStatus() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/iprn-sms-v2-restart', async (req, res) => {
+  try {
+    const { restart } = require('../workers/iprnSmsBotV2');
+    await restart();
+    logFromReq(req, 'iprn_sms_v2_bot_restart');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/iprn-sms-v2-start', async (req, res) => {
+  try {
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('iprn_sms_v2_enabled', 'true', strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = excluded.updated_at
+    `).run();
+    const bot = require('../workers/iprnSmsBotV2');
+    try { bot.stop(); } catch (_) {}
+    bot.start();
+    logFromReq(req, 'iprn_sms_v2_bot_start');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/iprn-sms-v2-stop', async (req, res) => {
+  try {
+    const bot = require('../workers/iprnSmsBotV2');
+    bot.stop();
+    db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES ('iprn_sms_v2_enabled', 'false', strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = 'false', updated_at = excluded.updated_at
+    `).run();
+    logFromReq(req, 'iprn_sms_v2_bot_stop');
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/iprn-sms-v2-scrape-now', async (req, res) => {
+  try {
+    const { scrapeNow } = require('../workers/iprnSmsBotV2');
+    const result = await scrapeNow();
+    logFromReq(req, 'iprn_sms_v2_scrape_now', { meta: result });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/iprn-sms-v2-pool-breakdown', (req, res) => {
+  try {
+    const ranges = db.prepare(`
+      SELECT
+        COALESCE(a.operator, 'Unknown') AS name,
+        COALESCE(a.operator, 'Unknown') AS range_name,
+        COUNT(*) AS count,
+        MAX(a.allocated_at) AS last_added,
+        MIN(a.allocated_at) AS first_added,
+        m.custom_name, m.tag_color, m.priority,
+        m.request_override, m.notes,
+        COALESCE(m.disabled, 0) AS disabled,
+        m.service_tag
+      FROM allocations a
+      LEFT JOIN iprn_sms_v2_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
+      WHERE a.provider = 'iprn_sms_v2' AND a.status = 'pool'
+      GROUP BY COALESCE(a.operator, 'Unknown')
+      ORDER BY COALESCE(m.priority, 0) DESC, count DESC
+    `).all();
+    const totalPool   = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn_sms_v2' AND status='pool'`).get().c;
+    const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn_sms_v2' AND status='active'`).get().c;
+    const totalUsed   = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn_sms_v2' AND status='used'`).get().c;
+    res.json({ ranges, totalPool, totalActive, totalUsed });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/iprn-sms-v2-numbers', (req, res) => {
+  try {
+    const status = String(req.query.status || 'all');
+    const q      = String(req.query.q || '').trim();
+    const limit  = Math.min(500, Math.max(1, +req.query.limit || 100));
+    const offset = Math.max(0, +req.query.offset || 0);
+    const where = [`a.provider = 'iprn_sms_v2'`];
+    const params = [];
+    if (status !== 'all') { where.push(`a.status = ?`); params.push(status); }
+    if (q) {
+      where.push(`(a.phone_number LIKE ? OR COALESCE(a.operator,'') LIKE ? OR COALESCE(a.country_code,'') LIKE ?)`);
+      const like = `%${q}%`;
+      params.push(like, like, like);
+    }
+    const whereSql = where.join(' AND ');
+    const total = db.prepare(`SELECT COUNT(*) c FROM allocations a WHERE ${whereSql}`).get(...params).c;
+    const rows = db.prepare(`
+      SELECT a.id, a.phone_number, a.operator AS range_name, a.country_code,
+             a.status, a.allocated_at, a.user_id, a.otp, u.username
+      FROM allocations a LEFT JOIN users u ON u.id = a.user_id
+      WHERE ${whereSql}
+      ORDER BY a.allocated_at DESC LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+    const counts = db.prepare(`
+      SELECT status, COUNT(*) c FROM allocations WHERE provider='iprn_sms_v2' GROUP BY status
+    `).all().reduce((acc, r) => { acc[r.status] = r.c; return acc; }, {});
+    res.json({ rows, total, limit, offset, counts });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/iprn-sms-v2-credentials', (req, res) => {
+  const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
+  const username = get('iprn_sms_v2_username') || process.env.IPRN_SMS_V2_USERNAME || '';
+  const password = get('iprn_sms_v2_password') || process.env.IPRN_SMS_V2_PASSWORD || '';
+  const base_url = get('iprn_sms_v2_base_url') || process.env.IPRN_SMS_V2_BASE_URL || 'https://panel.iprn-sms.com';
+  const sms_type = get('iprn_sms_v2_type') || process.env.IPRN_SMS_V2_TYPE || 'sms';
+  const enabled = (get('iprn_sms_v2_enabled') || process.env.IPRN_SMS_V2_ENABLED || 'false').toString().toLowerCase() === 'true';
+  res.json({
+    username, password_set: !!password, base_url, sms_type, enabled,
+    sources: {
+      username: get('iprn_sms_v2_username') ? 'database' : (process.env.IPRN_SMS_V2_USERNAME ? 'env' : 'none'),
+      password: get('iprn_sms_v2_password') ? 'database' : (process.env.IPRN_SMS_V2_PASSWORD ? 'env' : 'none'),
+    },
+  });
+});
+
+router.put('/iprn-sms-v2-credentials', async (req, res) => {
+  try {
+    const { username, password, base_url, sms_type, enabled } = req.body || {};
+    const upsert = db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `);
+    if (typeof username === 'string' && username.length) upsert.run('iprn_sms_v2_username', username.trim());
+    if (typeof password === 'string' && password.length) upsert.run('iprn_sms_v2_password', password);
+    if (typeof base_url === 'string') {
+      const clean = base_url.trim().replace(/\/+$/, '');
+      if (clean) upsert.run('iprn_sms_v2_base_url', clean);
+    }
+    if (typeof sms_type === 'string' && /^(sms|voice)$/i.test(sms_type)) {
+      upsert.run('iprn_sms_v2_type', sms_type.toLowerCase());
+    }
+    if (typeof enabled === 'boolean') upsert.run('iprn_sms_v2_enabled', enabled ? 'true' : 'false');
+    logFromReq(req, 'iprn_sms_v2_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
+    try {
+      const bot = require('../workers/iprnSmsBotV2');
+      try { bot.clearPersistedCookies?.(); } catch (_) {}
+      await bot.restart();
+    } catch (e) { console.warn('iprn_sms_v2-credentials: restart failed:', e.message); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/iprn-sms-v2-cookies', (req, res) => {
+  try {
+    const bot = require('../workers/iprnSmsBotV2');
+    res.json(bot.getCookieMeta ? bot.getCookieMeta() : { has_cookies: false, count: 0, saved_at: null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/iprn-sms-v2-cookies', async (req, res) => {
+  try {
+    const bot = require('../workers/iprnSmsBotV2');
+    if (bot.clearPersistedCookies) bot.clearPersistedCookies();
+    logFromReq(req, 'iprn_sms_v2_cookies_cleared');
+    try { await bot.restart(); } catch (_) {}
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/iprn-sms-v2-test-login', async (req, res) => {
+  try {
+    const bot = require('../workers/iprnSmsBotV2');
+    if (typeof bot.testLogin !== 'function') {
+      return res.status(501).json({ ok: false, error: 'Bot does not support test-login' });
+    }
+    const result = await bot.testLogin();
+    logFromReq(req, 'iprn_sms_v2_test_login', { meta: { ok: result.ok, latency_ms: result.latency_ms } });
+    res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+
+// ============================================================
 // SEVEN1TEL Bot — mirrors IMS endpoints (status/start/stop/restart/scrape/sync/credentials)
 // ============================================================
 
