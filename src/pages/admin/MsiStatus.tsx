@@ -658,6 +658,8 @@ const AdminMsiStatus = () => {
         }
       />
 
+      <AutoPoolCard botId="msi" />
+
       {isLoading && <p className="text-center text-muted-foreground text-sm">Loading…</p>}
 
       {s && (

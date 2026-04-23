@@ -487,6 +487,8 @@ export default function IprnStatus() {
         }
       />
 
+      <AutoPoolCard botId="iprn" />
+
       {/* Status pills */}
       <div className="flex flex-wrap items-center gap-2">
         <Pill ok={s.enabled} label={s.enabled ? "Enabled" : "Disabled"} />
