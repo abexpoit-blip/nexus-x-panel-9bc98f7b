@@ -159,10 +159,34 @@ function Kpi({ icon, label, value, accent }: { icon: React.ReactNode; label: str
 // ============================================================
 function OverviewTab() {
   const [savingExpiry, setSavingExpiry] = useState(false);
+  const qc = useQueryClient();
   const { data: expiry, refetch: refetchExpiry, isLoading: expiryLoading } = useQuery({
     queryKey: ["tgbot-otp-expiry"],
     queryFn: () => api.admin.otpExpiry(),
   });
+  const { data: cfg, refetch: refetchCfg } = useQuery({
+    queryKey: ["tgbot-config"],
+    queryFn: () => api.tgbot.config(),
+  });
+  const billingOn = cfg?.tg_billing_enabled !== "0";
+  const [savingBilling, setSavingBilling] = useState(false);
+
+  const toggleBilling = async () => {
+    setSavingBilling(true);
+    try {
+      await api.tgbot.saveConfig({ tg_billing_enabled: billingOn ? "0" : "1" });
+      toast.success(billingOn
+        ? "Billing OFF — bot now in FREE mode (no balance / no charges)"
+        : "Billing ON — wallet + per-OTP charges resumed");
+      await refetchCfg();
+      qc.invalidateQueries({ queryKey: ["tgbot-status"] });
+    } catch (e) {
+      toast.error("Failed: " + (e as Error).message);
+    } finally {
+      setSavingBilling(false);
+    }
+  };
+
   const currentMin = expiry?.expiry_min ?? 30;
   const expiryOpts = expiry?.options_min ?? [5, 8, 10, 15, 20, 30];
 
