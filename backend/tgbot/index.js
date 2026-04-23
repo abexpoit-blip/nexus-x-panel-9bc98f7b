@@ -565,7 +565,7 @@ bot.action(/^country:(\w+)$/, async (ctx) => {
   }
   const buttons = ranges.map(r => [
     Markup.button.callback(
-      `${serviceIcon(r.service)} ${r.range_name} — ${r.cnt} • ${fmtBdt(r.tg_rate_bdt)}`,
+      `${flagOf(cc)} ${serviceIcon(r.service)} ${r.range_name} — ${r.cnt} • ${fmtBdt(r.tg_rate_bdt)}`,
       `range:${r.provider}:${encodeURIComponent(r.range_name)}:${cc}`
     ),
   ]);
