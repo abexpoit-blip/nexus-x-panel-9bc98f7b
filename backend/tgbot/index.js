@@ -19,6 +19,11 @@ const EXPIRY_MIN        = Math.round(EXPIRY_SEC / 60);
 const SUPPORT_URL       = process.env.TG_SUPPORT_URL || 'https://t.me/';
 const SITE_URL          = process.env.TG_SITE_URL || 'https://nexus-x.site';
 
+// Cached bot username — populated at launch via getMe(); used to build the
+// single "Bot" inline button on every public OTP post so users in the channel
+// can jump straight to the bot. No support button — bot link only.
+let BOT_USERNAME = process.env.TG_BOT_USERNAME || '';
+
 // ---------- Public OTP history channel (admin configurable) ----------
 // Admin sets setting key `tg_public_channel` to a channel/group chat id like -1001234567890.
 // Every received OTP is posted there with number & OTP last-4 masked.
