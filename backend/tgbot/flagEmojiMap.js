@@ -41,6 +41,43 @@ const MANUAL_FLAG_IDS = {
 // Mutable map populated at startup (manual + auto-loaded). Read with getFlagEmoji().
 const FLAG_EMOJI_IDS = { ...MANUAL_FLAG_IDS };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Generic icon pack support (e.g. "IconsEmoji_JABA").
+// Same idea as flags but keyed by the raw unicode emoji glyph (e.g. "‼️", "♻️",
+// "📘", "🟢"). Use renderIconHtml(glyph) anywhere you want a premium custom
+// emoji rendered with safe unicode fallback.
+// ─────────────────────────────────────────────────────────────────────────────
+const ICON_EMOJI_IDS = {};
+
+async function loadIconPack(bot, packName) {
+  if (!bot || !packName) return 0;
+  try {
+    const set = await bot.telegram.getStickerSet(packName);
+    let added = 0;
+    for (const st of set.stickers || []) {
+      const id = st.custom_emoji_id;
+      const glyph = st.emoji;
+      if (!id || !glyph) continue;
+      // First-write wins so the earliest sticker for a glyph is kept stable.
+      if (!ICON_EMOJI_IDS[glyph]) {
+        ICON_EMOJI_IDS[glyph] = String(id);
+        added++;
+      }
+    }
+    return added;
+  } catch (e) {
+    console.warn(`[flagEmojiMap] failed to load icon pack "${packName}": ${e.message}`);
+    return 0;
+  }
+}
+
+function renderIconHtml(glyph) {
+  if (!glyph) return '';
+  const id = ICON_EMOJI_IDS[glyph];
+  if (id) return `<tg-emoji emoji-id="${id}">${glyph}</tg-emoji>`;
+  return glyph;
+}
+
 // Convert a unicode flag glyph (e.g. 🇧🇩) back to its ISO-3166 alpha-2 code.
 // Returns null if the input is not a valid regional-indicator flag pair.
 function flagGlyphToCC(glyph) {
@@ -124,4 +161,7 @@ module.exports = {
   getFlagEmoji,
   renderFlagHtml,
   loadFlagPack,
+  ICON_EMOJI_IDS,
+  loadIconPack,
+  renderIconHtml,
 };
