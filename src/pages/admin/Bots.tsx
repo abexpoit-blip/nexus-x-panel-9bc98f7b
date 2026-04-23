@@ -45,6 +45,7 @@ function BotCard({ bot }: { bot: BotEntry }) {
   const [s, setS] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<null | "start" | "stop" | "restart">(null);
 
   const load = async () => {
     try {
@@ -59,6 +60,19 @@ function BotCard({ bot }: { bot: BotEntry }) {
   };
 
   useEffect(() => { load(); const i = setInterval(load, 15_000); return () => clearInterval(i); }, []);
+
+  const act = async (kind: "start" | "stop" | "restart") => {
+    setBusy(kind);
+    try {
+      await bot[kind]();
+      toast.success(`${bot.label}: ${kind} OK`);
+      setTimeout(load, 600);
+    } catch (e: any) {
+      toast.error(`${bot.label} ${kind} failed: ${e?.message || "error"}`);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const enabled = !!s?.enabled;
   const running = !!s?.running;
@@ -119,8 +133,22 @@ function BotCard({ bot }: { bot: BotEntry }) {
           </div>
         )}
 
+        <div className="grid grid-cols-3 gap-1.5">
+          <Button size="sm" variant="outline" disabled={!!busy || running} onClick={() => act("start")}>
+            {busy === "start" ? <CircleDashed className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+            Start
+          </Button>
+          <Button size="sm" variant="outline" disabled={!!busy || !running} onClick={() => act("stop")}>
+            {busy === "stop" ? <CircleDashed className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3 mr-1" />}
+            Stop
+          </Button>
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => act("restart")}>
+            {busy === "restart" ? <CircleDashed className="h-3 w-3 animate-spin" /> : <RotateCw className="h-3 w-3 mr-1" />}
+            Restart
+          </Button>
+        </div>
         <Link to={bot.route}>
-          <Button size="sm" variant="outline" className="w-full">
+          <Button size="sm" variant="ghost" className="w-full">
             Manage <ExternalLink className="h-3 w-3 ml-1.5" />
           </Button>
         </Link>
@@ -131,17 +159,53 @@ function BotCard({ bot }: { bot: BotEntry }) {
 
 export default function Bots() {
   const [tick, setTick] = useState(0);
+  const [bulkBusy, setBulkBusy] = useState<null | "start" | "stop" | "restart">(null);
+
+  const bulk = async (kind: "start" | "stop" | "restart") => {
+    if (kind === "stop" && !confirm("Stop ALL bots? This will halt every scraper.")) return;
+    setBulkBusy(kind);
+    const results = await Promise.allSettled(BOTS.map((b) => b[kind]()));
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const fail = results.length - ok;
+    if (fail === 0) toast.success(`${kind}: all ${ok} bots OK`);
+    else toast.warning(`${kind}: ${ok} OK · ${fail} failed`);
+    setBulkBusy(null);
+    setTick((t) => t + 1);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="All Bots"
-        description="Live status across every scraping bot. Click any card to manage credentials, sync, and pool."
+        description="Live status + start/stop/restart for every scraping bot in one place."
         actions={
           <Button size="sm" variant="outline" onClick={() => setTick((t) => t + 1)}>
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh all
           </Button>
         }
       />
+      <Card className="border-white/[0.06]">
+        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Bulk actions — every bot</div>
+            <div className="text-xs text-muted-foreground">Applies to all {BOTS.length} bots simultaneously.</div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={!!bulkBusy} onClick={() => bulk("start")}>
+              {bulkBusy === "start" ? <CircleDashed className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
+              Start all
+            </Button>
+            <Button size="sm" variant="outline" disabled={!!bulkBusy} onClick={() => bulk("restart")}>
+              {bulkBusy === "restart" ? <CircleDashed className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5 mr-1.5" />}
+              Restart all
+            </Button>
+            <Button size="sm" variant="destructive" disabled={!!bulkBusy} onClick={() => bulk("stop")}>
+              {bulkBusy === "stop" ? <CircleDashed className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Square className="h-3.5 w-3.5 mr-1.5" />}
+              Stop all
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
       <div key={tick} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {BOTS.map((b) => <BotCard key={b.key} bot={b} />)}
       </div>
