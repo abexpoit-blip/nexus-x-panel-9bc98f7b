@@ -65,19 +65,23 @@ if (process.env.NODE_ENV === 'production') {
 // Global rate limiter
 app.use('/api', rateLimit({
   windowMs: +(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
-  max: +(process.env.RATE_LIMIT_MAX || 120),
+  max: +(process.env.RATE_LIMIT_MAX || 600),
   standardHeaders: true,
   legacyHeaders: false,
+  // Don't count CORS preflights or health checks — these are noisy and
+  // would otherwise eat up the budget and stall the login spinner.
+  skip: (req) => req.method === 'OPTIONS' || req.path === '/health',
   message: { error: 'Too many requests, slow down.' },
 }));
 
 // Strict limiter on auth endpoints (brute force protection)
 const authLimiter = rateLimit({
   windowMs: 15 * 60_000,                    // 15 minutes
-  max: 10,                                  // 10 login/register attempts per IP
+  max: 50,                                  // 50 login/register attempts per IP — generous for shared NAT/office IPs
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,             // only count failures
+  skip: (req) => req.method === 'OPTIONS',  // never block CORS preflight
   message: { error: 'Too many login attempts. Try again in 15 minutes.' },
 });
 app.use('/api/auth/login', authLimiter);
