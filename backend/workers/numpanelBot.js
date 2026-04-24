@@ -913,7 +913,10 @@ async function syncPool() {
   const sysUser = ensurePoolUser();
   let added = 0, removed = 0, kept = 0;
 
-  const exists = db.prepare("SELECT 1 FROM allocations WHERE provider='numpanel' AND phone_number=? AND status IN ('pool','active','claiming') LIMIT 1");
+  // Dedup against EVERY status (pool/claiming/active/received/used/released/
+  // expired). Without this, a previously-assigned number could re-enter the
+  // pool on the next scrape and be handed out to a SECOND agent.
+  const exists = db.prepare("SELECT 1 FROM allocations WHERE provider='numpanel' AND phone_number=? LIMIT 1");
   const ins = db.prepare(`
     INSERT INTO allocations (user_id, provider, phone_number, country_code, operator, status, allocated_at)
     VALUES (?, 'numpanel', ?, ?, ?, 'pool', strftime('%s','now'))
