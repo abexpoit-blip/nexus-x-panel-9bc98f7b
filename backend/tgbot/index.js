@@ -841,9 +841,11 @@ bot.action(/^releaseBatch:(.+)$/, async (ctx) => {
     for (const a of rows) {
       if (a.status === 'active') {
         db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(a.id);
-        // Reset allocated_at so the next claimer (TG or website) gets a clean
-        // expiry window — prevents "instant expired" on subsequent grabs.
-        db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'")
+        // PERMANENT release: once a number was assigned to an agent it must
+        // NEVER reappear in the pool — even if a scraper re-discovers it.
+        // Workers dedupe globally by phone_number so 'released' rows are
+        // treated as already-known and skipped on next scrape.
+        db.prepare("UPDATE allocations SET status='released' WHERE id = ? AND status='active'")
           .run(a.allocation_id);
       }
     }
@@ -867,7 +869,8 @@ bot.action(/^release:(\d+)$/, async (ctx) => {
   if (!a || a.status !== 'active') return ctx.reply('Already gone.');
   db.transaction(() => {
     db.prepare("UPDATE tg_assignments SET status='released' WHERE id = ?").run(id);
-    db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'").run(a.allocation_id);
+    // Permanent release — see releaseBatch handler for rationale.
+    db.prepare("UPDATE allocations SET status='released' WHERE id = ? AND status='active'").run(a.allocation_id);
   })();
   try { await ctx.editMessageText('🗑 Released. Number returned to pool.'); } catch {}
 });
@@ -1235,11 +1238,12 @@ function expireOldAssignments() {
     const txn = db.transaction(() => {
       for (const e of expired) {
         db.prepare("UPDATE tg_assignments SET status='expired' WHERE id = ?").run(e.id);
-        db.prepare("UPDATE allocations SET status='pool', allocated_at=strftime('%s','now') WHERE id = ? AND status='active'").run(e.allocation_id);
+        // Permanent expire — number is "burned" once handed out, never re-pooled.
+        db.prepare("UPDATE allocations SET status='expired' WHERE id = ? AND status='active'").run(e.allocation_id);
       }
     });
     txn();
-    console.log(`[tgbot] expired ${expired.length} unused number(s) → returned to pool`);
+    console.log(`[tgbot] expired ${expired.length} unused number(s) → permanently retired (will not re-pool)`);
 
     // Auto-vanish expired numbers from the user's TG batch cards.
     // For each impacted batch: if EVERY row is expired/released and none received OTP,
