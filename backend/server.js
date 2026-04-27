@@ -96,11 +96,12 @@ app.use('/api/cdr', require('./routes/cdr'));
 app.use('/api', require('./routes/payments'));            // /payments + /withdrawals
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
+
+// Public health check must be registered before protected /api catch-all routes.
+app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
+
 app.use('/api', require('./routes/security'));            // /audit + /sessions + /settings
 app.use('/api/admin/tgbot', require('./routes/tgbot'));   // Telegram bot admin
-
-// Health
-app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
 
 // 404
 app.use('/api', (_, res) => res.status(404).json({ error: 'Not found' }));

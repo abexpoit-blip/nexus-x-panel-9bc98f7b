@@ -1,13 +1,15 @@
 // API client for nexus-backend
 import { DEMO_USERS, demoData } from "./demoData";
 
-const configuredApiBase = (import.meta.env.VITE_API_URL as string) || "";
+const rawConfiguredApiBase = (import.meta.env.VITE_API_URL as string) || "";
 // Always use the dedicated API subdomain in production. The main domain
 // (nexus-x.site) does NOT proxy /api → backend; only api.nexus-x.site does.
 // Using same-origin caused requests to hit the SPA index.html and hang.
 const DEFAULT_API_BASE = "https://api.nexus-x.site/api";
-const BASE = (configuredApiBase || DEFAULT_API_BASE).replace(/\/+$/, "");
 const FALLBACK_BASE = "https://api.nexus-x.site/api";
+const configuredApiBase = rawConfiguredApiBase.replace(/\/+$/, "");
+const isKnownBadMainDomainApi = /^https:\/\/(www\.)?nexus-x\.site\/api$/i.test(configuredApiBase);
+const BASE = (isKnownBadMainDomainApi ? DEFAULT_API_BASE : (configuredApiBase || DEFAULT_API_BASE)).replace(/\/+$/, "");
 const TOKEN_KEY = "nexus_token";
 const DEMO_KEY = "nexus_demo_mode";
 const REQUEST_TIMEOUT_MS = Math.max(5000, +(import.meta.env.VITE_API_TIMEOUT_MS || 15000));
@@ -114,7 +116,7 @@ async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T
     token = null;
   }
 
-  const bases = BASE !== FALLBACK_BASE && !configuredApiBase
+  const bases = BASE !== FALLBACK_BASE
     ? [BASE, FALLBACK_BASE]
     : [BASE];
   let lastError: unknown = null;
