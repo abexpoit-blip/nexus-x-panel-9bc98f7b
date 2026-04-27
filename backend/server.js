@@ -133,10 +133,6 @@ app.listen(PORT, () => {
   try { require('./workers/numpanelBot').start(); }
   catch (e) { console.warn('numpanel bot start error:', e.message); }
 
-  // Start IPRN bot (no-op if IPRN_ENABLED=false). HTTP-only — no browser needed.
-  try { require('./workers/iprnBot').start(); }
-  catch (e) { console.warn('iprn bot start error:', e.message); }
-
   // Start IPRN-SMS bot (no-op if IPRN_SMS_ENABLED=false). HTTP-only.
   try { require('./workers/iprnSmsBot').start(); }
   catch (e) { console.warn('iprn_sms bot start error:', e.message); }
@@ -160,7 +156,6 @@ app.listen(PORT, () => {
     };
     autopool.register('msi',         { label: 'MSI',         poolUser: '__msi_pool__',         scrapeNow: safeScrape('./workers/msiBot') });
     autopool.register('numpanel',    { label: 'NumPanel',    poolUser: '__numpanel_pool__',    scrapeNow: safeScrape('./workers/numpanelBot') });
-    autopool.register('iprn',        { label: 'IPRN',        poolUser: '__iprn_pool__',        scrapeNow: safeScrape('./workers/iprnBot') });
     autopool.register('iprn_sms',    { label: 'IPRN-SMS',    poolUser: '__iprn_sms_pool__',    scrapeNow: safeScrape('./workers/iprnSmsBot') });
     autopool.register('iprn_sms_v2', { label: 'IPRN-SMS V2', poolUser: '__iprn_sms_v2_pool__', scrapeNow: safeScrape('./workers/iprnSmsBotV2') });
     autopool.register('seven1tel',   { label: 'Seven1Tel',   poolUser: '__seven1tel_pool__',   scrapeNow: safeScrape('./workers/seven1telBot') });

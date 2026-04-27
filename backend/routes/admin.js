@@ -749,14 +749,14 @@ router.get('/provider-status', async (req, res) => {
 });
 
 // PUT /api/admin/provider-toggle — Soft ON/OFF toggle for any provider.
-// Body: { id: 'msi'|'iprn'|'numpanel'|'ims', enabled: boolean }
+// Body: { id: 'msi'|'numpanel'|'ims'|'iprn_sms'|'iprn_sms_v2'|'seven1tel', enabled: boolean }
 // - flips <id>_enabled in settings (overrides .env)
 // - calls bot.start() / bot.stop() so the change takes effect immediately
 // - data (allocations, rates, range_meta) is preserved → "soft" disable
 router.put('/provider-toggle', async (req, res) => {
   try {
     const { id, enabled } = req.body || {};
-    const validIds = ['msi', 'iprn', 'iprn_sms', 'iprn_sms_v2', 'numpanel', 'ims', 'seven1tel'];
+    const validIds = ['msi', 'iprn_sms', 'iprn_sms_v2', 'numpanel', 'ims', 'seven1tel'];
     if (!validIds.includes(id)) {
       return res.status(400).json({ error: `id must be one of: ${validIds.join(', ')}` });
     }
@@ -770,7 +770,6 @@ router.put('/provider-toggle', async (req, res) => {
     `).run(`${id}_enabled`, enabled ? 'true' : 'false');
 
     const botFile =
-      id === 'iprn' ? 'iprnBot' :
       id === 'iprn_sms' ? 'iprnSmsBot' :
       id === 'iprn_sms_v2' ? 'iprnSmsBotV2' :
       id === 'msi' ? 'msiBot' :
@@ -1249,7 +1248,6 @@ const RANGE_META_TABLES = {
   numpanel: 'numpanel_range_meta',
   ims: 'ims_range_meta',
   msi: 'msi_range_meta',
-  iprn: 'iprn_range_meta',
   iprn_sms: 'iprn_sms_range_meta',
   iprn_sms_v2: 'iprn_sms_v2_range_meta',
   seven1tel: 'seven1tel_range_meta',
@@ -1304,7 +1302,6 @@ function rangeMetaRoutes(provider) {
 rangeMetaRoutes('numpanel');
 rangeMetaRoutes('ims');
 rangeMetaRoutes('msi');
-rangeMetaRoutes('iprn');
 rangeMetaRoutes('iprn_sms');
 rangeMetaRoutes('iprn_sms_v2');
 rangeMetaRoutes('seven1tel');
@@ -1496,225 +1493,6 @@ router.post('/fake-otp/purge', (req, res) => {
   const r = db.prepare(`DELETE FROM cdr WHERE note = 'fake:broadcast'`).run();
   logFromReq(req, 'fake_otp_purge', { meta: { removed: r.changes } });
   res.json({ ok: true, removed: r.changes });
-});
-
-
-// ============================================================
-// IPRN Bot — mirrors MSI route surface (HTTP-only, no cookies/captcha)
-// ============================================================
-
-router.get('/iprn-status', (req, res) => {
-  try {
-    const { getStatus } = require('../workers/iprnBot');
-    res.json({ status: getStatus() });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/iprn-restart', async (req, res) => {
-  try {
-    const { restart } = require('../workers/iprnBot');
-    await restart();
-    logFromReq(req, 'iprn_bot_restart');
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/iprn-start', async (req, res) => {
-  try {
-    db.prepare(`
-      INSERT INTO settings (key, value, updated_at) VALUES ('iprn_enabled', 'true', strftime('%s','now'))
-      ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = strftime('%s','now')
-    `).run();
-    const bot = require('../workers/iprnBot');
-    bot.start();
-    const snapshot = bot.getStatus ? bot.getStatus() : null;
-    if (!snapshot?.running) {
-      return res.status(400).json({ error: snapshot?.lastError || 'IPRN bot did not start', status: snapshot, auto_enabled: true });
-    }
-    bot.logEvent && bot.logEvent('success', 'Bot started by admin');
-    logFromReq(req, 'iprn_bot_start');
-    res.json({ ok: true, status: snapshot, auto_enabled: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/iprn-stop', async (req, res) => {
-  try {
-    const bot = require('../workers/iprnBot');
-    bot.stop();
-    bot.logEvent && bot.logEvent('warn', 'Bot stopped by admin');
-    logFromReq(req, 'iprn_bot_stop');
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/iprn-scrape-now', async (req, res) => {
-  try {
-    const { scrapeNow } = require('../workers/iprnBot');
-    const result = await scrapeNow();
-    logFromReq(req, 'iprn_scrape_now', { meta: result });
-    res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/iprn-pool-breakdown', (req, res) => {
-  const ranges = db.prepare(`
-    SELECT
-      COALESCE(a.operator, 'Unknown') AS name,
-      COUNT(*) AS count,
-      MAX(a.allocated_at) AS last_added,
-      MIN(a.allocated_at) AS first_added,
-      m.custom_name, m.tag_color, m.priority,
-      m.request_override, m.notes, m.disabled, m.service_tag
-    FROM allocations a
-    LEFT JOIN iprn_range_meta m ON m.range_prefix = COALESCE(a.operator, 'Unknown')
-    WHERE a.provider = 'iprn' AND a.status = 'pool'
-    GROUP BY COALESCE(a.operator, 'Unknown')
-    ORDER BY COALESCE(m.priority, 0) DESC, count DESC
-  `).all();
-  const totalActive = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn' AND status='active'`).get().c;
-  const totalUsed = db.prepare(`SELECT COUNT(*) c FROM allocations WHERE provider='iprn' AND status='used'`).get().c;
-  res.json({ ranges, totalActive, totalUsed });
-});
-
-// GET /api/admin/iprn-numbers — paginated raw allocation rows for the IPRN provider.
-// Mirrors what the upstream /numbers/index page shows so admins can verify the
-// scrape captured the same inventory the panel displays. Filterable by status
-// and free-text search across phone / range / country.
-router.get('/iprn-numbers', (req, res) => {
-  try {
-    const status = String(req.query.status || 'all');         // pool | claiming | active | received | used | released | all
-    const q      = String(req.query.q || '').trim();
-    const limit  = Math.min(500, Math.max(1, +req.query.limit || 100));
-    const offset = Math.max(0, +req.query.offset || 0);
-
-    const where = [`a.provider = 'iprn'`];
-    const params = [];
-    if (status !== 'all') { where.push(`a.status = ?`); params.push(status); }
-    if (q) {
-      where.push(`(a.phone_number LIKE ? OR COALESCE(a.operator,'') LIKE ? OR COALESCE(a.country_code,'') LIKE ?)`);
-      const like = `%${q}%`;
-      params.push(like, like, like);
-    }
-    const whereSql = where.join(' AND ');
-
-    const total = db.prepare(`SELECT COUNT(*) c FROM allocations a WHERE ${whereSql}`).get(...params).c;
-    const rows = db.prepare(`
-      SELECT a.id, a.phone_number, a.operator AS range_name, a.country_code,
-             a.status, a.allocated_at, a.user_id, a.otp,
-             u.username
-      FROM allocations a
-      LEFT JOIN users u ON u.id = a.user_id
-      WHERE ${whereSql}
-      ORDER BY a.allocated_at DESC
-      LIMIT ? OFFSET ?
-    `).all(...params, limit, offset);
-
-    // Status counts (cheap aggregate so the UI can render filter chips with counts).
-    const counts = db.prepare(`
-      SELECT status, COUNT(*) c FROM allocations
-      WHERE provider='iprn' GROUP BY status
-    `).all().reduce((acc, r) => { acc[r.status] = r.c; return acc; }, {});
-
-    res.json({ rows, total, limit, offset, counts });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/iprn-credentials', (req, res) => {
-  const get = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
-  const username = get('iprn_username') || process.env.IPRN_USERNAME || '';
-  const password = get('iprn_password') || process.env.IPRN_PASSWORD || '';
-  const base_url = get('iprn_base_url') || process.env.IPRN_BASE_URL || 'https://iprndata.com';
-  const enabled = (get('iprn_enabled') || process.env.IPRN_ENABLED || 'false').toString().toLowerCase() === 'true';
-  const mask = (s) => s ? (s.length <= 4 ? '****' : s.slice(0,2) + '****' + s.slice(-2)) : '';
-  res.json({
-    enabled,
-    base_url,
-    username,
-    password_masked: mask(password),
-    has_password: !!password,
-    source: {
-      username: get('iprn_username') ? 'database' : (process.env.IPRN_USERNAME ? 'env' : 'none'),
-      password: get('iprn_password') ? 'database' : (process.env.IPRN_PASSWORD ? 'env' : 'none'),
-    },
-  });
-});
-
-router.put('/iprn-credentials', async (req, res) => {
-  try {
-    const { username, password, base_url, enabled } = req.body || {};
-    const upsert = db.prepare(`
-      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, strftime('%s','now'))
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
-    `);
-    if (typeof username === 'string' && username.length) upsert.run('iprn_username', username.trim());
-    if (typeof password === 'string' && password.length) upsert.run('iprn_password', password);
-    if (typeof base_url === 'string' && base_url.length) {
-      let clean = base_url.trim().replace(/\/+$/, '');
-      try {
-        const u = new URL(/^https?:\/\//i.test(clean) ? clean : `https://${clean}`);
-        clean = `${u.protocol}//${u.host}`;
-      } catch (_) {
-        clean = clean.replace(/\/+$/, '');
-      }
-      if (clean) upsert.run('iprn_base_url', clean);
-    }
-    if (typeof enabled === 'boolean') upsert.run('iprn_enabled', enabled ? 'true' : 'false');
-    logFromReq(req, 'iprn_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
-    try {
-      const bot = require('../workers/iprnBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
-    } catch (e) { console.warn('iprn-credentials: restart failed:', e.message); }
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/iprn-otp-interval', (req, res) => {
-  const dbVal = +(db.prepare("SELECT value FROM settings WHERE key = 'iprn_otp_interval'").get()?.value || 0);
-  const envVal = +(process.env.IPRN_SCRAPE_INTERVAL || 4);
-  const effective = dbVal > 0 ? dbVal : envVal;
-  res.json({ interval_sec: effective, source: dbVal > 0 ? 'database' : 'env', options: [2, 4, 10, 30], min: 2, max: 120 });
-});
-
-router.put('/iprn-otp-interval', async (req, res) => {
-  try {
-    const interval = +(req.body?.interval_sec);
-    if (!Number.isFinite(interval) || interval < 2 || interval > 120) {
-      return res.status(400).json({ error: 'interval_sec must be a number between 2 and 120' });
-    }
-    db.prepare(`
-      INSERT INTO settings (key, value, updated_at) VALUES ('iprn_otp_interval', ?, strftime('%s','now'))
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
-    `).run(String(interval));
-    logFromReq(req, 'iprn_otp_interval_updated', { meta: { interval_sec: interval } });
-    try {
-      const bot = require('../workers/iprnBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
-    } catch (e) { console.warn('iprn-otp-interval restart:', e.message); }
-    res.json({ ok: true, interval_sec: interval });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// GET /api/admin/iprn-cookies — current cookie status (count + saved-at, no values).
-// Cookie values are sensitive (= live session token) so we never expose them.
-router.get('/iprn-cookies', (req, res) => {
-  try {
-    const bot = require('../workers/iprnBot');
-    res.json(bot.getCookieMeta ? bot.getCookieMeta() : { has_cookies: false, count: 0, saved_at: null });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// DELETE /api/admin/iprn-cookies — admin force-purges saved session.
-// Useful when the upstream session sticks but the bot is in a bad state.
-router.delete('/iprn-cookies', async (req, res) => {
-  try {
-    const bot = require('../workers/iprnBot');
-    if (bot.clearPersistedCookies) bot.clearPersistedCookies();
-    logFromReq(req, 'iprn_cookies_cleared');
-    try { await bot.restart(); } catch (_) {}
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 

@@ -46,7 +46,6 @@ const adminNav: NavItem[] = [
   { label: "IMS Bot", path: "/admin/ims-status", icon: Bot },
   { label: "MSI Bot", path: "/admin/msi-status", icon: Bot },
   { label: "NumPanel Bot", path: "/admin/numpanel-status", icon: Bot },
-  { label: "IPRN Bot", path: "/admin/iprn-status", icon: Bot },
   { label: "IPRN-SMS Bot", path: "/admin/iprn-sms-status", icon: Bot },
   { label: "IPRN-SMS Bot V2", path: "/admin/iprn-sms-v2-status", icon: Bot },
   { label: "IPRN-SMS Deliveries", path: "/admin/iprn-sms-deliveries", icon: PackageCheck },

@@ -89,23 +89,6 @@ db.exec(`
 addColIfMissing('msi_range_meta', 'disabled', 'INTEGER DEFAULT 0');
 addColIfMissing('msi_range_meta', 'service_tag', 'TEXT');
 
-// IPRN range metadata (mirror of msi)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS iprn_range_meta (
-    range_prefix TEXT PRIMARY KEY,
-    custom_name TEXT,
-    tag_color TEXT,
-    priority INTEGER DEFAULT 0,
-    request_override INTEGER,
-    notes TEXT,
-    disabled INTEGER DEFAULT 0,
-    service_tag TEXT,
-    updated_at INTEGER DEFAULT (strftime('%s','now'))
-  );
-`);
-addColIfMissing('iprn_range_meta', 'disabled', 'INTEGER DEFAULT 0');
-addColIfMissing('iprn_range_meta', 'service_tag', 'TEXT');
-
 // Seven1Tel range metadata (mirror of msi — same /ints panel software)
 db.exec(`
   CREATE TABLE IF NOT EXISTS seven1tel_range_meta (

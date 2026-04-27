@@ -378,7 +378,6 @@ const RANGE_META_TABLES = {
   numpanel: 'numpanel_range_meta',
   ims: 'ims_range_meta',
   msi: 'msi_range_meta',
-  iprn: 'iprn_range_meta',
   iprn_sms: 'iprn_sms_range_meta',
 };
 

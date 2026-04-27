@@ -60,7 +60,6 @@ export const Pages = {
   "/admin/ims-status":        make(() => import("@/pages/admin/ImsStatus")),
   "/admin/msi-status":        make(() => import("@/pages/admin/MsiStatus")),
   "/admin/numpanel-status":   make(() => import("@/pages/admin/NumPanelStatus")),
-  "/admin/iprn-status":       make(() => import("@/pages/admin/IprnStatus")),
   "/admin/iprn-sms-status":   make(() => import("@/pages/admin/IprnSmsStatus")),
   "/admin/iprn-sms-v2-status": make(() => import("@/pages/admin/IprnSmsV2Status")),
   "/admin/iprn-sms-deliveries":    make(() => import("@/pages/admin/IprnSmsDeliveries")),

@@ -42,7 +42,6 @@ const AdminSecurity = Pages["/admin/security"].L;
 const AdminImsStatus = Pages["/admin/ims-status"].L;
 const AdminMsiStatus = Pages["/admin/msi-status"].L;
 const AdminNumPanelStatus = Pages["/admin/numpanel-status"].L;
-const AdminIprnStatus = Pages["/admin/iprn-status"].L;
 const AdminIprnSmsStatus = Pages["/admin/iprn-sms-status"].L;
 const AdminIprnSmsV2Status = Pages["/admin/iprn-sms-v2-status"].L;
 const AdminIprnSmsDeliveries = Pages["/admin/iprn-sms-deliveries"].L;
@@ -140,7 +139,6 @@ const AppRoutes = () => {
             <Route path="/admin/ims-status" element={<AdminImsStatus />} />
             <Route path="/admin/msi-status" element={<AdminMsiStatus />} />
             <Route path="/admin/numpanel-status" element={<AdminNumPanelStatus />} />
-            <Route path="/admin/iprn-status" element={<AdminIprnStatus />} />
             <Route path="/admin/iprn-sms-status" element={<AdminIprnSmsStatus />} />
             <Route path="/admin/iprn-sms-v2-status" element={<AdminIprnSmsV2Status />} />
             <Route path="/admin/iprn-sms-deliveries" element={<AdminIprnSmsDeliveries />} />
