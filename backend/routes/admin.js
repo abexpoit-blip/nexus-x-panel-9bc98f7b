@@ -749,14 +749,14 @@ router.get('/provider-status', async (req, res) => {
 });
 
 // PUT /api/admin/provider-toggle — Soft ON/OFF toggle for any provider.
-// Body: { id: 'msi'|'iprn'|'numpanel'|'ims', enabled: boolean }
+// Body: { id: 'msi'|'numpanel'|'ims'|'iprn_sms'|'iprn_sms_v2'|'seven1tel', enabled: boolean }
 // - flips <id>_enabled in settings (overrides .env)
 // - calls bot.start() / bot.stop() so the change takes effect immediately
 // - data (allocations, rates, range_meta) is preserved → "soft" disable
 router.put('/provider-toggle', async (req, res) => {
   try {
     const { id, enabled } = req.body || {};
-    const validIds = ['msi', 'iprn', 'iprn_sms', 'iprn_sms_v2', 'numpanel', 'ims', 'seven1tel'];
+    const validIds = ['msi', 'iprn_sms', 'iprn_sms_v2', 'numpanel', 'ims', 'seven1tel'];
     if (!validIds.includes(id)) {
       return res.status(400).json({ error: `id must be one of: ${validIds.join(', ')}` });
     }
@@ -770,7 +770,6 @@ router.put('/provider-toggle', async (req, res) => {
     `).run(`${id}_enabled`, enabled ? 'true' : 'false');
 
     const botFile =
-      id === 'iprn' ? 'iprnBot' :
       id === 'iprn_sms' ? 'iprnSmsBot' :
       id === 'iprn_sms_v2' ? 'iprnSmsBotV2' :
       id === 'msi' ? 'msiBot' :
@@ -1249,7 +1248,6 @@ const RANGE_META_TABLES = {
   numpanel: 'numpanel_range_meta',
   ims: 'ims_range_meta',
   msi: 'msi_range_meta',
-  iprn: 'iprn_range_meta',
   iprn_sms: 'iprn_sms_range_meta',
   iprn_sms_v2: 'iprn_sms_v2_range_meta',
   seven1tel: 'seven1tel_range_meta',
@@ -1304,7 +1302,6 @@ function rangeMetaRoutes(provider) {
 rangeMetaRoutes('numpanel');
 rangeMetaRoutes('ims');
 rangeMetaRoutes('msi');
-rangeMetaRoutes('iprn');
 rangeMetaRoutes('iprn_sms');
 rangeMetaRoutes('iprn_sms_v2');
 rangeMetaRoutes('seven1tel');
