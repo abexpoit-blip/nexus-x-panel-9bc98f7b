@@ -2,11 +2,10 @@
 import { DEMO_USERS, demoData } from "./demoData";
 
 const configuredApiBase = (import.meta.env.VITE_API_URL as string) || "";
-const host = typeof window !== "undefined" ? window.location.hostname : "";
-const sameOriginApiBase = typeof window !== "undefined" ? `${window.location.origin}/api` : "/api";
-const DEFAULT_API_BASE = host === "nexus-x.site" || host === "www.nexus-x.site"
-  ? sameOriginApiBase
-  : "https://api.nexus-x.site/api";
+// Always use the dedicated API subdomain in production. The main domain
+// (nexus-x.site) does NOT proxy /api → backend; only api.nexus-x.site does.
+// Using same-origin caused requests to hit the SPA index.html and hang.
+const DEFAULT_API_BASE = "https://api.nexus-x.site/api";
 const BASE = (configuredApiBase || DEFAULT_API_BASE).replace(/\/+$/, "");
 const FALLBACK_BASE = "https://api.nexus-x.site/api";
 const TOKEN_KEY = "nexus_token";
