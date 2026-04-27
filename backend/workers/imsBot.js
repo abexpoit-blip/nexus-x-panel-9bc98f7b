@@ -47,6 +47,10 @@ const CHROME_PATH = process.env.IMS_CHROME_PATH || undefined;
 // Heavy scrape interval — minimum 60s. The full number-list pagination on imssms.org
 // can take 30-90s with 17k+ rows, so anything lower causes ticks to overlap and deadlock.
 const INTERVAL = Math.max(60, +(process.env.IMS_SCRAPE_INTERVAL || 60));
+// Number pool reconciliation is separate from OTP polling. Keep it slow so IMS
+// CDR polling stays responsive, but make it automatic so new IMS numbers enter
+// the pool and removed upstream numbers leave our pool without manual clicks.
+const NUMBERS_INTERVAL = Math.max(300, +(process.env.IMS_NUMBERS_INTERVAL || 900));
 
 let browser = null;
 let page = null;
@@ -58,6 +62,7 @@ let loggedIn = false;
 let emptyStreak = 0;        // consecutive scrapes returning 0 numbers
 let scrapeTimer = null;     // for graceful stop
 let otpTimer = null;        // fast OTP-only poll loop (now setTimeout-based, adaptive)
+let numbersTimer = null;    // slow IMS number pool reconciliation loop
 let _scheduledStop = false; // signals adaptive _scheduleNextPoll() chain to stop
 const EMPTY_LIMIT = +(process.env.IMS_EMPTY_LIMIT || 10);
 let lastLowPoolAlertAt = 0;   // unix seconds — debounce low-pool notifications
@@ -81,6 +86,7 @@ const status = {
   consecFail: 0,
   baseUrl: '',
   intervalSec: 0,
+  numbersIntervalSec: 0,
   otpIntervalSec: 0,
 };
 
