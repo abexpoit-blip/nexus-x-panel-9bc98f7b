@@ -723,15 +723,6 @@ export const api = {
     seven1telRangeMetaDelete: (prefix: string) =>
       request<{ ok: boolean }>(`/admin/seven1tel-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
 
-    // ---- IPRN range meta (shared rangeMetaRoutes('iprn')) ----
-    iprnRangeMetaSave: (body: {
-      range_prefix: string; custom_name?: string | null; tag_color?: string | null;
-      priority?: number | null; request_override?: number | null; notes?: string | null;
-      disabled?: boolean; service_tag?: string | null;
-    }) => request<{ ok: boolean }>("/admin/iprn-range-meta", { method: "PUT", body: JSON.stringify(body) }),
-    iprnRangeMetaDelete: (prefix: string) =>
-      request<{ ok: boolean }>(`/admin/iprn-range-meta/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
-
     // ---- IPRN-SMS range meta (shared rangeMetaRoutes('iprn_sms')) ----
     iprnSmsRangeMetaSave: (body: {
       range_prefix: string; custom_name?: string | null; tag_color?: string | null;
@@ -848,55 +839,6 @@ export const api = {
       request<{ ok: boolean; config: any }>(`/admin/autopool/${botId}`, { method: "PUT", body: JSON.stringify(body) }),
     runNow: (botId: string) =>
       request<{ ok: boolean; result?: any; error?: string }>(`/admin/autopool/${botId}/run`, { method: "POST" }),
-  },
-
-  // ===== IPRN Bot admin (HTTP-only, no cookies/captcha) =====
-  iprn: {
-    status: () => request<{ status: any }>("/admin/iprn-status"),
-    restart: () => request<{ ok: boolean }>("/admin/iprn-restart", { method: "POST" }),
-    start: () => request<{ ok: boolean }>("/admin/iprn-start", { method: "POST" }),
-    stop: () => request<{ ok: boolean }>("/admin/iprn-stop", { method: "POST" }),
-    scrapeNow: () => request<{ ok: boolean; added?: number; otps?: number; error?: string }>("/admin/iprn-scrape-now", { method: "POST" }),
-    poolBreakdown: () => request<{
-      ranges: Array<{
-        name: string; count: number; last_added: number | null; first_added: number | null;
-        custom_name: string | null; tag_color: string | null; priority: number | null;
-        request_override: number | null; notes: string | null; disabled: number | null; service_tag: string | null;
-      }>;
-      totalActive: number; totalUsed: number;
-    }>("/admin/iprn-pool-breakdown"),
-    credentials: () => request<{
-      enabled: boolean; base_url: string; username: string;
-      password_masked: string; has_password: boolean;
-      source: { username: string; password: string };
-    }>("/admin/iprn-credentials"),
-    credentialsSave: (body: { username?: string; password?: string; base_url?: string; enabled?: boolean }) =>
-      request<{ ok: boolean }>("/admin/iprn-credentials", { method: "PUT", body: JSON.stringify(body) }),
-    otpInterval: () => request<{ interval_sec: number; source: string; options: number[]; min: number; max: number }>("/admin/iprn-otp-interval"),
-    otpIntervalSave: (interval_sec: number) =>
-      request<{ ok: boolean; interval_sec: number }>("/admin/iprn-otp-interval", { method: "PUT", body: JSON.stringify({ interval_sec }) }),
-    cookies: () =>
-      request<{ has_cookies: boolean; count: number; saved_at: number | null; names?: string[] }>("/admin/iprn-cookies"),
-    cookiesClear: () =>
-      request<{ ok: boolean }>("/admin/iprn-cookies", { method: "DELETE" }),
-    numbers: (params: { status?: string; q?: string; limit?: number; offset?: number } = {}) => {
-      const qs = new URLSearchParams();
-      if (params.status) qs.set("status", params.status);
-      if (params.q) qs.set("q", params.q);
-      if (params.limit != null) qs.set("limit", String(params.limit));
-      if (params.offset != null) qs.set("offset", String(params.offset));
-      const tail = qs.toString();
-      return request<{
-        rows: Array<{
-          id: number; phone_number: string; range_name: string | null;
-          country_code: string | null; status: string;
-          allocated_at: number; user_id: number; otp: string | null;
-          username: string | null;
-        }>;
-        total: number; limit: number; offset: number;
-        counts: Record<string, number>;
-      }>(`/admin/iprn-numbers${tail ? `?${tail}` : ""}`);
-    },
   },
 
   // ===== IPRN-SMS Bot admin (panel.iprn-sms.com — Symfony, JSON API + ZIP) =====
