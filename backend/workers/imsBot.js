@@ -1154,6 +1154,7 @@ function start() {
   status.enabled = ENABLED;
   status.baseUrl = BASE_URL;
   status.intervalSec = INTERVAL;
+  status.numbersIntervalSec = NUMBERS_INTERVAL;
   if (!ENABLED) {
     console.log('✗ IMS bot disabled (enable from admin panel or set IMS_ENABLED=true)');
     logEvent('warn', 'Start skipped — bot disabled');
@@ -1167,6 +1168,7 @@ function start() {
   }
   if (scrapeTimer) { clearInterval(scrapeTimer); scrapeTimer = null; }
   if (otpTimer) { clearInterval(otpTimer); otpTimer = null; }
+  if (numbersTimer) { clearInterval(numbersTimer); numbersTimer = null; }
   // Recovery: any 'claiming' rows from a crashed/restarted bulk allocation
   // should be returned to 'pool' so they can be assigned again. Safe because
   // legitimate claims flip to 'active' inside the same transaction in routes/numbers.js.
@@ -1177,12 +1179,13 @@ function start() {
   status.running = true;
   emptyStreak = 0;
   console.log(`✓ IMS bot starting (heavy tick every ${INTERVAL}s for keepalive, headless=${HEADLESS}, base=${BASE_URL})`);
-  // First tick: just login + go to CDR page (no scraping). Fast-poll handles all OTP work.
+  // First tick: login + initial pool sync. Fast-poll handles OTP work after this.
   setTimeout(async () => {
     try {
       await ensureBrowser();
       if (!loggedIn) await login();
-      console.log('[ims-bot] initial login complete — fast-poll will handle OTP scraping');
+      console.log('[ims-bot] initial login complete — running first IMS pool sync');
+      await syncLive().catch(e => console.warn('[ims-bot] initial numbers sync failed:', e.message));
     } catch (e) {
       console.error('[ims-bot] initial login failed:', e.message);
       logEvent('error', 'Initial login failed: ' + e.message);
@@ -1199,6 +1202,17 @@ function start() {
       finally { busy = false; }
     }
   }, INTERVAL * 1000);
+
+  numbersTimer = setInterval(async () => {
+    if (busy || otpBusy || !loggedIn) return;
+    try {
+      const result = await syncLive();
+      if (result.ok) console.log(`[ims-bot] periodic numbers sync: +${result.added}, -${result.removed}, kept=${result.kept}, live=${result.scraped}`);
+      else console.warn('[ims-bot] periodic numbers sync skipped:', result.error);
+    } catch (e) {
+      console.warn('[ims-bot] periodic numbers sync failed:', e.message);
+    }
+  }, NUMBERS_INTERVAL * 1000);
 
   // FAST OTP loop — adaptive interval based on burst load.
   //   • idle (0 pending allocations)        → IDLE_INTERVAL    (gentler on IMS)
