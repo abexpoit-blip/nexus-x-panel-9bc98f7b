@@ -1676,10 +1676,14 @@ router.get('/iprn-sms-cookies', (req, res) => {
 
 router.delete('/iprn-sms-cookies', async (req, res) => {
   try {
-    const bot = require('../workers/iprnSmsBot');
-    if (bot.clearPersistedCookies) bot.clearPersistedCookies();
+    if (WORKERS_IN_API) {
+      const bot = require('../workers/iprnSmsBot');
+      if (bot.clearPersistedCookies) bot.clearPersistedCookies();
+    } else {
+      db.prepare("DELETE FROM settings WHERE key IN ('iprn_sms_cookies','iprn_sms_cookies_saved_at')").run();
+    }
     logFromReq(req, 'iprn_sms_cookies_cleared');
-    try { await bot.restart(); } catch (_) {}
+    try { await restartWorkerBot('../workers/iprnSmsBot'); } catch (_) {}
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1864,10 +1868,14 @@ router.get('/iprn-sms-v2-cookies', (req, res) => {
 
 router.delete('/iprn-sms-v2-cookies', async (req, res) => {
   try {
-    const bot = require('../workers/iprnSmsBotV2');
-    if (bot.clearPersistedCookies) bot.clearPersistedCookies();
+    if (WORKERS_IN_API) {
+      const bot = require('../workers/iprnSmsBotV2');
+      if (bot.clearPersistedCookies) bot.clearPersistedCookies();
+    } else {
+      db.prepare("DELETE FROM settings WHERE key IN ('iprn_sms_v2_cookies','iprn_sms_v2_cookies_saved_at')").run();
+    }
     logFromReq(req, 'iprn_sms_v2_cookies_cleared');
-    try { await bot.restart(); } catch (_) {}
+    try { await restartWorkerBot('../workers/iprnSmsBotV2'); } catch (_) {}
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2079,10 +2087,7 @@ router.delete('/seven1tel-cookies', async (req, res) => {
   try {
     db.prepare("DELETE FROM settings WHERE key = 'seven1tel_cookies'").run();
     logFromReq(req, 'seven1tel_cookies_cleared', {});
-    try {
-      const bot = require('../workers/seven1telBot');
-      await bot.restart();
-    } catch (_) {}
+    try { await restartWorkerBot('../workers/seven1telBot'); } catch (_) {}
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
