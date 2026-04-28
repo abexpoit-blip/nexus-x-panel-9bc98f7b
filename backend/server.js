@@ -121,8 +121,11 @@ app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   CORS origin: ${corsOrigins ? corsOrigins.join(', ') : '(allow all — dev only)'}\n`);
 
-  if (String(process.env.RUN_WORKERS_IN_API || '').toLowerCase() === 'true') {
-    console.warn('RUN_WORKERS_IN_API=true — starting workers inside API process. Prefer the nexus-workers PM2 process in production.');
-    require('./workers').startAll();
+  // Bots run inside the API process by default (simple, single-process model).
+  // Set RUN_WORKERS_IN_API=false only if you intentionally run them via a separate PM2 process.
+  if (String(process.env.RUN_WORKERS_IN_API || 'true').toLowerCase() !== 'false') {
+    console.log('▶ Starting bot workers in-process…');
+    try { require('./workers').startAll(); }
+    catch (e) { console.error('Worker startup failed:', e.message); }
   }
 });
