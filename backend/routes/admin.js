@@ -604,10 +604,12 @@ router.post('/ims-pool-cleanup', (req, res) => {
     }
 
     logFromReq(req, 'ims_pool_cleanup', { meta: { mode, hours, range, removed: result.changes } });
-    try {
-      const bot = require('../workers/imsBot');
-      bot.logEvent && bot.logEvent('warn', description);
-    } catch (_) {}
+    if (WORKERS_IN_API) {
+      try {
+        const bot = require('../workers/imsBot');
+        bot.logEvent && bot.logEvent('warn', description);
+      } catch (_) {}
+    }
 
     res.json({ ok: true, removed: result.changes, description });
   } catch (e) {
@@ -651,13 +653,8 @@ router.put('/ims-credentials', async (req, res) => {
     logFromReq(req, 'ims_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
 
     // Hot-restart bot so new credentials take effect immediately
-    try {
-      const bot = require('../workers/imsBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
-    } catch (e) {
-      console.warn('ims-credentials: restart failed:', e.message);
-    }
+    try { await restartWorkerBot('../workers/imsBot'); }
+    catch (e) { console.warn('ims-credentials: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -691,13 +688,8 @@ router.put('/ims-cookies', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(cookies.trim());
     logFromReq(req, 'ims_cookies_updated', { meta: { length: cookies.length } });
-    try {
-      const bot = require('../workers/imsBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Session cookies updated by admin — bot restarting');
-    } catch (e) {
-      console.warn('ims-cookies: restart failed:', e.message);
-    }
+    try { await restartWorkerBot('../workers/imsBot'); }
+    catch (e) { console.warn('ims-cookies: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -709,10 +701,7 @@ router.delete('/ims-cookies', async (req, res) => {
   try {
     db.prepare("DELETE FROM settings WHERE key = 'ims_cookies'").run();
     logFromReq(req, 'ims_cookies_cleared', {});
-    try {
-      const bot = require('../workers/imsBot');
-      await bot.restart();
-    } catch (_) {}
+    try { await restartWorkerBot('../workers/imsBot'); } catch (_) {}
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1113,11 +1102,8 @@ router.put('/msi-credentials', async (req, res) => {
     }
     if (typeof enabled === 'boolean') upsert.run('msi_enabled', enabled ? 'true' : 'false');
     logFromReq(req, 'msi_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
-    try {
-      const bot = require('../workers/msiBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
-    } catch (e) { console.warn('msi-credentials: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/msiBot'); }
+    catch (e) { console.warn('msi-credentials: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1141,11 +1127,8 @@ router.put('/msi-otp-interval', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(String(interval));
     logFromReq(req, 'msi_otp_interval_updated', { meta: { interval_sec: interval } });
-    try {
-      const bot = require('../workers/msiBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
-    } catch (e) { console.warn('msi-otp-interval restart:', e.message); }
+    try { await restartWorkerBot('../workers/msiBot'); }
+    catch (e) { console.warn('msi-otp-interval restart:', e.message); }
     res.json({ ok: true, interval_sec: interval });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1175,11 +1158,8 @@ router.put('/msi-cookies', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(cookies.trim());
     logFromReq(req, 'msi_cookies_updated', { meta: { length: cookies.length } });
-    try {
-      const bot = require('../workers/msiBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Session cookies updated by admin — bot restarting');
-    } catch (e) { console.warn('msi-cookies: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/msiBot'); }
+    catch (e) { console.warn('msi-cookies: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1389,11 +1369,8 @@ router.put('/numpanel-credentials', async (req, res) => {
     }
     if (typeof enabled === 'boolean') upsert.run('numpanel_enabled', enabled ? '1' : '0');
     logFromReq(req, 'numpanel_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
-    try {
-      const bot = require('../workers/numpanelBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
-    } catch (e) { console.warn('numpanel-credentials: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/numpanelBot'); }
+    catch (e) { console.warn('numpanel-credentials: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1416,11 +1393,8 @@ router.put('/numpanel-otp-interval', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(String(interval));
     logFromReq(req, 'numpanel_otp_interval_updated', { meta: { interval_sec: interval } });
-    try {
-      const bot = require('../workers/numpanelBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
-    } catch (e) { console.warn('numpanel-otp-interval restart:', e.message); }
+    try { await restartWorkerBot('../workers/numpanelBot'); }
+    catch (e) { console.warn('numpanel-otp-interval restart:', e.message); }
     res.json({ ok: true, interval_sec: interval });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1448,11 +1422,8 @@ router.put('/numpanel-api-token', async (req, res) => {
     if (typeof api_token === 'string' && api_token.length) upsert.run('numpanel_api_token', api_token.trim());
     if (typeof api_base === 'string' && api_base.length) upsert.run('numpanel_api_base', api_base.trim().replace(/\/+$/, ''));
     logFromReq(req, 'numpanel_api_token_updated', {});
-    try {
-      const bot = require('../workers/numpanelBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'API token updated by admin — bot restarting');
-    } catch (e) { console.warn('numpanel-api-token restart:', e.message); }
+    try { await restartWorkerBot('../workers/numpanelBot'); }
+    catch (e) { console.warn('numpanel-api-token restart:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1481,11 +1452,8 @@ router.put('/numpanel-cookies', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(cookies.trim());
     logFromReq(req, 'numpanel_cookies_updated', { meta: { length: cookies.length } });
-    try {
-      const bot = require('../workers/numpanelBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Session cookies updated by admin — bot restarting');
-    } catch (e) { console.warn('numpanel-cookies: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/numpanelBot'); }
+    catch (e) { console.warn('numpanel-cookies: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1701,11 +1669,8 @@ router.put('/iprn-sms-credentials', async (req, res) => {
     }
     if (typeof enabled === 'boolean') upsert.run('iprn_sms_enabled', enabled ? 'true' : 'false');
     logFromReq(req, 'iprn_sms_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
-    try {
-      const bot = require('../workers/iprnSmsBot');
-      try { bot.clearPersistedCookies?.(); } catch (_) {}  // creds changed → invalidate session
-      await bot.restart();
-    } catch (e) { console.warn('iprn_sms-credentials: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/iprnSmsBot'); }
+    catch (e) { console.warn('iprn_sms-credentials: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1893,11 +1858,8 @@ router.put('/iprn-sms-v2-credentials', async (req, res) => {
     }
     if (typeof enabled === 'boolean') upsert.run('iprn_sms_v2_enabled', enabled ? 'true' : 'false');
     logFromReq(req, 'iprn_sms_v2_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
-    try {
-      const bot = require('../workers/iprnSmsBotV2');
-      try { bot.clearPersistedCookies?.(); } catch (_) {}
-      await bot.restart();
-    } catch (e) { console.warn('iprn_sms_v2-credentials: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/iprnSmsBotV2'); }
+    catch (e) { console.warn('iprn_sms_v2-credentials: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2060,11 +2022,8 @@ router.put('/seven1tel-credentials', async (req, res) => {
     }
     if (typeof enabled === 'boolean') upsert.run('seven1tel_enabled', enabled ? 'true' : 'false');
     logFromReq(req, 'seven1tel_credentials_updated', { meta: { username: username || '(unchanged)', enabled } });
-    try {
-      const bot = require('../workers/seven1telBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Credentials updated by admin — bot restarting');
-    } catch (e) { console.warn('seven1tel-credentials: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/seven1telBot'); }
+    catch (e) { console.warn('seven1tel-credentials: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2088,11 +2047,8 @@ router.put('/seven1tel-otp-interval', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(String(interval));
     logFromReq(req, 'seven1tel_otp_interval_updated', { meta: { interval_sec: interval } });
-    try {
-      const bot = require('../workers/seven1telBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', `OTP poll interval changed to ${interval}s by admin`);
-    } catch (e) { console.warn('seven1tel-otp-interval restart:', e.message); }
+    try { await restartWorkerBot('../workers/seven1telBot'); }
+    catch (e) { console.warn('seven1tel-otp-interval restart:', e.message); }
     res.json({ ok: true, interval_sec: interval });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2122,11 +2078,8 @@ router.put('/seven1tel-cookies', async (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%s','now')
     `).run(cookies.trim());
     logFromReq(req, 'seven1tel_cookies_updated', { meta: { length: cookies.length } });
-    try {
-      const bot = require('../workers/seven1telBot');
-      await bot.restart();
-      bot.logEvent && bot.logEvent('success', 'Session cookies updated by admin — bot restarting');
-    } catch (e) { console.warn('seven1tel-cookies: restart failed:', e.message); }
+    try { await restartWorkerBot('../workers/seven1telBot'); }
+    catch (e) { console.warn('seven1tel-cookies: restart failed:', e.message); }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
