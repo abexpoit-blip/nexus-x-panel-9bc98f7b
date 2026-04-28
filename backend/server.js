@@ -121,11 +121,13 @@ app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   CORS origin: ${corsOrigins ? corsOrigins.join(', ') : '(allow all — dev only)'}\n`);
 
-  // Bots run inside the API process by default (simple, single-process model).
-  // Set RUN_WORKERS_IN_API=false only if you intentionally run them via a separate PM2 process.
-  if (String(process.env.RUN_WORKERS_IN_API || 'true').toLowerCase() !== 'false') {
+  // Default: keep heavy bot workers out of the API process so login/health stay responsive.
+  // Set RUN_WORKERS_IN_API=true only for emergency single-process fallback.
+  if (String(process.env.RUN_WORKERS_IN_API || 'false').toLowerCase() === 'true') {
     console.log('▶ Starting bot workers in-process…');
     try { require('./workers').startAll(); }
     catch (e) { console.error('Worker startup failed:', e.message); }
+  } else {
+    console.log('▶ Bot workers disabled in API process (managed by nexus-workers).');
   }
 });
