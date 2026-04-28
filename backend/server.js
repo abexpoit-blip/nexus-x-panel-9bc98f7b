@@ -87,6 +87,9 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
+// Public health check must be registered before protected routes and rate-limiters.
+app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
@@ -96,9 +99,6 @@ app.use('/api/cdr', require('./routes/cdr'));
 app.use('/api', require('./routes/payments'));            // /payments + /withdrawals
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
-
-// Public health check must be registered before protected /api catch-all routes.
-app.get('/api/health', (_, res) => res.json({ ok: true, ts: Date.now() }));
 
 app.use('/api', require('./routes/security'));            // /audit + /sessions + /settings
 app.use('/api/admin/tgbot', require('./routes/tgbot'));   // Telegram bot admin
@@ -121,45 +121,8 @@ app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   CORS origin: ${corsOrigins ? corsOrigins.join(', ') : '(allow all — dev only)'}\n`);
 
-  // Start OTP poller (AccHub auto polling) after server is up
-  require('./workers/otpPoller').start();
-
-  // Start IMS browser bot (no-op if IMS_ENABLED=false)
-  require('./workers/imsBot').start();
-
-  // Start MSI browser bot (no-op if MSI_ENABLED=false)
-  require('./workers/msiBot').start();
-
-  // Start NumPanel bot (no-op if NUMPANEL_ENABLED=false)
-  try { require('./workers/numpanelBot').start(); }
-  catch (e) { console.warn('numpanel bot start error:', e.message); }
-
-  // Start IPRN-SMS bot (no-op if IPRN_SMS_ENABLED=false). HTTP-only.
-  try { require('./workers/iprnSmsBot').start(); }
-  catch (e) { console.warn('iprn_sms bot start error:', e.message); }
-
-  // Start IPRN-SMS V2 bot (separate account on panel.iprn-sms.com).
-  try { require('./workers/iprnSmsBotV2').start(); }
-  catch (e) { console.warn('iprn_sms_v2 bot start error:', e.message); }
-
-  // Start Seven1Tel bot (no-op if SEVEN1TEL_ENABLED=false). Same /ints panel as MSI.
-  try { require('./workers/seven1telBot').start(); }
-  catch (e) { console.warn('seven1tel bot start error:', e.message); }
-
-  // ----- Auto-pool scheduler (refill + prune + cap, per-bot timers) -----
-  try {
-    const autopool = require('./lib/autopool');
-    const safeScrape = (modName) => async () => {
-      try {
-        const m = require(modName);
-        if (typeof m.scrapeNow === 'function') await m.scrapeNow();
-      } catch (e) { /* surfaced via lastResult.scrapeError in autopool */ throw e; }
-    };
-    autopool.register('msi',         { label: 'MSI',         poolUser: '__msi_pool__',         scrapeNow: safeScrape('./workers/msiBot') });
-    autopool.register('numpanel',    { label: 'NumPanel',    poolUser: '__numpanel_pool__',    scrapeNow: safeScrape('./workers/numpanelBot') });
-    autopool.register('iprn_sms',    { label: 'IPRN-SMS',    poolUser: '__iprn_sms_pool__',    scrapeNow: safeScrape('./workers/iprnSmsBot') });
-    autopool.register('iprn_sms_v2', { label: 'IPRN-SMS V2', poolUser: '__iprn_sms_v2_pool__', scrapeNow: safeScrape('./workers/iprnSmsBotV2') });
-    autopool.register('seven1tel',   { label: 'Seven1Tel',   poolUser: '__seven1tel_pool__',   scrapeNow: safeScrape('./workers/seven1telBot') });
-    autopool.startScheduler();
-  } catch (e) { console.warn('autopool init error:', e.message); }
+  if (String(process.env.RUN_WORKERS_IN_API || '').toLowerCase() === 'true') {
+    console.warn('RUN_WORKERS_IN_API=true — starting workers inside API process. Prefer the nexus-workers PM2 process in production.');
+    require('./workers').startAll();
+  }
 });
