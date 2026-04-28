@@ -49,9 +49,9 @@ echo -e "${G}✓ Backend deps installed${N}"
 
 echo -e "\n${Y}▶ Restarting backend (pm2: $PM2_NAME)…${N}"
 if pm2 list | grep -q "$PM2_NAME"; then
-  pm2 restart "$PM2_NAME" --update-env
+  RUN_WORKERS_IN_API=false pm2 restart "$PM2_NAME" --update-env
 else
-  pm2 start server.js --name "$PM2_NAME"
+  RUN_WORKERS_IN_API=false pm2 start server.js --name "$PM2_NAME"
 fi
 
 WORKERS_NAME="nexus-workers"
