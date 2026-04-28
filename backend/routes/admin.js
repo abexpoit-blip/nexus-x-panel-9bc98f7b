@@ -6,9 +6,69 @@ const {
   signImpersonationToken, recordSession, setAuthCookie,
 } = require('../middleware/auth');
 const { logFromReq } = require('../lib/audit');
+const workerControl = require('../lib/workerControl');
 
 const router = express.Router();
 router.use(authRequired, adminOnly);
+
+// Bot workers run in a separate PM2 process. Proxy live status/actions to that
+// process so the API stays responsive and the UI sees the real bot state.
+const BOT_IDS = ['ims', 'msi', 'numpanel', 'seven1tel', 'iprn-sms', 'iprn-sms-v2'];
+const BOT_SETTING_KEY = {
+  msi: 'msi_enabled',
+  numpanel: 'numpanel_enabled',
+  seven1tel: 'seven1tel_enabled',
+  'iprn-sms': 'iprn_sms_enabled',
+  'iprn-sms-v2': 'iprn_sms_v2_enabled',
+};
+function enableBotSetting(botId) {
+  const key = BOT_SETTING_KEY[botId];
+  if (!key) return;
+  db.prepare(`
+    INSERT INTO settings (key, value, updated_at) VALUES (?, 'true', strftime('%s','now'))
+    ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = strftime('%s','now')
+  `).run(key);
+}
+for (const botId of BOT_IDS) {
+  router.get(`/${botId}-status`, async (_req, res, next) => {
+    try { res.json(await workerControl.request(`/${botId}-status`)); }
+    catch (e) { res.status(503).json({ error: e.message || 'Worker process unavailable' }); }
+  });
+  for (const action of ['restart', 'start', 'stop', 'scrape-now', 'sync-live']) {
+    router.post(`/${botId}-${action}`, async (req, res, next) => {
+      try {
+        if (action === 'start') enableBotSetting(botId);
+        const out = await workerControl.request(`/${botId}-${action}`, { method: 'POST' });
+        logFromReq(req, `${botId.replace(/-/g, '_')}_${action.replace(/-/g, '_')}`, { meta: out });
+        res.json(out);
+      } catch (e) { res.status(503).json({ error: e.message || 'Worker process unavailable' }); }
+    });
+  }
+}
+router.post('/ims-scrape-numbers', async (req, res) => {
+  try { const out = await workerControl.request('/ims-scrape-numbers', { method: 'POST' }); logFromReq(req, 'ims_scrape_numbers_start', { meta: out }); res.json(out); }
+  catch (e) { res.status(503).json({ error: e.message || 'Worker process unavailable' }); }
+});
+router.get('/ims-numbers-job', async (_req, res) => {
+  try { res.json(await workerControl.request('/ims-numbers-job')); }
+  catch (e) { res.status(503).json({ error: e.message || 'Worker process unavailable' }); }
+});
+router.get('/autopool', async (_req, res) => {
+  try { res.json(await workerControl.request('/autopool')); }
+  catch (e) { res.status(503).json({ error: e.message || 'Worker process unavailable' }); }
+});
+router.get('/autopool/:botId', async (req, res) => {
+  try { res.json(await workerControl.request(`/autopool/${encodeURIComponent(req.params.botId)}`)); }
+  catch (e) { res.status(e.status || 503).json({ error: e.message || 'Worker process unavailable' }); }
+});
+router.put('/autopool/:botId', async (req, res) => {
+  try { const out = await workerControl.request(`/autopool/${encodeURIComponent(req.params.botId)}`, { method: 'PUT', body: req.body || {} }); logFromReq(req, 'autopool_config_updated', { meta: { botId: req.params.botId, ...out.config } }); res.json(out); }
+  catch (e) { res.status(e.status || 503).json({ error: e.message || 'Worker process unavailable' }); }
+});
+router.post('/autopool/:botId/run', async (req, res) => {
+  try { const out = await workerControl.request(`/autopool/${encodeURIComponent(req.params.botId)}/run`, { method: 'POST' }); logFromReq(req, 'autopool_run_now', { meta: { botId: req.params.botId, result: out.result } }); res.json(out); }
+  catch (e) { res.status(e.status || 503).json({ error: e.message || 'Worker process unavailable' }); }
+});
 
 // POST /api/admin/login-as/:id — admin starts impersonation
 router.post('/login-as/:id', (req, res) => {
