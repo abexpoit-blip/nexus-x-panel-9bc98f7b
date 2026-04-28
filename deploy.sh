@@ -10,6 +10,7 @@ G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[0;36m'; N='\033[0m'
 PROJECT_DIR="/opt/nexus/nexus-x-panel"
 BACKEND_DIR="$PROJECT_DIR/backend"
 PM2_NAME="nexus-backend"
+WORKERS_NAME="nexus-workers"
 
 # === EDIT THIS if your nginx serves from a different folder ===
 # Auto-detected from your nginx config: /var/www/nexus-x.site
@@ -49,16 +50,17 @@ echo -e "${G}✓ Backend deps installed${N}"
 
 echo -e "\n${Y}▶ Restarting backend (pm2: $PM2_NAME)…${N}"
 if pm2 list | grep -q "$PM2_NAME"; then
-  RUN_WORKERS_IN_API=true pm2 restart "$PM2_NAME" --update-env
+  RUN_WORKERS_IN_API=false pm2 restart "$PM2_NAME" --update-env
 else
-  RUN_WORKERS_IN_API=true pm2 start server.js --name "$PM2_NAME"
+  RUN_WORKERS_IN_API=false pm2 start server.js --name "$PM2_NAME"
 fi
 
-# Workers now run inside the API process via RUN_WORKERS_IN_API=true.
-# Remove the legacy standalone workers process if it exists from a previous deploy.
-if pm2 list | grep -q "nexus-workers"; then
-  echo -e "${Y}  ⚠ Removing legacy nexus-workers process (workers now run in-API)${N}"
-  pm2 delete nexus-workers || true
+# Bot workers run as a separate process so heavy scraping cannot block login/API.
+echo -e "\n${Y}▶ Restarting bot workers (pm2: $WORKERS_NAME)…${N}"
+if pm2 list | grep -q "$WORKERS_NAME"; then
+  pm2 restart "$WORKERS_NAME" --update-env
+else
+  pm2 start workers/runner.js --name "$WORKERS_NAME"
 fi
 
 # Telegram bot — separate pm2 process
@@ -70,7 +72,7 @@ else
   pm2 start tgbot/index.js --name "$TGBOT_NAME"
 fi
 pm2 save > /dev/null
-echo -e "${G}✓ Backend + TG bot restarted${N}"
+echo -e "${G}✓ Backend + workers + TG bot restarted${N}"
 
 # 3. Frontend build (FORCE clean build — no stale cache)
 echo -e "\n${Y}▶ Building frontend (clean)…${N}"
