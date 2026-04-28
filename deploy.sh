@@ -49,17 +49,16 @@ echo -e "${G}✓ Backend deps installed${N}"
 
 echo -e "\n${Y}▶ Restarting backend (pm2: $PM2_NAME)…${N}"
 if pm2 list | grep -q "$PM2_NAME"; then
-  RUN_WORKERS_IN_API=false pm2 restart "$PM2_NAME" --update-env
+  RUN_WORKERS_IN_API=true pm2 restart "$PM2_NAME" --update-env
 else
-  RUN_WORKERS_IN_API=false pm2 start server.js --name "$PM2_NAME"
+  RUN_WORKERS_IN_API=true pm2 start server.js --name "$PM2_NAME"
 fi
 
-WORKERS_NAME="nexus-workers"
-echo -e "\n${Y}▶ Restarting backend workers (pm2: $WORKERS_NAME)…${N}"
-if pm2 list | grep -q "$WORKERS_NAME"; then
-  pm2 restart "$WORKERS_NAME" --update-env
-else
-  pm2 start workers/runner.js --name "$WORKERS_NAME"
+# Workers now run inside the API process via RUN_WORKERS_IN_API=true.
+# Remove the legacy standalone workers process if it exists from a previous deploy.
+if pm2 list | grep -q "nexus-workers"; then
+  echo -e "${Y}  ⚠ Removing legacy nexus-workers process (workers now run in-API)${N}"
+  pm2 delete nexus-workers || true
 fi
 
 # Telegram bot — separate pm2 process
